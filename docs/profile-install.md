@@ -139,6 +139,62 @@ An empty result is the evidence. The only files any of this writes are
 `~/.dsh/profiles/web/package.json`, `~/.dsh/profiles/web/cordis.patch.yml`,
 `~/.dsh/settings.yaml`, and pnpm's own `node_modules` inside the profile.
 
+## Story 1.2: sealing the network-capable tool
+
+`web_search` is **not** disabled by a `cordis.patch.yml` row alone. It is registered per agent
+preset (`tool-web` in each built-in preset's own `agent.cordis.yml`), a separate composition
+mounted once per process — the profile's patch layer never reaches it. Confirmed empirically on
+27 Aug: the host tree already ships `tool-web` as `disabled: true`, yet a live session under
+Standard mode still advertised "file and web search," because the preset's own copy of the row
+carries no `disabled` key and wins for that session.
+
+The fix has two parts:
+
+1. **Per-preset — the part that actually removes the tool.** In Settings → Agent presets,
+   **Duplicate** each built-in preset that mounts `tool-web` (Standard, PTC, Creator — Minimal
+   never had it) into `~/.dsh/.agent-presets/blind-flange-{standard,ptc,creator}/`. In each
+   copy's `agent.cordis.yml`, change the `tool-web` row to:
+
+   ```yaml
+   - id: tool-web
+     name: '@deepseek-ai/dsh-tool-web'
+     disabled: true
+   ```
+
+   `disabled: true`, not `config: { search: false }` — the latter leaves the row listed and
+   simply empty of tools; the former drops it from the catalog entirely, which is what "does
+   not appear in the tool list" requires. Set **Standard mode (sealed)** as the default preset
+   (Settings → Agent presets → "Set as default"). `$DSH_HOME/.agent-presets` is the harness's
+   own sanctioned path for this — "a preset IS a composition," per the shipped preset file's own
+   comments — so this is extension, not a source edit.
+
+2. **Host layer — belt and suspenders.** Append to `~/.dsh/profiles/web/cordis.patch.yml`:
+
+   ```yaml
+   - id: web-search-deepseek
+     disabled: true
+
+   - id: web
+     disabled: true
+   ```
+
+   This removes the search-provider plugin and its config surface (the "Add an API key"
+   onboarding prompt, the Web search card under Settings → Plugins) even though, by itself, it
+   does not touch the preset-scoped tool. Nothing else in the harness hard-depends on the `web`
+   service (checked by grep against the clone at `C:\Users\rpxi1\src\deepseek-harness` — only
+   the web-search-provider and web-fetch packages inject it).
+
+**Checking it worked:**
+
+```sh
+dsh --profile web --dump-config   # web and web-search-deepseek rows both show disabled: true
+```
+
+In the running app: Settings → Agent presets shows "Standard mode (sealed)" marked **In use**,
+described as having "No network-capable tool." Settings → Plugins → Web search is gone. A new
+session under any built-in preset besides the sealed copies would still show it — the sealed
+presets are what must stay selected, not a property of the profile as a whole.
+
 ## Removing it
 
 ```sh
