@@ -39,7 +39,7 @@ development_status:
   1-1-the-blind-flange-plugin-package-mounts-in-the-web-profile: done
   1-2-no-network-capable-tool-appears-in-the-tool-list: done
   1-3-no-cloud-model-provider-appears-in-the-model-list: done
-  1-4-the-workbench-introduces-itself-as-blind-flange: backlog
+  1-4-the-workbench-introduces-itself-as-blind-flange: done
   1-5-our-mark-our-tab-title-our-favicon: backlog
   epic-1-retrospective: optional
 
