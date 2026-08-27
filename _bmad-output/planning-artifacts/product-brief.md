@@ -169,8 +169,10 @@ mid-session. Then the scanned report becoming a signed `.docx`.
 
 ## Constraints — not negotiable
 
-1. **Apache-2.0 and MIT only**, across weights, dependencies and harness
-   (`docs/licence-policy.md`). Verified by reading `LICENSE` at the pinned version.
+1. **Apache-2.0, MIT, BSD-2-Clause and BSD-3-Clause only**, across weights, dependencies and
+   harness (`docs/licence-policy.md`). Verified by reading `LICENSE` at the pinned version.
+   Widened from two licences to four on 28 Aug 2026 by ADR-0005, which also rejected Docling
+   (its models are CDLA-Permissive-2.0) in favour of the Tesseract stack.
 2. **Offline by construction.** No component reaches the network at runtime. A blocked call
    is a hang, and a hang looks like a crash on stage.
 3. **Hardware is fixed:** MSI GF63, i5-11260H, 15.7 GB RAM, GTX 1650 Max-Q with 4 GB VRAM.

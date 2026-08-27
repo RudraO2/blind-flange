@@ -8,7 +8,8 @@ Smart India Hackathon 2026, problem statement **SIH26117**.
 - **Organisation:** Mangalore Refinery and Petrochemicals Limited (MRPL), ONGC subsidiary, Miniratna CPSE
 - **Theme:** Smart Automation · **Category:** Software
 - **Idea submission deadline:** 20 September 2026, via SPOC, PDF only, 6 slides max
-- **Internal hackathon:** September 2026, IIT Madras BS Degree Programme template, 9 slides
+- **Internal hackathon:** prototype deadline **31 August 2026**, IIT Madras BS Degree
+  Programme template, 9 slides
 - **Grand Finale:** December 2026, 36 hours
 - **Team:** 6 members, minimum 1 female
 - **Proposed codename:** Blind Flange (the plate bolted over a line to positively isolate it — the physical air gap)
@@ -57,17 +58,32 @@ The PPT round is **done**. The deck was built from `DECK-CONTENT.md`; the explai
 in `videos/` is finished output and nothing reads back from it. Both are behind us.
 
 Now: build the **prototype** that wins the IITM BS internal round. Scope is §17 **Phase 0**,
-"Prove the spine" — one vertical slice, end to end.
+"Prove the spine" — one vertical slice, end to end. **Four days, deadline 31 August 2026.**
+
+**Planning is finished as of 28 Aug 2026.** Do not re-plan.
+
+| Artifact | What it is |
+|---|---|
+| `_bmad-output/planning-artifacts/product-brief.md` | The scope. P0, P1, the cut line, positioning. |
+| `_bmad-output/planning-artifacts/epics.md` | **The plan.** 7 epics, 33 stories, acceptance criteria, and a Standing acceptance criteria block that applies to all of them. |
+| `_bmad-output/implementation-artifacts/sprint-status.yaml` | Which stories are done. The build's memory. |
+| `docs/ralph-loop.md` | **How to build.** Paste it into a fresh chat; it picks the next story, builds, reviews, gates, commits and stops. One story per chat. |
 
 **Method is BMAD**, start to end — BMad Method v6.11.0, module `bmm`, installed 27 Aug 2026
 into `_bmad/` with 49 skills in `.claude/skills/`. Run `bmad-help` if unsure what comes next.
-Before any BMAD planning skill, read **`docs/bmad-input-brief.md`**: constraints, source
-material in reading order, and the list of what is genuinely still open.
+`docs/bmad-input-brief.md` was the input to planning; it is now history rather than
+instruction, and `epics.md` supersedes it wherever they disagree.
+
+Three stories carry the real risk and each has its escape hatch written into its acceptance
+criteria: **3.1** the replay adapter seam (timeboxed, fallback is our own loop), **4.2**
+proving Tesseract returns bounding boxes on this laptop (timeboxed, and **no fake crop** if it
+slips), and **6.4** the licence audit that closes the gap `licence-policy.md` records against
+itself.
 
 Matt Pocock's skills are installed at user level but **stood down for this project** — see
 `CLAUDE.md`. `.scratch/phase-0-spine/spec.md` is a pre-BMAD draft: input, not authority.
 
-Three decisions were made on 27 Aug 2026 that the artifact does not yet reflect:
+Five decisions are recorded in `docs/adr/` and the artifact does not yet reflect any of them:
 
 - **ADR-0001** — pluggable model plane. The only GPU is this laptop's GTX 1650 Max-Q, 4 GB,
   and nothing better is coming. Every model call goes through one `ModelProvider` with
@@ -83,6 +99,19 @@ Three decisions were made on 27 Aug 2026 that the artifact does not yet reflect:
   closes the October harness gate early. It is a developer preview two weeks old, so build
   against our own plugin contracts and pin the version; the fallback stays our own loop.
 
+- **ADR-0004** — extend the harness's own web client rather than build a frontend. A 27 Aug
+  spike proved an out-of-tree UI plugin renders with no fork and no bundler, and that a full
+  page load makes zero external requests. Our panels take declared slots. Disclose the
+  dependency loudly and first; rebrand *after* the panels exist, never before.
+- **ADR-0005** (28 Aug) — Tesseract, not Docling, for ingestion, and the licence allow-list
+  widens from two to four. Docling's models are CDLA-Permissive-2.0, which is genuinely
+  permissive and legally safe but outside the list; the Tesseract stack is Apache-2.0
+  throughout and far lighter. `PyMuPDF` is AGPL-3.0 and banned by name — use `pypdfium2`.
+
+**ADR-0001 also carries a 28 Aug amendment**: the Phase 0 replay cache is authored by hand,
+not captured from real `local` runs, because local inference is a day-4 stretch goal. Read
+the amendment, not just the original decision.
+
 Licence policy is now written down as a hard constraint: `docs/licence-policy.md`.
 Fold all of this into `blind-flange.html` when you next touch it.
 
@@ -94,7 +123,8 @@ cold clone, and a recorded offline run.
 
 - Own thin frontend, not Open WebUI. The routing explainer, provenance crops and egress
   monitor do not exist in any off-the-shelf shell and they are the differentiators.
-- Fleet constrained to Apache-2.0 / MIT licences only. The loader refuses anything else.
+- Fleet constrained to Apache-2.0 / MIT / BSD-2-Clause / BSD-3-Clause licences only. The
+  loader refuses anything else. Widened from two licences to four on 28 Aug 2026 by ADR-0005.
 - No fine-tuning. No custom inference engine. No 120B-class model (R11 excuses it).
 - No full P&ID connectivity-graph extraction — scope is symbol and tag inventory plus
   region Q&A, and the limit is stated out loud in the pitch.

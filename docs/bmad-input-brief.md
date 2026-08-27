@@ -6,8 +6,9 @@ elicitation is for. Do not treat this as a substitute for asking.
 
 ## What is being built
 
-A prototype of **Blind Flange** for the IIT Madras BS internal hackathon round, September
-2026. Solo build, one person with Claude Code, roughly nine days from 27 August.
+A prototype of **Blind Flange** for the IIT Madras BS internal hackathon round. Solo build, one person with
+Claude Code. **Four days, deadline 31 August 2026** — an earlier "roughly nine days /
+September" figure was wrong and was corrected on 28 August.
 
 Blind Flange is a sovereign, air-gapped agentic AI workbench for confidential industrial
 work, built on open-weight multimodal models. Smart India Hackathon 2026 problem statement
@@ -29,9 +30,10 @@ work, built on open-weight multimodal models. Smart India Hackathon 2026 problem
 
 These are not up for elicitation. Challenge them only if you can show a contradiction.
 
-1. **Licences: Apache-2.0 and MIT only.** Weights, dependencies, harness, everything. The
-   reasoning is in `docs/licence-policy.md` and it is the client-facing differentiator, not
-   an engineering preference.
+1. **Licences: Apache-2.0, MIT, BSD-2-Clause and BSD-3-Clause only.** Weights, dependencies,
+   harness, everything. The reasoning is in `docs/licence-policy.md` and it is the
+   client-facing differentiator, not an engineering preference. Widened from two licences to
+   four on 28 Aug 2026 by ADR-0005. `PyMuPDF` is AGPL-3.0 and is banned by name.
 2. **Offline by construction.** No component may reach the network at runtime. Every model
    artefact pre-staged. A blocked call is a hang, and a hang looks like a crash on stage.
 3. **Hardware is fixed and small.** MSI GF63 laptop: i5-11260H, 15.7 GB RAM, GTX 1650 Max-Q

@@ -17,8 +17,9 @@ _Avoid_: the workbench, the platform, the tool
 
 **Fleet**:
 The set of open-weight models installed on the box — general reasoner, coder, vision-document
-model, embedder, reranker. Licence-constrained to Apache-2.0 and MIT; the loader refuses
-anything else. Singular "the fleet", never a list of model names in prose.
+model, embedder, reranker. Licence-constrained to Apache-2.0, MIT, BSD-2-Clause and
+BSD-3-Clause; the loader refuses anything else. Singular "the fleet", never a list of model
+names in prose.
 _Avoid_: model zoo, model pool, the models
 
 **Router**:

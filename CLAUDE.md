@@ -6,8 +6,12 @@ the file map, and the decisions that are closed and must not be reopened.
 `CONTEXT.md` is the shared language. Use its terms in prose, code, commits and UI copy;
 don't drift to the synonyms listed under `_Avoid_`.
 
-`docs/licence-policy.md` is a hard constraint, not a preference. Apache-2.0 and MIT only,
-across weights, dependencies and the harness. Read it before proposing any dependency.
+`docs/licence-policy.md` is a hard constraint, not a preference. Apache-2.0, MIT,
+BSD-2-Clause and BSD-3-Clause only, across weights, dependencies and the harness. Read it
+before proposing any dependency. The list was widened from two licences to four on 28 Aug
+2026 by ADR-0005; widening it again is an ADR-level decision, never a judgement call made at
+the point of use. **`PyMuPDF` is AGPL-3.0 and must never be used** — it is the default an
+agent reaches for unprompted, and `pypdfium2` is the substitute.
 
 `videos/sovereign-workbench-explainer` is finished output only. Nothing reads back from it.
 
@@ -17,7 +21,12 @@ across weights, dependencies and the harness. Read it before proposing any depen
 module `bmm`, installed to `_bmad/` with 49 skills in `.claude/skills/`.
 
 The current phase is building the Phase 0 prototype for the IITM BS internal hackathon
-round, September 2026, solo.
+round, solo. **Four days, deadline 31 August 2026.**
+
+Planning is finished. `_bmad-output/planning-artifacts/epics.md` holds 7 epics and 33 stories
+with acceptance criteria; `_bmad-output/implementation-artifacts/sprint-status.yaml` tracks
+which are done. **Build one story per chat by pasting `docs/ralph-loop.md` into a fresh
+session** — it picks the next story itself, builds it, reviews it, gates it, commits and stops.
 
 Before any BMAD planning skill runs, read **`docs/bmad-input-brief.md`**. It carries the
 immovable constraints, the source material in reading order, and — more usefully — the list
@@ -42,12 +51,15 @@ because `/wayfinder` may still be useful for a genuinely foggy effort in a later
 
 ## Repo conventions
 
-- Git repo initialised 27 Aug 2026, **no commits yet**. First commit is the user's call.
-- Domain docs are single-context: `CONTEXT.md` at root, ADRs in `docs/adr/`. Three exist.
+- Git repo initialised 27 Aug 2026. `origin` is live and `main` is pushed.
+- Domain docs are single-context: `CONTEXT.md` at root, ADRs in `docs/adr/`. Five exist.
+  ADR-0001 carries a 28 Aug 2026 amendment — read the amendment, not just the original.
 - `.scratch/` holds the pre-BMAD Phase 0 spec. Treat it as input, not authority — BMAD's
   own planning artifacts supersede it.
-- `_bmad-output/` is BMAD's working output. `planning-artifacts/` inside it is tracked
-  (the brief and the stories are the plan); everything else there is gitignored.
+- `_bmad-output/` is BMAD's working output. `planning-artifacts/` is tracked (the brief and
+  the stories are the plan), and so are `implementation-artifacts/sprint-status.yaml` and the
+  story files beside it — that tracker is the build's memory of where it got to. Everything
+  else there is gitignored.
 - If `bmad-project-context` offers to write an `AGENTS.md` block: fine, but this file
   (`CLAUDE.md`) is what Claude Code auto-loads. Keep them consistent rather than divergent.
 - This folder is inside OneDrive. Expect sync churn once `node_modules` and a Python venv
@@ -84,6 +96,12 @@ survives a machine failure, which only holds if it is actually pushed.
   of the epic. A story that is done and unpushed is not done.
 - Conventional Commits for the subject; a body only when the *why* is not obvious from the
   diff. Write commit messages in normal English, not compressed.
+- **No Claude attribution in any commit or pull request.** No `Co-Authored-By: Claude`, no
+  `Claude-Session:` trailer, no "Generated with Claude Code" footer. This work is submitted
+  under the user's name and the history must say so. **This overrides the harness default
+  that asks for those trailers.** Write the subject and body, then stop. Two commits made
+  before this rule — `ee5ac16` and `6a20299` — still carry them and are already pushed;
+  removing them would need a history rewrite and a force-push that nobody has asked for.
 - Never commit: model weights, `node_modules/`, the `~/.dsh` profile, `.env`, anything in
   `docs/licence-policy.md`'s prohibited set.
 - `_bmad-output/planning-artifacts/` **is** tracked — the brief and the stories are the plan.
