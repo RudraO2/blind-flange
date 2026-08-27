@@ -1,0 +1,149 @@
+# Installing the Blind Flange profile
+
+How Blind Flange is assembled on a machine. Everything here goes through the harness's own
+supported paths — a profile dependency and a patch row. **No harness source file is ever
+edited** (NFR5).
+
+The `~/.dsh` profile is not in this repository and never will be, so this file is the record
+that makes it reproducible. Epic 6 turns it into one command.
+
+## Versions
+
+| Component | Version | Status |
+|---|---|---|
+| `@deepseek-ai/dsh` | `0.1.1-rc.2` | **Pinned.** The harness is a developer preview whose README promises compatibility-breaking changes (NFR6). Install it with the exact version; never `@latest`. The same string is recorded in `plugins/dsh-client-ui-base/package.json` under `blindFlange.harnessVersion`. |
+| Node | `22.15.0` | **Minimum, not pinned.** What this machine runs and what the plugin was verified against; a second machine needs `>=22.15.0`. `@earendil-works/pi-ai` wants `>=22.19.0`, but that provider is removed in Story 1.3, so the gap closes by deletion rather than by an upgrade. |
+| pnpm | `10.11.0` | **Minimum, not pinned.** `dsh plugin` forwards to whatever pnpm is on `PATH` and fails with a clear message if there is none. |
+
+Check both before starting — a missing pnpm fails halfway through step 2 and leaves a
+half-built profile:
+
+```sh
+node -v     # >= 22.15.0
+pnpm -v     # >= 10.11.0
+```
+
+**Licence scope.** Three packages have been verified by reading `LICENSE` at the pinned ref,
+on 27 August 2026: the harness (`deepseek-ai/deepseek-harness`, MIT), Cordis
+(`cordiverse/cordis`, MIT) and the published CLI `@deepseek-ai/dsh` (MIT). That is the three
+we install directly, **not** the roughly 511 packages the global install pulls in. The
+transitive tree is disclosed in the harness's own `THIRD_PARTY_NOTICES.md` and is **not yet
+audited** — Story 6.4 closes that, and the Apache-2.0/MIT/BSD-only claim must not go in front
+of MRPL until it has. See `licence-policy.md`.
+
+## Steps
+
+1. **Install the harness CLI globally at the pinned version.**
+
+   ```sh
+   npm install -g @deepseek-ai/dsh@0.1.1-rc.2
+   ```
+
+   Roughly 511 packages and two minutes. Do not use `npx` — it did not complete in seven
+   minutes on this machine.
+
+2. **Install the Blind Flange plugin package into the web profile.** Run this from the
+   repository root:
+
+   ```sh
+   dsh plugin --profile web add "link:$(pwd)/plugins/dsh-client-ui-base"
+   ```
+
+   On Windows use forward slashes in the path even in PowerShell — the spec is passed through
+   to pnpm, which reads a backslash path as an escape. The installed dependency should read
+   `link:C:/Users/.../plugins/dsh-client-ui-base`.
+
+   `dsh plugin` initialises the profile on first use, forwards the rest to pnpm inside
+   `~/.dsh/profiles/web`, then reconciles the profile's bundle list. It prints
+
+   > `@blind-flange/dsh-client-ui-base declares no dsh.bundle — installed as a plain
+   > dependency, not a profile layer`
+
+   which is the expected and correct outcome: our client plugins are mounted by the patch row
+   in step 3, not by joining the bundle stack.
+
+   **Use `link:`, not `file:`.** With `file:` pnpm copies the package into its store, so every
+   edit to a plugin source file needs a reinstall before it reaches the browser. `link:` points
+   the profile at the working copy, which is what a four-day build needs.
+
+   The cost of `link:` is an absolute path in `~/.dsh/profiles/web/package.json`. Moving or
+   re-cloning the repository breaks it silently — the plugin simply stops being served. Re-run
+   this step after any move, and expect to run it as written on a second machine.
+
+3. **Mount it.** `~/.dsh/profiles/web/cordis.patch.yml` is the user patch layer, applied after
+   every bundle layer. **Append** this array element; keep any entries already there.
+
+   ```yaml
+   - insert:
+       - id: bf-base
+         name: '@blind-flange/dsh-client-ui-base'
+   ```
+
+4. **Suppress the Internal Testing Notice.** Merge this key into `~/.dsh/settings.yaml` — the
+   file also holds the operator's own settings, so do not overwrite it:
+
+   ```yaml
+   ui-onboarding:
+     welcomeNoticeVersion: 2026-08-13.1
+   ```
+
+   The same file records the theme last chosen in Settings (`ui-theme.preference`, one of
+   `light`, `dark` or `system`). Both themes are honoured, so every panel we build has to
+   render correctly in either.
+
+   The API-key modal is a separate problem and is not suppressed by this — see Story 1.3.
+
+5. **Retire the 27 August spike, if this machine carries it.** The spike copied a plugin
+   straight into the shared profile store instead of installing it. Remove the directory and
+   any `bf-egress-monitor` row in `cordis.patch.yml`:
+
+   ```sh
+   rm -rf ~/.dsh/profiles/node_modules/@blind-flange
+   ```
+
+   Nothing depends on it. The egress monitor is rebuilt from the UI primitives in Epic 2; the
+   spike's hand-written colours are the counter-example our UI rules exist to prevent.
+
+## Checking it worked
+
+```sh
+dsh --profile web --dump-config     # the bf-base row appears under the cordis.patch.yml layer
+dsh web --no-open                   # serves http://127.0.0.1:3080
+```
+
+`--dump-config` prints the composed tree with a `# ==` header per layer. The last layer should
+end with our row, and **no `bf-egress-monitor` row should appear anywhere**:
+
+```
+# == C:\Users\...\.dsh\profiles\web\cordis.patch.yml
+- id: bf-base
+  name: '@blind-flange/dsh-client-ui-base'
+```
+
+With the app running:
+
+- The browser fetches `/plugins/@blind-flange/dsh-client-ui-base/client.js` and gets a 200,
+  alongside the shipped plugins. That is the browser half.
+- Settings → Plugins → Plugin list shows `ui-base` as Mounted and Enabled. That is the host
+  half; the two are checked separately because they can fail independently.
+- The console carries no error naming `@blind-flange/...`.
+
+**Confirming no harness file was edited.** The claim is checkable rather than asserted — no
+file under the global install should have changed since the profile work started:
+
+```sh
+find "$(npm root -g)/@deepseek-ai" -newermt "<the time you started>" | head
+```
+
+An empty result is the evidence. The only files any of this writes are
+`~/.dsh/profiles/web/package.json`, `~/.dsh/profiles/web/cordis.patch.yml`,
+`~/.dsh/settings.yaml`, and pnpm's own `node_modules` inside the profile.
+
+## Removing it
+
+```sh
+dsh plugin --profile web remove @blind-flange/dsh-client-ui-base
+```
+
+and delete the insert row. Removal is always a patch-layer edit; nothing under the harness
+install is touched, so there is nothing to undo there.
