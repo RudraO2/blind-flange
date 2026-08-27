@@ -20,3 +20,33 @@ inverts the project's central claim; it is a development convenience only.
 
 Cached responses for `replay` are captured from real `local` runs, not hand-written, so
 the replayed output is something the system actually produced.
+
+## Amendment, 28 August 2026 — Phase 0 ships an authored cache
+
+The paragraph above cannot hold for Phase 0, and it is better to say so than to leave a rule
+in the repository that the code quietly breaks.
+
+Real `local` inference on the GTX 1650 is a **stretch goal for day 4** of a four-day build, so
+there are no real `local` runs to capture from. For the internal-round prototype the replay
+cache is therefore **authored by hand**, and the disclosure on screen must say what is actually
+true rather than implying capture.
+
+**What this costs.** The text the workbench appears to produce is written by a person, not
+generated. That is a real reduction in what the demo evidences, and it is why the original rule
+existed.
+
+**What it does not cost.** Everything ADR-0002 protects still holds. The egress denial, the
+canary, the audit log, the router scoring, the OCR and its bounding boxes, and the `.docx`
+generation are all real events produced by real code. Only token generation is authored — and
+token generation was already the one swappable part.
+
+**Therefore:**
+
+- The provider indicator must not use wording that implies capture from a live run. It states
+  that responses are cached and authored for the prototype.
+- The cache format is the same one a captured cache would use, so replacing authored entries
+  with captured ones later is a data swap, not a code change.
+- When `local` runs — on day 4, or in any later phase — the authored entries are replaced with
+  captured ones and this amendment is superseded rather than quietly forgotten.
+- `remote` remains a development convenience only, never active during a demo or a recording.
+  Unchanged.
