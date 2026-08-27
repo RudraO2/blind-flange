@@ -34,6 +34,15 @@ def image_to_findings(image_bytes: bytes) -> list[Finding]:
     server maps that to a 400 rather than letting it surface as a 500.
     """
     image = Image.open(io.BytesIO(image_bytes))
+    return findings_from_image(image)
+
+
+def findings_from_image(image: Image.Image) -> list[Finding]:
+    """Run OCR against an already-decoded image.
+
+    Split out from image_to_findings so Story 4.4's PDF path can hand this a page
+    rendered straight from pypdfium2, rather than re-encoding it to bytes and back.
+    """
     data = pytesseract.image_to_data(image, output_type=pytesseract.Output.DICT)
 
     findings: list[Finding] = []

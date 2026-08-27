@@ -15,3 +15,9 @@ pytesseract==0.3.13
 # Pulled in transitively by pytesseract. Its licence (MIT-CMU) is the open question recorded
 # in LICENCES.md since Story 4.1 — not resolved by this story, not reopened by it either.
 pillow==11.3.0
+
+# Story 4.4 — renders each PDF page to an image ocr.py can read. Never PyMuPDF: it is
+# AGPL-3.0 (ADR-0005, CLAUDE.md). Same version already licence-checked for the fixture
+# generator in ../requirements-fixtures.txt; recorded again here because it is now also a
+# runtime dependency of the service itself, not only a build-time tool.
+pypdfium2==4.30.0

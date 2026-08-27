@@ -139,6 +139,28 @@ tessdata or any model file at request time.
 Story 4.3's own licence gate therefore inherits Story 4.1's open Pillow question rather than
 adding to it — see "The open decision" above, still unresolved, still an ADR away.
 
+## Story 4.4 — the PDF path
+
+Verified 28 August 2026. Adds one runtime dependency to `services/ingestion/requirements.txt`:
+
+| Component | Version | Licence | How it was verified |
+|---|---|---|---|
+| `pypdfium2` | 4.30.0 | Apache-2.0 **or** BSD-3-Clause, at our choice | Same distribution already verified for the fixture generator in Story 4.1 — `METADATA` declares `(Apache-2.0 OR BSD-3-Clause) AND LicenseRef-PdfiumThirdParty`. Now also a runtime dependency of the service, not only a build-time tool, so recorded here again against that role. |
+
+No other component enters the tree: `pdf.py` imports only `pypdfium2` and this directory's
+own `ocr` module. **`PyMuPDF` does not appear anywhere in the dependency tree** — confirmed
+by `pip show pymupdf` (not installed) and by `requirements.txt` naming only `pytesseract`,
+`pillow` and `pypdfium2` (ADR-0005).
+
+`pypdfium2` bundles the PDFium engine's third-party sources (`LICENSES/LicenseRef-PdfiumThirdParty.txt`)
+— libpng, LibTIFF and similar under permissive/public-domain terms, recorded in Story 4.1's
+row above and unchanged here.
+
+This story does not touch the open Pillow (`MIT-CMU`) question — it neither resolves nor
+reopens it. The service's dependency tree still does not fully satisfy its own "every licence
+inside the allow-list" acceptance criterion for that one pre-existing reason, unchanged since
+Story 4.1.
+
 ## Gate result for Story 4.1
 
 The story's third acceptance criterion — "**Given** the generator's dependencies **When**

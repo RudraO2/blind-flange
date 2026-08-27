@@ -16,8 +16,10 @@ import os
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
 from PIL import UnidentifiedImageError
+from pypdfium2 import PdfiumError
 
 from ocr import image_to_findings
+from pdf import pdf_to_findings
 
 HOST = "127.0.0.1"
 DEFAULT_PORT = 8642
@@ -45,33 +47,60 @@ class IngestionHandler(BaseHTTPRequestHandler):
         self._send_json(404, {"error": "not found"})
 
     def do_POST(self) -> None:  # noqa: N802 - stdlib method name
-        if self.path != "/v1/ingest/image":
+        if self.path == "/v1/ingest/image":
+            self._handle_ingest_image()
+        elif self.path == "/v1/ingest/pdf":
+            self._handle_ingest_pdf()
+        else:
             self._send_json(404, {"error": "not found"})
-            return
 
+    def _read_body(self, max_bytes: int) -> bytes | None:
+        # Read (and so drain from the socket) before any error response is sent. Responding
+        # first and leaving the body unread lets Windows RST the connection out from under
+        # the client while it is still reading that response.
+        length = self.headers.get("Content-Length")
+        if length is None:
+            self._send_json(400, {"error": "Content-Length is required"})
+            return None
+        length = int(length)
+        if length <= 0:
+            self._send_json(400, {"error": "request body is empty"})
+            return None
+        if length > max_bytes:
+            self._send_json(413, {"error": f"body exceeds {max_bytes} bytes"})
+            return None
+        return self.rfile.read(length)
+
+    def _handle_ingest_image(self) -> None:
         content_type = self.headers.get("Content-Type", "")
+        body = self._read_body(MAX_BODY_BYTES)
+        if body is None:
+            return
         if not content_type.startswith("image/"):
             self._send_json(400, {"error": "Content-Type must be image/*"})
             return
 
-        length = self.headers.get("Content-Length")
-        if length is None:
-            self._send_json(400, {"error": "Content-Length is required"})
-            return
-        length = int(length)
-        if length <= 0:
-            self._send_json(400, {"error": "request body is empty"})
-            return
-        if length > MAX_BODY_BYTES:
-            self._send_json(413, {"error": f"body exceeds {MAX_BODY_BYTES} bytes"})
-            return
-
-        image_bytes = self.rfile.read(length)
-
         try:
-            findings = image_to_findings(image_bytes)
+            findings = image_to_findings(body)
         except UnidentifiedImageError:
             self._send_json(400, {"error": "body is not a decodable image"})
+            return
+
+        self._send_json(200, {"findings": findings})
+
+    def _handle_ingest_pdf(self) -> None:
+        content_type = self.headers.get("Content-Type", "")
+        body = self._read_body(MAX_BODY_BYTES)
+        if body is None:
+            return
+        if content_type != "application/pdf":
+            self._send_json(400, {"error": "Content-Type must be application/pdf"})
+            return
+
+        try:
+            findings = pdf_to_findings(body)
+        except PdfiumError:
+            self._send_json(400, {"error": "body is not a decodable PDF"})
             return
 
         self._send_json(200, {"findings": findings})

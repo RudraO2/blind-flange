@@ -22,6 +22,7 @@ from server import HOST, IngestionHandler
 from http.server import ThreadingHTTPServer
 
 FIXTURE = Path(__file__).resolve().parent / "fixtures" / "sample-inspection-report-p1.png"
+PDF_FIXTURE = Path(__file__).resolve().parent / "fixtures" / "sample-inspection-report.pdf"
 TEST_PORT = 8643
 
 
@@ -103,6 +104,62 @@ class IngestionServiceTest(unittest.TestCase):
             "/v1/ingest/image",
             body=payload,
             headers={"Content-Type": "image/png", "Content-Length": str(len(payload))},
+        )
+        resp = conn.getresponse()
+        self.assertEqual(resp.status, 400)
+        resp.read()
+
+
+    def test_ingest_pdf_returns_findings_with_page_numbers(self) -> None:
+        pdf_bytes = PDF_FIXTURE.read_bytes()
+        conn = self._client()
+        conn.request(
+            "POST",
+            "/v1/ingest/pdf",
+            body=pdf_bytes,
+            headers={"Content-Type": "application/pdf", "Content-Length": str(len(pdf_bytes))},
+        )
+        resp = conn.getresponse()
+        self.assertEqual(resp.status, 200)
+        body = json.loads(resp.read())
+
+        findings = body["findings"]
+        self.assertGreater(len(findings), 0, "expected at least one word finding")
+
+        sample = findings[0]
+        for key in ("text", "bbox", "confidence", "page"):
+            self.assertIn(key, sample)
+        self.assertIsInstance(sample["page"], int)
+
+        pages_seen = {f["page"] for f in findings}
+        self.assertEqual(pages_seen, {1, 2}, "the fixture PDF has two pages")
+
+        # Page 1's own banner text should still be legible after the pdfium render step,
+        # per the same proof Story 4.2 ran against the plain image.
+        page_1_text = " ".join(f["text"] for f in findings if f["page"] == 1)
+        self.assertIn("SYNTHETIC", page_1_text)
+
+    def test_ingest_pdf_rejects_non_pdf_content_type(self) -> None:
+        conn = self._client()
+        payload = b"not a pdf"
+        conn.request(
+            "POST",
+            "/v1/ingest/pdf",
+            body=payload,
+            headers={"Content-Type": "image/png", "Content-Length": str(len(payload))},
+        )
+        resp = conn.getresponse()
+        self.assertEqual(resp.status, 400)
+        resp.read()
+
+    def test_ingest_pdf_rejects_undecodable_pdf_bytes(self) -> None:
+        conn = self._client()
+        payload = b"%PDF-not-actually-a-pdf"
+        conn.request(
+            "POST",
+            "/v1/ingest/pdf",
+            body=payload,
+            headers={"Content-Type": "application/pdf", "Content-Length": str(len(payload))},
         )
         resp = conn.getresponse()
         self.assertEqual(resp.status, 400)
