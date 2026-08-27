@@ -132,6 +132,44 @@ Then **stop**. Do not start it. The next story goes in a new chat.
 
 ---
 
+## Running two chats at once
+
+Two lanes are safe. More are not, and the reason is mechanical rather than cautious: one
+`~/.dsh/profiles/web/cordis.patch.yml`, one port 3080, one `sprint-status.yaml` and one `main`
+branch are all single-copy on this machine.
+
+The lanes come from ADR-0003's hard boundary — the harness orchestrates in Node, Python services
+do all the ML behind local HTTP, nothing crosses. That boundary is also a work boundary.
+
+| | Lane A — harness | Lane B — Python |
+|---|---|---|
+| Stories | Epics 1, 2, 3, 5, 6, 7 in order, plus 4.5 | 4.1 → 4.2 → 4.3 → 4.4 |
+| Touches | the plugin packages, the profile, React | the ingestion service and its fixtures only |
+| Runs `dsh web` | yes | **never** |
+| Takes screenshots | yes | no |
+| Writes `sprint-status.yaml` | yes | **never** — reports instead |
+
+Lane B needs nothing from Lane A and can start before Story 1.1 exists. It also contains Story
+4.2, the timeboxed proof that OCR returns bounding boxes on this hardware, which is the build's
+largest unknown — starting it in parallel from the first hour is the main reason to bother with
+two lanes at all.
+
+Story 4.5, the crop viewer, is React. It belongs to Lane A and waits for both lanes.
+
+**When running in a lane, four things change:**
+
+1. **You are told which story to do. Skip Step 2's selection entirely** and use the story you
+   were given. Never auto-pick in a lane — two chats picking "the first backlog story" pick the
+   same one.
+2. **Lane B never starts the application, never takes a screenshot, and never edits
+   `sprint-status.yaml`.** It reports the story key and its status in the final message, and
+   Lane A or the user records it. One writer for that file.
+3. **`git pull --rebase` before every push.** The lanes touch different directories, so this
+   stays clean; without it the second push of a pair is rejected.
+4. **Stay inside your lane's files.** If the story you were given needs a file belonging to the
+   other lane, stop and say so rather than reaching across. That is the signal the two lanes have
+   met, and it is a decision for the user, not for you.
+
 ## If something is wrong with the plan itself
 
 If the story you picked is wrong, contradicts another story, or the plan has drifted from the
