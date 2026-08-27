@@ -115,6 +115,30 @@ resolve or need to.
 All three rows above are individually inside the allow-list. The Pillow question stands as
 recorded in Story 4.1's gate result and is unaffected by this story.
 
+## Story 4.3 — the ingestion service itself
+
+Verified 28 August 2026. `services/ingestion/requirements.txt` pins the service's own
+runtime dependencies, distinct from the fixture generator and the Story 4.2 proof script.
+
+| Component | Version | Licence | How it was verified |
+|---|---|---|---|
+| `pytesseract` | 0.3.13 | Apache-2.0 | Same distribution already verified for Story 4.2 — `pytesseract-0.3.13.dist-info/LICENSE`. |
+| `pillow` | 11.3.0 | **`MIT-CMU` — outside the allow-list** | Same open question as Story 4.1 and 4.2 — see above. Not reopened, not resolved, by this story. |
+
+**No new component enters the tree.** The HTTP boundary (`server.py`) is Python's own
+`http.server` — deliberately, so this story does not have to license-check a web framework
+on top of an already-open question. `services/ingestion/CONTRACT.md` documents why nothing
+richer than stdlib was needed for one JSON endpoint.
+
+The service makes no outbound call at runtime (NFR2): `server.py` and `ocr.py` import only
+`json`, `os`, `io`, `pathlib`, `platform`, `http.server`, `pytesseract` and `PIL` — no
+`requests`, `urllib.request`, `socket` client code, or similar. It binds `127.0.0.1` only
+and reads the Tesseract binary already installed on the host (Story 4.2); it never fetches
+tessdata or any model file at request time.
+
+Story 4.3's own licence gate therefore inherits Story 4.1's open Pillow question rather than
+adding to it — see "The open decision" above, still unresolved, still an ADR away.
+
 ## Gate result for Story 4.1
 
 The story's third acceptance criterion — "**Given** the generator's dependencies **When**

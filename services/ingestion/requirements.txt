@@ -1,0 +1,17 @@
+# Runtime dependencies of the ingestion service itself (services/ingestion/server.py,
+# ocr.py) — distinct from ../requirements-fixtures.txt (the sample-report generator,
+# build-time only) and proof/requirements-proof.txt (the Story 4.2 timeboxed proof script).
+#
+# The HTTP boundary is stdlib `http.server` deliberately — no web framework, so this list
+# stays exactly what Story 4.2 already pinned and licence-checked, and does not reopen the
+# licence gate for a new component.
+#
+# Licences verified from the LICENSE file at these exact versions and recorded in
+# LICENCES.md, per docs/licence-policy.md. Tesseract itself is not a pip package — see
+# proof/requirements-proof.txt for how the binary is installed.
+
+pytesseract==0.3.13
+
+# Pulled in transitively by pytesseract. Its licence (MIT-CMU) is the open question recorded
+# in LICENCES.md since Story 4.1 — not resolved by this story, not reopened by it either.
+pillow==11.3.0
