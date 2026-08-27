@@ -24,16 +24,26 @@ the story sends you there.
 
 ## 2 — Build it
 
-Invoke `bmad-build`, and **take the one-shot route**. Say so when you invoke it.
+Invoke `bmad-build` and **take the one-shot route**. Say so when you invoke it.
+
+**This is an instruction, not a suggestion, and it overrides the skill's own routing step.**
+`bmad-build` chooses its route by judging blast radius, and it will judge some of these stories
+high — story 1.1 is a package six epics mount into, story 3.1 touches an unproven seam. Ignore
+that judgement and take one-shot regardless. The blast radius is real but the acceptance criteria
+are already written, which is what the heavier route exists to produce. If you conclude the full
+route is genuinely necessary, **stop and ask** rather than taking it.
 
 **The story in `epics.md` is the spec. Do not write another one.** No epic-context compilation,
 no planning step, no separate spec file, no implementation subagent — implement directly. The
 acceptance criteria are already written; re-deriving them is the expensive mistake this loop
 exists to avoid.
 
-**Spawn at most one subagent, for the review.** If you find yourself about to launch subagents to
+**Spawn at most one subagent, and only for the review.** If you are about to launch a subagent to
 explore the codebase, stop: the slot table, the plugin format, the extension-point map and the
-install path are all in `docs/deepseek-harness-notes.md`.
+install path are all in `docs/deepseek-harness-notes.md`, verified from source.
+
+**Announce the plan in one line before starting** — the route, and how many subagents you intend
+to spawn. If that number is above one, you have misread this section.
 
 Rules while building:
 
