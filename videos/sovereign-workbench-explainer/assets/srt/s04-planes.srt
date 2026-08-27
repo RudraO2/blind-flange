@@ -1,0 +1,43 @@
+1
+00:00:00,000 --> 00:00:03,537
+Let us look at the shape of the system. Six layers, stacked.
+
+2
+00:00:03,537 --> 00:00:07,580
+At the top, access. The screen people actually use.
+
+3
+00:00:07,580 --> 00:00:13,139
+Below that, orchestration. This is the brain that makes a plan and decides which model answers.
+
+4
+00:00:13,139 --> 00:00:17,182
+Below that, tools. The things the assistant is allowed to reach for.
+
+5
+00:00:17,182 --> 00:00:21,730
+Reading a file, running code, searching documents.
+
+6
+00:00:21,730 --> 00:00:25,773
+Then the model plane, where the AI models themselves live.
+
+7
+00:00:25,773 --> 00:00:30,826
+Then data, where files, search indexes, and the audit trail are kept.
+
+8
+00:00:30,826 --> 00:00:36,385
+And underneath everything, control. The firewall, the network monitor, the audit log.
+
+9
+00:00:36,385 --> 00:00:41,944
+The important thing about this diagram is not the six boxes. It is the outline around them.
+
+10
+00:00:41,944 --> 00:00:47,503
+Everything inside that outline talks to itself over the local machine. Nothing has a route out.
+
+11
+00:00:47,503 --> 00:00:51,040
+Now, the problem statement asks for something specific.

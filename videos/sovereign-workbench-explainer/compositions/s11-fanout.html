@@ -1,0 +1,130 @@
+<!doctype html>
+<html lang="en">
+  <head><meta charset="UTF-8" /><title>The card is a budget</title></head>
+  <body>
+    <template>
+      <style>
+#root{position:absolute;inset:0;width:1920px;height:1080px;overflow:hidden;
+  background:#08100F;color:#E1EAEB;
+  font-family:"IBM Plex Mono",monospace;}
+#grid{position:absolute;inset:0;
+  background-image:linear-gradient(#12211F 1px,transparent 1px),linear-gradient(90deg,#12211F 1px,transparent 1px);
+  background-size:80px 80px;opacity:.35;}
+#vig{position:absolute;inset:0;background:radial-gradient(ellipse at 50% 42%,transparent 40%,#050B0A 100%);}
+#tb{position:absolute;top:64px;left:96px;display:flex;align-items:baseline;gap:22px;}
+#tb .n{font-family:"IBM Plex Mono",monospace;font-size:22px;font-weight:700;color:#FF6E3F;letter-spacing:.08em;}
+#tb .t{font-family:Oswald,sans-serif;font-size:44px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:#E1EAEB;}
+#rule{position:absolute;top:132px;left:96px;width:1728px;height:2px;background:#233539;transform-origin:left center;}
+#stage{position:absolute;top:196px;left:96px;width:1728px;height:648px;}
+#capband{position:absolute;left:260px;right:260px;bottom:84px;height:150px;display:grid;place-items:center;}
+.cue{position:absolute;left:0;right:0;top:0;bottom:0;display:grid;place-items:center;
+  text-align:center;font-family:"IBM Plex Mono",monospace;font-size:44px;font-weight:400;
+  line-height:1.34;color:#F2F7F7;text-shadow:0 3px 18px rgba(5,11,10,.95);}
+#prog{position:absolute;bottom:38px;left:96px;right:96px;display:flex;align-items:center;gap:18px;}
+#prog .bar{flex:1;height:2px;background:#1A2A2E;position:relative;}
+#prog .fill{position:absolute;left:0;top:0;bottom:0;background:#FF6E3F;transform-origin:left center;}
+#prog .lbl{font-size:17px;color:#8FA4AB;letter-spacing:.16em;}
+.mono{font-family:"IBM Plex Mono",monospace;}
+.osw{font-family:Oswald,sans-serif;text-transform:uppercase;letter-spacing:.05em;}
+.flare{color:#FF6E3F;} .gauge{color:#46BDB0;} .warn{color:#DFA82F;} .dim{color:#9DB2B9;}
+.card{position:absolute;background:#0F1A1D;border:2px solid #233539;border-radius:6px;}
+.chip{position:absolute;font-family:"IBM Plex Mono",monospace;font-size:22px;
+  padding:9px 16px;border-radius:4px;border:2px solid #233539;background:#0F1A1D;white-space:nowrap;}
+
+#mbox{position:absolute;left:0;top:40px;width:420px;height:180px;background:#0F1A1D;border:2px solid #46BDB0;border-radius:7px;
+  display:grid;place-items:center;text-align:center;font-size:26px;line-height:1.45;}
+.ag{position:absolute;width:150px;height:80px;background:#0F1A1D;border:2px solid #FF6E3F;border-radius:5px;
+  display:grid;place-items:center;font-size:21px;color:#FF6E3F;}
+#vram{position:absolute;left:0;top:300px;width:1728px;height:70px;background:#131F22;border-radius:5px;overflow:hidden;}
+#vw{position:absolute;left:0;top:0;bottom:0;width:648px;background:rgba(70,189,176,.42);display:grid;place-items:center;font-size:23px;}
+#vk{position:absolute;left:648px;top:0;bottom:0;right:0;background:rgba(255,110,63,.2);display:grid;place-items:center;font-size:23px;color:#FF6E3F;transform-origin:left center;}
+#thr{position:absolute;left:0;top:412px;font-size:27px;}
+#gu{position:absolute;left:0;top:470px;font-size:27px;}
+#free{position:absolute;left:0;top:540px;font-size:40px;font-family:Oswald,sans-serif;text-transform:uppercase;color:#FF6E3F;letter-spacing:.03em;}</style>
+
+      <div id="root" data-composition-id="s11-fanout" data-width="1920" data-height="1080" data-duration="70.5">
+        <div id="grid"></div>
+        <div id="vig"></div>
+
+        <div id="tb">
+          <span class="n">11</span>
+          <span class="t">The card is a budget</span>
+        </div>
+        <div id="rule"></div>
+
+        <div id="stage">
+
+          <div id="mbox">one 10B model<br/>loaded once · 6 GB</div>
+          <div class="ag" id="g1" style="left:520px;top:20px">agent 1</div>
+          <div class="ag" id="g2" style="left:700px;top:20px">agent 2</div>
+          <div class="ag" id="g3" style="left:880px;top:20px">agent 3</div>
+          <div class="ag" id="g4" style="left:520px;top:130px">agent 4</div>
+          <div class="ag" id="g5" style="left:700px;top:130px">agent 5</div>
+          <div class="ag" id="g6" style="left:880px;top:130px">agent 6</div>
+          <div id="vram"><div id="vw" class="mono">weights · 6 GB · paid ONCE</div><div id="vk" class="mono">9.5 GB left = 8–15 agents</div></div>
+          <div id="thr" class="mono">throughput <span class="gauge">↑ 1.5–3× at five concurrent</span> — not slower</div>
+          <div id="gu" class="mono">GPU utilisation <span class="dim">30%</span> → <span class="gauge">85%</span></div>
+          <div id="free">The model was already loaded — the parallelism was free</div>
+        </div>
+
+        <div id="capband">
+        <div class="cue clip" id="cue-s11-fanout-0" data-start="0.000" data-duration="4.539">Now let us come back to that first principle, because it pays off here.</div>
+        <div class="cue clip" id="cue-s11-fanout-1" data-start="4.539" data-duration="4.539">Remember, generating text is limited by memory speed, not arithmetic.</div>
+        <div class="cue clip" id="cue-s11-fanout-2" data-start="9.078" data-duration="5.044">The card reads all the weights for every word, and barely calculates anything.</div>
+        <div class="cue clip" id="cue-s11-fanout-3" data-start="14.122" data-duration="3.530">So what happens if you run four requests at the same time?</div>
+        <div class="cue clip" id="cue-s11-fanout-4" data-start="17.652" data-duration="4.035">It reads those same weights once, and serves all four.</div>
+        <div class="cue clip" id="cue-s11-fanout-5" data-start="21.687" data-duration="2.493">Which means the cost of the weights is paid</div>
+        <div class="cue clip" id="cue-s11-fanout-6" data-start="24.180" data-duration="2.550">once, no matter how many agents are running.</div>
+        <div class="cue clip" id="cue-s11-fanout-7" data-start="26.730" data-duration="5.044">Each extra agent costs only its own small slice of conversation memory,</div>
+        <div class="cue clip" id="cue-s11-fanout-8" data-start="31.774" data-duration="2.906">and total throughput goes up, not down. Roughly one and</div>
+        <div class="cue clip" id="cue-s11-fanout-9" data-start="34.680" data-duration="2.642">a half to three times at five concurrent requests.</div>
+        <div class="cue clip" id="cue-s11-fanout-10" data-start="37.322" data-duration="5.548">So the leftover space on the card is not spare. It is the parallelism budget.</div>
+        <div class="cue clip" id="cue-s11-fanout-11" data-start="42.870" data-duration="5.547">A 10 billion model at 4-bit uses about 6 gigabytes of a 16 gigabyte card.</div>
+        <div class="cue clip" id="cue-s11-fanout-12" data-start="48.417" data-duration="6.053">The 9 and a half gigabytes left over is room for roughly 8 to 15 agents</div>
+        <div class="cue clip" id="cue-s11-fanout-13" data-start="54.470" data-duration="3.026">working at once on the same model, not one.</div>
+        <div class="cue clip" id="cue-s11-fanout-14" data-start="57.496" data-duration="4.539">So when a 12-page inspection report comes in, we do not read it page by page.</div>
+        <div class="cue clip" id="cue-s11-fanout-15" data-start="62.035" data-duration="3.026">We put six readers on it simultaneously.</div>
+        <div class="cue clip" id="cue-s11-fanout-16" data-start="65.061" data-duration="4.539">And the model was already loaded, so the parallelism was free.</div>
+        </div>
+
+        <div id="prog">
+          <span class="lbl">11 / 15</span>
+          <span class="bar"><span class="fill" id="pfill"></span></span>
+          <span class="lbl">SIH26117</span>
+        </div>
+
+        <audio id="vo-s11-fanout" src="assets/vo/s11-fanout.wav" data-start="0" data-duration="69.600" data-track-index="31" data-volume="1"></audio>
+      </div>
+
+      <script>
+        (function () {
+          window.__timelines = window.__timelines || {};
+          // Every scene shares chrome ids (#pfill, #tb, ...). Selector strings in
+          // GSAP resolve against the whole document, and all scenes are mounted
+          // at once, so all lookups MUST be scoped to this scene's own root.
+          const scope = document.querySelector('[data-composition-id="s11-fanout"]');
+          const q = gsap.utils.selector(scope);
+          const tl = gsap.timeline({ paused: true });
+          const D = 70.5;
+
+          tl.from(q(".n"), { opacity: 0, x: -18, duration: 0.45, ease: "power3.out" }, 0)
+            .from(q(".t"), { opacity: 0, x: -26, duration: 0.55, ease: "power3.out" }, 0.08)
+            .from(q("#rule"), { scaleX: 0, duration: 0.7, ease: "power3.inOut" }, 0.18)
+            .fromTo(q("#pfill"), { scaleX: 0 }, { scaleX: 1, duration: D - 0.05, ease: "none" }, 0);
+
+
+          tl.from(q("#mbox"), { opacity:0, scale:.93, duration:.7, ease:"power3.out" }, 1.2)
+            .from(q("#vram"), { opacity:0, duration:.6 }, 24.0)
+            .fromTo(q("#vk"), { scaleX:0 }, { scaleX:1, duration:1.0, ease:"power3.out" }, 32.0)
+            .from(q("#thr"), { opacity:0, x:-22, duration:.55 }, 21.0)
+            .from(q("#gu"), { opacity:0, x:-22, duration:.55 }, 38.0);
+          ["#g1","#g2","#g3","#g4","#g5","#g6"].forEach((s,i)=>
+            tl.from(q(s),{opacity:0,scale:.7,duration:.42,ease:"back.out(1.9)"},44.0+i*.85));
+          tl.from(q("#free"), { opacity:0, y:24, duration:.7, ease:"power3.out" }, 52.5);
+
+          window.__timelines["s11-fanout"] = tl;
+        })();
+      </script>
+    </template>
+  </body>
+</html>

@@ -1,0 +1,117 @@
+<!doctype html>
+<html lang="en">
+  <head><meta charset="UTF-8" /><title>Six planes</title></head>
+  <body>
+    <template>
+      <style>
+#root{position:absolute;inset:0;width:1920px;height:1080px;overflow:hidden;
+  background:#08100F;color:#E1EAEB;
+  font-family:"IBM Plex Mono",monospace;}
+#grid{position:absolute;inset:0;
+  background-image:linear-gradient(#12211F 1px,transparent 1px),linear-gradient(90deg,#12211F 1px,transparent 1px);
+  background-size:80px 80px;opacity:.35;}
+#vig{position:absolute;inset:0;background:radial-gradient(ellipse at 50% 42%,transparent 40%,#050B0A 100%);}
+#tb{position:absolute;top:64px;left:96px;display:flex;align-items:baseline;gap:22px;}
+#tb .n{font-family:"IBM Plex Mono",monospace;font-size:22px;font-weight:700;color:#FF6E3F;letter-spacing:.08em;}
+#tb .t{font-family:Oswald,sans-serif;font-size:44px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:#E1EAEB;}
+#rule{position:absolute;top:132px;left:96px;width:1728px;height:2px;background:#233539;transform-origin:left center;}
+#stage{position:absolute;top:196px;left:96px;width:1728px;height:648px;}
+#capband{position:absolute;left:260px;right:260px;bottom:84px;height:150px;display:grid;place-items:center;}
+.cue{position:absolute;left:0;right:0;top:0;bottom:0;display:grid;place-items:center;
+  text-align:center;font-family:"IBM Plex Mono",monospace;font-size:44px;font-weight:400;
+  line-height:1.34;color:#F2F7F7;text-shadow:0 3px 18px rgba(5,11,10,.95);}
+#prog{position:absolute;bottom:38px;left:96px;right:96px;display:flex;align-items:center;gap:18px;}
+#prog .bar{flex:1;height:2px;background:#1A2A2E;position:relative;}
+#prog .fill{position:absolute;left:0;top:0;bottom:0;background:#FF6E3F;transform-origin:left center;}
+#prog .lbl{font-size:17px;color:#8FA4AB;letter-spacing:.16em;}
+.mono{font-family:"IBM Plex Mono",monospace;}
+.osw{font-family:Oswald,sans-serif;text-transform:uppercase;letter-spacing:.05em;}
+.flare{color:#FF6E3F;} .gauge{color:#46BDB0;} .warn{color:#DFA82F;} .dim{color:#9DB2B9;}
+.card{position:absolute;background:#0F1A1D;border:2px solid #233539;border-radius:6px;}
+.chip{position:absolute;font-family:"IBM Plex Mono",monospace;font-size:22px;
+  padding:9px 16px;border-radius:4px;border:2px solid #233539;background:#0F1A1D;white-space:nowrap;}
+
+.pl{position:absolute;left:250px;width:1080px;height:74px;background:#0F1A1D;border:2px solid #233539;border-radius:5px;
+  display:flex;align-items:center;padding:0 26px;gap:26px;}
+.pl .nm{font-family:Oswald,sans-serif;font-size:29px;text-transform:uppercase;letter-spacing:.06em;width:250px;}
+.pl .ds{font-size:22px;color:#9DB2B9;}
+#fence{position:absolute;left:206px;top:12px;width:1168px;height:552px;border:3px dashed #FF6E3F;border-radius:12px;}
+#fencelbl{position:absolute;left:206px;top:584px;font-size:25px;color:#FF6E3F;letter-spacing:.09em;}</style>
+
+      <div id="root" data-composition-id="s04-planes" data-width="1920" data-height="1080" data-duration="51.94">
+        <div id="grid"></div>
+        <div id="vig"></div>
+
+        <div id="tb">
+          <span class="n">04</span>
+          <span class="t">Six planes</span>
+        </div>
+        <div id="rule"></div>
+
+        <div id="stage">
+
+          <div id="fence"></div>
+          <div class="pl" id="l1" style="top:38px"><span class="nm">Access</span><span class="ds">the screen people use</span></div>
+          <div class="pl" id="l2" style="top:126px"><span class="nm">Orchestration</span><span class="ds">plans the work, picks the model</span></div>
+          <div class="pl" id="l3" style="top:214px"><span class="nm">Tools</span><span class="ds">read files, run code, search documents</span></div>
+          <div class="pl" id="l4" style="top:302px"><span class="nm">Model</span><span class="ds">the open-weight models themselves</span></div>
+          <div class="pl" id="l5" style="top:390px"><span class="nm">Data</span><span class="ds">files, search index, audit trail</span></div>
+          <div class="pl" id="l6" style="top:478px"><span class="nm">Control</span><span class="ds">firewall, network monitor, audit log</span></div>
+          <div id="fencelbl" class="mono">↑ nothing inside this outline has a route out</div>
+        </div>
+
+        <div id="capband">
+        <div class="cue clip" id="cue-s04-planes-0" data-start="0.000" data-duration="3.537">Let us look at the shape of the system. Six layers, stacked.</div>
+        <div class="cue clip" id="cue-s04-planes-1" data-start="3.537" data-duration="4.043">At the top, access. The screen people actually use.</div>
+        <div class="cue clip" id="cue-s04-planes-2" data-start="7.580" data-duration="2.898">Below that, orchestration. This is the brain that</div>
+        <div class="cue clip" id="cue-s04-planes-3" data-start="10.478" data-duration="2.661">makes a plan and decides which model answers.</div>
+        <div class="cue clip" id="cue-s04-planes-4" data-start="13.139" data-duration="4.043">Below that, tools. The things the assistant is allowed to reach for.</div>
+        <div class="cue clip" id="cue-s04-planes-5" data-start="17.182" data-duration="4.548">Reading a file, running code, searching documents.</div>
+        <div class="cue clip" id="cue-s04-planes-6" data-start="21.730" data-duration="4.043">Then the model plane, where the AI models themselves live.</div>
+        <div class="cue clip" id="cue-s04-planes-7" data-start="25.773" data-duration="5.053">Then data, where files, search indexes, and the audit trail are kept.</div>
+        <div class="cue clip" id="cue-s04-planes-8" data-start="30.826" data-duration="3.243">And underneath everything, control. The firewall,</div>
+        <div class="cue clip" id="cue-s04-planes-9" data-start="34.069" data-duration="2.316">the network monitor, the audit log.</div>
+        <div class="cue clip" id="cue-s04-planes-10" data-start="36.385" data-duration="3.027">The important thing about this diagram is not the</div>
+        <div class="cue clip" id="cue-s04-planes-11" data-start="39.412" data-duration="2.532">six boxes. It is the outline around them.</div>
+        <div class="cue clip" id="cue-s04-planes-12" data-start="41.944" data-duration="3.016">Everything inside that outline talks to itself over</div>
+        <div class="cue clip" id="cue-s04-planes-13" data-start="44.960" data-duration="2.543">the local machine. Nothing has a route out.</div>
+        <div class="cue clip" id="cue-s04-planes-14" data-start="47.503" data-duration="3.537">Now, the problem statement asks for something specific.</div>
+        </div>
+
+        <div id="prog">
+          <span class="lbl">04 / 15</span>
+          <span class="bar"><span class="fill" id="pfill"></span></span>
+          <span class="lbl">SIH26117</span>
+        </div>
+
+        <audio id="vo-s04-planes" src="assets/vo/s04-planes.wav" data-start="0" data-duration="51.040" data-track-index="24" data-volume="1"></audio>
+      </div>
+
+      <script>
+        (function () {
+          window.__timelines = window.__timelines || {};
+          // Every scene shares chrome ids (#pfill, #tb, ...). Selector strings in
+          // GSAP resolve against the whole document, and all scenes are mounted
+          // at once, so all lookups MUST be scoped to this scene's own root.
+          const scope = document.querySelector('[data-composition-id="s04-planes"]');
+          const q = gsap.utils.selector(scope);
+          const tl = gsap.timeline({ paused: true });
+          const D = 51.94;
+
+          tl.from(q(".n"), { opacity: 0, x: -18, duration: 0.45, ease: "power3.out" }, 0)
+            .from(q(".t"), { opacity: 0, x: -26, duration: 0.55, ease: "power3.out" }, 0.08)
+            .from(q("#rule"), { scaleX: 0, duration: 0.7, ease: "power3.inOut" }, 0.18)
+            .fromTo(q("#pfill"), { scaleX: 0 }, { scaleX: 1, duration: D - 0.05, ease: "none" }, 0);
+
+
+          const lay=["#l1","#l2","#l3","#l4","#l5","#l6"];
+          lay.forEach((s,i)=>tl.from(q(s),{opacity:0,x:-46,duration:.55,ease:"power3.out"},9.5+i*3.6));
+          tl.from(q("#fence"), { opacity:0, scale:.97, duration:.9, ease:"power3.out" }, 40.0)
+            .from(q("#fencelbl"), { opacity:0, duration:.6 }, 43.0);
+
+          window.__timelines["s04-planes"] = tl;
+        })();
+      </script>
+    </template>
+  </body>
+</html>

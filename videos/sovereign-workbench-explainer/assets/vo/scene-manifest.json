@@ -1,0 +1,46 @@
+[
+  {
+    "id": "s01-problem",
+    "duration": 50.82
+  },
+  {
+    "id": "s02-what",
+    "duration": 57.62
+  },
+  {
+    "id": "s03-gpu",
+    "duration": 59.22
+  },
+  {
+    "id": "s04-planes",
+    "duration": 51.94
+  },
+  {
+    "id": "s05-registry",
+    "duration": 59.62
+  },
+  {
+    "id": "s06-router",
+    "duration": 59.62
+  },
+  {
+    "id": "s07-residency",
+    "duration": 64.46
+  },
+  {
+    "id": "s08-moe",
+    "duration": 76.5
+  },
+  {
+    "id": "s09-sticky",
+    "duration": 69.58
+  },
+  {
+    "id": "s10-agent",
+    "duration": 69.5
+  },
+  {
+    "id": "s11-fanout",
+    "duration": 70.5
+  }
+]

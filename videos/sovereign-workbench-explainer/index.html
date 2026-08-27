@@ -1,0 +1,180 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=1920, height=1080" />
+    <title>Blind Flange — from first principles</title>
+    <script src="https://cdn.jsdelivr.net/npm/gsap@3.14.2/dist/gsap.min.js"></script>
+    <style>
+      body { margin: 0; background: #08100F; }
+      #root { position: relative; width: 1920px; height: 1080px; overflow: hidden;
+        background: #08100F; color: #E1EAEB; font-family: "IBM Plex Mono", monospace; }
+      .card { position: absolute; inset: 0; display: grid; place-items: center; }
+      .inner { width: 1400px; text-align: center; }
+      .kick { font-size: 24px; letter-spacing: .3em; color: #FF6E3F; text-transform: uppercase; }
+      .big { font-family: Oswald, sans-serif; font-size: 168px; font-weight: 700;
+        letter-spacing: .03em; text-transform: uppercase; line-height: .98; margin: 34px 0 0; }
+      .sub { font-size: 34px; color: #9DB2B9; margin-top: 34px; line-height: 1.5; }
+      .meta { font-size: 22px; color: #8FA4AB; letter-spacing: .18em; margin-top: 54px; }
+      .rulebar { width: 200px; height: 5px; background: #FF6E3F; margin: 0 auto; }
+      .endline { font-family: Oswald, sans-serif; font-size: 88px; text-transform: uppercase;
+        letter-spacing: .03em; line-height: 1.18; }
+      .endline .q { color: #FF6E3F; }
+      #grid { position: absolute; inset: 0; opacity: .3;
+        background-image: linear-gradient(#12211F 1px, transparent 1px), linear-gradient(90deg, #12211F 1px, transparent 1px);
+        background-size: 80px 80px; }
+    </style>
+  </head>
+  <body>
+    <div id="root" data-composition-id="main" data-start="0" data-width="1920" data-height="1080" data-duration="702.78">
+      <div id="grid"></div>
+
+      <section id="titlecard" class="clip card" data-start="0" data-duration="6.4" data-track-index="0">
+        <div class="inner">
+          <div class="rulebar" id="trule"></div>
+          <div class="kick" id="tkick" style="margin-top:30px">Smart India Hackathon 2026 · SIH26117</div>
+          <h1 class="big" id="tbig">Blind&nbsp;Flange</h1>
+          <div class="sub" id="tsub">A sovereign, air-gapped AI workbench for MRPL<br/>— explained from first principles</div>
+          <div class="meta" id="tmeta">MANGALORE REFINERY AND PETROCHEMICALS LIMITED</div>
+        </div>
+      </section>
+
+      <div
+        id="scene-s01-problem"
+        data-composition-id="s01-problem"
+        data-composition-src="compositions/s01-problem.html"
+        data-start="6.400"
+        data-duration="50.820"
+        data-track-index="1"
+        data-width="1920"
+        data-height="1080"
+      ></div>
+      <div
+        id="scene-s02-what"
+        data-composition-id="s02-what"
+        data-composition-src="compositions/s02-what.html"
+        data-start="57.220"
+        data-duration="57.620"
+        data-track-index="1"
+        data-width="1920"
+        data-height="1080"
+      ></div>
+      <div
+        id="scene-s03-gpu"
+        data-composition-id="s03-gpu"
+        data-composition-src="compositions/s03-gpu.html"
+        data-start="114.840"
+        data-duration="59.220"
+        data-track-index="1"
+        data-width="1920"
+        data-height="1080"
+      ></div>
+      <div
+        id="scene-s04-planes"
+        data-composition-id="s04-planes"
+        data-composition-src="compositions/s04-planes.html"
+        data-start="174.060"
+        data-duration="51.940"
+        data-track-index="1"
+        data-width="1920"
+        data-height="1080"
+      ></div>
+      <div
+        id="scene-s05-registry"
+        data-composition-id="s05-registry"
+        data-composition-src="compositions/s05-registry.html"
+        data-start="226.000"
+        data-duration="59.620"
+        data-track-index="1"
+        data-width="1920"
+        data-height="1080"
+      ></div>
+      <div
+        id="scene-s06-router"
+        data-composition-id="s06-router"
+        data-composition-src="compositions/s06-router.html"
+        data-start="285.620"
+        data-duration="59.620"
+        data-track-index="1"
+        data-width="1920"
+        data-height="1080"
+      ></div>
+      <div
+        id="scene-s07-residency"
+        data-composition-id="s07-residency"
+        data-composition-src="compositions/s07-residency.html"
+        data-start="345.240"
+        data-duration="64.460"
+        data-track-index="1"
+        data-width="1920"
+        data-height="1080"
+      ></div>
+      <div
+        id="scene-s08-moe"
+        data-composition-id="s08-moe"
+        data-composition-src="compositions/s08-moe.html"
+        data-start="409.700"
+        data-duration="76.500"
+        data-track-index="1"
+        data-width="1920"
+        data-height="1080"
+      ></div>
+      <div
+        id="scene-s09-sticky"
+        data-composition-id="s09-sticky"
+        data-composition-src="compositions/s09-sticky.html"
+        data-start="486.200"
+        data-duration="69.580"
+        data-track-index="1"
+        data-width="1920"
+        data-height="1080"
+      ></div>
+      <div
+        id="scene-s10-agent"
+        data-composition-id="s10-agent"
+        data-composition-src="compositions/s10-agent.html"
+        data-start="555.780"
+        data-duration="69.500"
+        data-track-index="1"
+        data-width="1920"
+        data-height="1080"
+      ></div>
+      <div
+        id="scene-s11-fanout"
+        data-composition-id="s11-fanout"
+        data-composition-src="compositions/s11-fanout.html"
+        data-start="625.280"
+        data-duration="70.500"
+        data-track-index="1"
+        data-width="1920"
+        data-height="1080"
+      ></div>
+
+      <section id="endcard" class="clip card" data-start="695.780" data-duration="7" data-track-index="0">
+        <div class="inner">
+          <div class="endline" id="e1">Build the <span class="q">proof</span> first.</div>
+          <div class="endline" id="e2" style="font-size:52px;color:#9DB2B9;margin-top:34px">The assistant is just the evidence.</div>
+          <div class="meta" id="e3">SIH26117 · MRPL · SMART AUTOMATION</div>
+        </div>
+      </section>
+    </div>
+
+    <script>
+      window.__timelines = window.__timelines || {};
+      const tl = gsap.timeline({ paused: true });
+
+      tl.from("#trule", { scaleX: 0, duration: .7, ease: "power3.inOut" }, .15)
+        .from("#tkick", { opacity: 0, y: 14, duration: .6 }, .5)
+        .from("#tbig", { opacity: 0, y: 40, duration: .9, ease: "power3.out" }, .7)
+        .from("#tsub", { opacity: 0, y: 22, duration: .7, ease: "power3.out" }, 1.35)
+        .from("#tmeta", { opacity: 0, duration: .7 }, 1.9)
+        .to("#titlecard", { opacity: 0, duration: .5, ease: "power2.in" }, 5.85);
+
+      tl.from("#e1", { opacity: 0, y: 30, duration: .8, ease: "power3.out" }, 696.08)
+        .from("#e2", { opacity: 0, y: 22, duration: .7, ease: "power3.out" }, 696.88)
+        .from("#e3", { opacity: 0, duration: .7 }, 697.78);
+
+      window.__timelines["main"] = tl;
+    </script>
+  </body>
+</html>

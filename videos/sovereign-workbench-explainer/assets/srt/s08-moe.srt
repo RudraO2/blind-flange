@@ -1,0 +1,67 @@
+1
+00:00:00,000 --> 00:00:05,706
+But there is something better than swapping, and it comes from an old research result.
+
+2
+00:00:05,706 --> 00:00:09,985
+When a model runs, its neurons do not all fire equally.
+
+3
+00:00:09,985 --> 00:00:13,789
+A small fraction fire for almost every single word.
+
+4
+00:00:13,789 --> 00:00:17,592
+The large majority only fire for particular inputs.
+
+5
+00:00:17,592 --> 00:00:21,396
+The researchers called them hot neurons and cold neurons.
+
+6
+00:00:21,396 --> 00:00:26,151
+The insight is obvious once you hear it. Keep the hot part on the fast hardware,
+
+7
+00:00:26,151 --> 00:00:29,955
+and let the cold part live in slower memory.
+
+8
+00:00:29,955 --> 00:00:33,758
+Modern mixture of experts models are that idea, shipped.
+
+9
+00:00:33,758 --> 00:00:38,513
+The model is split into many specialist sections, and only a few are used per word.
+
+10
+00:00:38,513 --> 00:00:43,268
+So we place them by hand. The always-active parts go on the graphics card.
+
+11
+00:00:43,268 --> 00:00:47,072
+The rarely-used experts go into ordinary system memory.
+
+12
+00:00:47,072 --> 00:00:52,777
+The result is dramatic. A dense 27 billion model at 4-bit takes about 17 gigabytes,
+
+13
+00:00:52,777 --> 00:00:57,057
+which fills a 16 gigabyte card completely, with nothing left over.
+
+14
+00:00:57,057 --> 00:01:01,336
+A mixture of experts model of similar quality runs in 5 to 7 gigabytes.
+
+15
+00:01:01,336 --> 00:01:07,042
+So the real move is not picking a smaller model. It is going from dense to mixture of experts.
+
+16
+00:01:07,042 --> 00:01:12,747
+And at 5 to 7 gigabytes each, you can suddenly hold three models at the same time
+
+17
+00:01:12,747 --> 00:01:15,600
+and stop swapping altogether.

@@ -1,0 +1,55 @@
+1
+00:00:00,000 --> 00:00:04,479
+This is the part that decides which model answers your question.
+
+2
+00:00:04,479 --> 00:00:06,967
+And it works in three cheap steps.
+
+3
+00:00:06,967 --> 00:00:10,948
+Step zero is the obvious stuff. Did you attach an image?
+
+4
+00:00:10,948 --> 00:00:14,431
+Then it must be the vision model. No thinking required.
+
+5
+00:00:14,431 --> 00:00:16,919
+Step one is a tiny classifier.
+
+6
+00:00:16,919 --> 00:00:21,896
+This is a small, fast program that reads your question and sorts it into a category.
+
+7
+00:00:21,896 --> 00:00:26,374
+Is this code, is this a summary, is this a calculation?
+
+8
+00:00:26,374 --> 00:00:30,853
+It runs on the processor in about 20 milliseconds, faster than you can blink.
+
+9
+00:00:30,853 --> 00:00:35,332
+Step two is the scorer. It takes the shortlist and checks reality.
+
+10
+00:00:35,332 --> 00:00:39,810
+Does this model support tools? Is your document going to fit in its memory?
+
+11
+00:00:39,810 --> 00:00:43,791
+Is it loaded right now, or would we have to wake it up?
+
+12
+00:00:43,791 --> 00:00:48,270
+And then, crucially, it shows you the answer. Every reply carries a small chip.
+
+13
+00:00:48,270 --> 00:00:53,744
+Click it, and you see the candidates, the scores, and one line explaining why the winner won.
+
+14
+00:00:53,744 --> 00:00:58,720
+That single panel is what turns a claim into a demonstration.

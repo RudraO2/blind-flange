@@ -1,0 +1,125 @@
+<!doctype html>
+<html lang="en">
+  <head><meta charset="UTF-8" /><title>Per message, or per chat?</title></head>
+  <body>
+    <template>
+      <style>
+#root{position:absolute;inset:0;width:1920px;height:1080px;overflow:hidden;
+  background:#08100F;color:#E1EAEB;
+  font-family:"IBM Plex Mono",monospace;}
+#grid{position:absolute;inset:0;
+  background-image:linear-gradient(#12211F 1px,transparent 1px),linear-gradient(90deg,#12211F 1px,transparent 1px);
+  background-size:80px 80px;opacity:.35;}
+#vig{position:absolute;inset:0;background:radial-gradient(ellipse at 50% 42%,transparent 40%,#050B0A 100%);}
+#tb{position:absolute;top:64px;left:96px;display:flex;align-items:baseline;gap:22px;}
+#tb .n{font-family:"IBM Plex Mono",monospace;font-size:22px;font-weight:700;color:#FF6E3F;letter-spacing:.08em;}
+#tb .t{font-family:Oswald,sans-serif;font-size:44px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:#E1EAEB;}
+#rule{position:absolute;top:132px;left:96px;width:1728px;height:2px;background:#233539;transform-origin:left center;}
+#stage{position:absolute;top:196px;left:96px;width:1728px;height:648px;}
+#capband{position:absolute;left:260px;right:260px;bottom:84px;height:150px;display:grid;place-items:center;}
+.cue{position:absolute;left:0;right:0;top:0;bottom:0;display:grid;place-items:center;
+  text-align:center;font-family:"IBM Plex Mono",monospace;font-size:44px;font-weight:400;
+  line-height:1.34;color:#F2F7F7;text-shadow:0 3px 18px rgba(5,11,10,.95);}
+#prog{position:absolute;bottom:38px;left:96px;right:96px;display:flex;align-items:center;gap:18px;}
+#prog .bar{flex:1;height:2px;background:#1A2A2E;position:relative;}
+#prog .fill{position:absolute;left:0;top:0;bottom:0;background:#FF6E3F;transform-origin:left center;}
+#prog .lbl{font-size:17px;color:#8FA4AB;letter-spacing:.16em;}
+.mono{font-family:"IBM Plex Mono",monospace;}
+.osw{font-family:Oswald,sans-serif;text-transform:uppercase;letter-spacing:.05em;}
+.flare{color:#FF6E3F;} .gauge{color:#46BDB0;} .warn{color:#DFA82F;} .dim{color:#9DB2B9;}
+.card{position:absolute;background:#0F1A1D;border:2px solid #233539;border-radius:6px;}
+.chip{position:absolute;font-family:"IBM Plex Mono",monospace;font-size:22px;
+  padding:9px 16px;border-radius:4px;border:2px solid #233539;background:#0F1A1D;white-space:nowrap;}
+
+.bub{position:absolute;left:0;width:820px;padding:24px 28px;background:#0F1A1D;border:2px solid #233539;border-radius:8px;font-size:25px;}
+.bub .who{font-size:19px;color:#8FA4AB;letter-spacing:.13em;margin-bottom:10px;}
+.opt{position:absolute;left:900px;width:828px;padding:22px 26px;border-radius:7px;border:2px solid #233539;background:#0F1A1D;}
+.opt .h{font-family:Oswald,sans-serif;font-size:29px;text-transform:uppercase;letter-spacing:.04em;}
+.opt .s{font-size:21px;color:#9DB2B9;margin-top:9px;line-height:1.45;}
+#calc{position:absolute;left:0;top:430px;width:1728px;padding:26px 30px;background:#0B1618;border:2px solid #FF6E3F;border-radius:7px;
+  font-size:25px;line-height:1.62;}
+#calc .em{color:#FF6E3F;}</style>
+
+      <div id="root" data-composition-id="s09-sticky" data-width="1920" data-height="1080" data-duration="69.58">
+        <div id="grid"></div>
+        <div id="vig"></div>
+
+        <div id="tb">
+          <span class="n">09</span>
+          <span class="t">Per message, or per chat?</span>
+        </div>
+        <div id="rule"></div>
+
+        <div id="stage">
+
+          <div class="bub" id="bb1" style="top:20px"><div class="who mono">TURN 1</div>"Summarise this inspection report."</div>
+          <div class="bub" id="bb2" style="top:170px"><div class="who mono">TURN 2</div>"Now write me a script to do that."</div>
+          <div class="opt" id="op1" style="top:20px"><div class="h warn">Route once per chat</div><div class="s">Fails on exactly that second sentence — and a judge will type exactly that sentence.</div></div>
+          <div class="opt" id="op2" style="top:170px"><div class="h warn">Route every message</div><div class="s">Thrashes. Each switch pays a wake-up and throws away the working memory.</div></div>
+          <div class="opt" id="op3" style="top:310px;border-color:#46BDB0"><div class="h gauge">Stay put, switch on evidence</div><div class="s">And let the system price the switch out loud.</div></div>
+          <div id="calc" class="mono">considered <span class="em">coder-14b</span> (0.79) → stayed on general-14b<br/>because switching costs <span class="em">1.8 s wake-up</span> + <span class="em">4,200 tokens</span> of rebuild</div>
+        </div>
+
+        <div id="capband">
+        <div class="cue clip" id="cue-s09-sticky-0" data-start="0.000" data-duration="2.345">Now a question that sounds small and is</div>
+        <div class="cue clip" id="cue-s09-sticky-1" data-start="2.345" data-duration="2.705">not. You start a conversation about a report.</div>
+        <div class="cue clip" id="cue-s09-sticky-2" data-start="5.050" data-duration="5.050">Then you type, now write me a script to do that. Should the model change?</div>
+        <div class="cue clip" id="cue-s09-sticky-3" data-start="10.100" data-duration="2.610">If you route only once, at the start of</div>
+        <div class="cue clip" id="cue-s09-sticky-4" data-start="12.710" data-duration="2.945">the chat, you fail on exactly that sentence.</div>
+        <div class="cue clip" id="cue-s09-sticky-5" data-start="15.655" data-duration="3.030">And a judge will test exactly that sentence.</div>
+        <div class="cue clip" id="cue-s09-sticky-6" data-start="18.685" data-duration="4.545">But if you re-route on every single message, the system thrashes.</div>
+        <div class="cue clip" id="cue-s09-sticky-7" data-start="23.230" data-duration="2.217">Every switch costs a wake-up, and it</div>
+        <div class="cue clip" id="cue-s09-sticky-8" data-start="25.447" data-duration="2.833">throws away the conversation's working memory.</div>
+        <div class="cue clip" id="cue-s09-sticky-9" data-start="28.280" data-duration="4.040">So a four-turn chat pays four wake-ups and four rebuilds.</div>
+        <div class="cue clip" id="cue-s09-sticky-10" data-start="32.320" data-duration="5.555">The answer is neither. Stay put by default. Switch only on clear evidence.</div>
+        <div class="cue clip" id="cue-s09-sticky-11" data-start="37.875" data-duration="2.996">And most importantly, make the cost of switching</div>
+        <div class="cue clip" id="cue-s09-sticky-12" data-start="40.871" data-duration="2.559">visible to the thing making the decision.</div>
+        <div class="cue clip" id="cue-s09-sticky-13" data-start="43.430" data-duration="3.072">So the challenger model has to beat the current</div>
+        <div class="cue clip" id="cue-s09-sticky-14" data-start="46.502" data-duration="2.483">model by more than it costs to switch.</div>
+        <div class="cue clip" id="cue-s09-sticky-15" data-start="48.985" data-duration="2.662">A borderline call keeps what you have. A clear</div>
+        <div class="cue clip" id="cue-s09-sticky-16" data-start="51.647" data-duration="2.893">call switches. And the panel shows the arithmetic.</div>
+        <div class="cue clip" id="cue-s09-sticky-17" data-start="54.540" data-duration="3.193">Considered the coder model, stayed on the current</div>
+        <div class="cue clip" id="cue-s09-sticky-18" data-start="57.733" data-duration="2.867">one because switching would cost 1.8 seconds</div>
+        <div class="cue clip" id="cue-s09-sticky-19" data-start="60.600" data-duration="3.535">of wake-up plus 4,000 tokens of rebuild.</div>
+        <div class="cue clip" id="cue-s09-sticky-20" data-start="64.135" data-duration="4.545">One line, and it is obvious the router is real.</div>
+        </div>
+
+        <div id="prog">
+          <span class="lbl">09 / 15</span>
+          <span class="bar"><span class="fill" id="pfill"></span></span>
+          <span class="lbl">SIH26117</span>
+        </div>
+
+        <audio id="vo-s09-sticky" src="assets/vo/s09-sticky.wav" data-start="0" data-duration="68.680" data-track-index="29" data-volume="1"></audio>
+      </div>
+
+      <script>
+        (function () {
+          window.__timelines = window.__timelines || {};
+          // Every scene shares chrome ids (#pfill, #tb, ...). Selector strings in
+          // GSAP resolve against the whole document, and all scenes are mounted
+          // at once, so all lookups MUST be scoped to this scene's own root.
+          const scope = document.querySelector('[data-composition-id="s09-sticky"]');
+          const q = gsap.utils.selector(scope);
+          const tl = gsap.timeline({ paused: true });
+          const D = 69.58;
+
+          tl.from(q(".n"), { opacity: 0, x: -18, duration: 0.45, ease: "power3.out" }, 0)
+            .from(q(".t"), { opacity: 0, x: -26, duration: 0.55, ease: "power3.out" }, 0.08)
+            .from(q("#rule"), { scaleX: 0, duration: 0.7, ease: "power3.inOut" }, 0.18)
+            .fromTo(q("#pfill"), { scaleX: 0 }, { scaleX: 1, duration: D - 0.05, ease: "none" }, 0);
+
+
+          tl.from(q("#bb1"), { opacity:0, x:-34, duration:.55 }, 2.0)
+            .from(q("#bb2"), { opacity:0, x:-34, duration:.55 }, 6.5)
+            .from(q("#op1"), { opacity:0, x:34, duration:.55 }, 14.0)
+            .from(q("#op2"), { opacity:0, x:34, duration:.55 }, 22.5)
+            .from(q("#op3"), { opacity:0, x:34, duration:.55 }, 33.0)
+            .from(q("#calc"), { opacity:0, y:24, duration:.65, ease:"power3.out" }, 46.0);
+
+          window.__timelines["s09-sticky"] = tl;
+        })();
+      </script>
+    </template>
+  </body>
+</html>

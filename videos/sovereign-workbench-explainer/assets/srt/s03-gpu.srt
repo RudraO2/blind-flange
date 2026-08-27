@@ -1,0 +1,43 @@
+1
+00:00:00,000 --> 00:00:05,951
+Now the first principle. And honestly, this one idea explains most of the engineering.
+
+2
+00:00:05,951 --> 00:00:11,307
+To run an AI model, its weights, which are just billions of numbers,
+
+3
+00:00:11,307 --> 00:00:14,878
+have to sit in the memory of a graphics card.
+
+4
+00:00:14,878 --> 00:00:20,829
+That memory is called VRAM, and it is small. A mid-range card has maybe 16 gigabytes.
+
+5
+00:00:20,829 --> 00:00:27,375
+Here is the part most people get wrong. When the model writes text, it produces one word at a time.
+
+6
+00:00:27,375 --> 00:00:32,731
+For every single word, the card has to read the entire set of weights out of memory.
+
+7
+00:00:32,731 --> 00:00:38,682
+Every word, billions of numbers. And then it does almost no arithmetic with them.
+
+8
+00:00:38,682 --> 00:00:44,038
+So the speed of text generation is not limited by how fast the card can calculate.
+
+9
+00:00:44,038 --> 00:00:48,203
+It is limited by how fast it can read memory.
+
+10
+00:00:48,203 --> 00:00:53,559
+Remember that sentence. It comes back three times in this video,
+
+11
+00:00:53,559 --> 00:00:58,320
+and each time it changes a design decision.

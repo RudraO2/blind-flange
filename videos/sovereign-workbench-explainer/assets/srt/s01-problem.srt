@@ -1,0 +1,39 @@
+1
+00:00:00,000 --> 00:00:05,413
+Let us start with the actual problem, because the technology only makes sense once you see it.
+
+2
+00:00:05,413 --> 00:00:10,585
+A refinery produces an enormous amount of confidential paperwork every single day.
+
+3
+00:00:10,585 --> 00:00:15,758
+Piping and instrumentation diagrams, inspection reports, approval notes, vendor negotiations.
+
+4
+00:00:15,758 --> 00:00:21,051
+Now company policy is very clear, none of this can go into ChatGPT or Claude,
+
+5
+00:00:21,051 --> 00:00:25,862
+because the moment you paste it there, the data has left the building.
+
+6
+00:00:25,862 --> 00:00:30,674
+So what actually happens? Two things. Either people do the work by hand slowly,
+
+7
+00:00:30,674 --> 00:00:36,688
+or, and this is the real problem, they quietly paste confidential material into public tools anyway
+
+8
+00:00:36,688 --> 00:00:39,094
+and hope nobody notices.
+
+9
+00:00:39,094 --> 00:00:45,108
+The first is a productivity cost. The second is a security incident.
+
+10
+00:00:45,108 --> 00:00:49,920
+MRPL wrote this problem statement because of the second one.

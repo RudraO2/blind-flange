@@ -1,0 +1,22 @@
+node_modules/
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+.env
+.env.*
+dist/
+build/
+.DS_Store
+Thumbs.db
+
+# model weights and caches - never commit, always pre-staged separately
+*.gguf
+*.safetensors
+models/
+.cache/
+
+# BMAD working output
+_bmad-output/
+
+# local tracker scratch is KEPT - it is the issue tracker, not throwaway

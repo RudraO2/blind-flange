@@ -1,0 +1,59 @@
+1
+00:00:00,000 --> 00:00:04,539
+Now let us come back to that first principle, because it pays off here.
+
+2
+00:00:04,539 --> 00:00:09,078
+Remember, generating text is limited by memory speed, not arithmetic.
+
+3
+00:00:09,078 --> 00:00:14,122
+The card reads all the weights for every word, and barely calculates anything.
+
+4
+00:00:14,122 --> 00:00:17,652
+So what happens if you run four requests at the same time?
+
+5
+00:00:17,652 --> 00:00:21,687
+It reads those same weights once, and serves all four.
+
+6
+00:00:21,687 --> 00:00:26,730
+Which means the cost of the weights is paid once, no matter how many agents are running.
+
+7
+00:00:26,730 --> 00:00:31,774
+Each extra agent costs only its own small slice of conversation memory,
+
+8
+00:00:31,774 --> 00:00:37,322
+and total throughput goes up, not down. Roughly one and a half to three times at five concurrent requests.
+
+9
+00:00:37,322 --> 00:00:42,870
+So the leftover space on the card is not spare. It is the parallelism budget.
+
+10
+00:00:42,870 --> 00:00:48,417
+A 10 billion model at 4-bit uses about 6 gigabytes of a 16 gigabyte card.
+
+11
+00:00:48,417 --> 00:00:54,470
+The 9 and a half gigabytes left over is room for roughly 8 to 15 agents
+
+12
+00:00:54,470 --> 00:00:57,496
+working at once on the same model, not one.
+
+13
+00:00:57,496 --> 00:01:02,035
+So when a 12-page inspection report comes in, we do not read it page by page.
+
+14
+00:01:02,035 --> 00:01:05,061
+We put six readers on it simultaneously.
+
+15
+00:01:05,061 --> 00:01:09,600
+And the model was already loaded, so the parallelism was free.
