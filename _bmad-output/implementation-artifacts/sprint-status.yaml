@@ -40,7 +40,7 @@ development_status:
   1-2-no-network-capable-tool-appears-in-the-tool-list: done
   1-3-no-cloud-model-provider-appears-in-the-model-list: done
   1-4-the-workbench-introduces-itself-as-blind-flange: backlog
-  1-5-our-mark-our-tab-title-our-favicon: backlog
+  1-5-our-mark-our-tab-title-our-favicon: done
   epic-1-retrospective: optional
 
   epic-2: backlog

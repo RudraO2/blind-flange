@@ -50,12 +50,41 @@ function loadClientHalf(hostRequire) {
 	return { id: registered.id, exports, errors };
 }
 
-/** A host React seam with everything a panel needs. */
-const healthyJsxRuntime = { jsx: () => {}, jsxs: () => {}, Fragment: Symbol("Fragment") };
+/** A host React seam with everything a panel needs. `jsx` returns an inspectable plain object. */
+const healthyJsxRuntime = {
+	jsx: (type, props) => ({ type, props }),
+	jsxs: (type, props) => ({ type, props }),
+	Fragment: Symbol("Fragment"),
+};
+
+/**
+ * A stub `ctx` shaped like the client root context: `slots.inject` runs its
+ * generator immediately (no real dependency wait, since this test only checks
+ * what got registered) and `slots.register` records the call.
+ */
+function stubSlotsCtx() {
+	const registered = [];
+	return {
+		registered,
+		ctx: {
+			slots: {
+				inject: (name, generator) => {
+					for (const call of generator()) registered.push(call);
+				},
+				register: (options, Component) => ({ options, Component }),
+			},
+		},
+	};
+}
 
 test("registers under the package name so the served bundle and the manifest agree", () => {
 	const { id } = loadClientHalf(() => healthyJsxRuntime);
 	assert.equal(id, manifest.name);
+});
+
+test("declares the slots service so the host supplies ctx.slots to apply", () => {
+	const { exports } = loadClientHalf(() => healthyJsxRuntime);
+	assert.deepEqual(Array.from(exports.inject), ["slots"]);
 });
 
 test("says nothing when the host supplies a complete react/jsx-runtime", () => {
@@ -63,7 +92,7 @@ test("says nothing when the host supplies a complete react/jsx-runtime", () => {
 		assert.equal(specifier, "react/jsx-runtime");
 		return healthyJsxRuntime;
 	});
-	exports.apply();
+	exports.apply(stubSlotsCtx().ctx);
 	assert.deepEqual(errors, []);
 });
 
@@ -71,7 +100,7 @@ test("names the package and the module when the host cannot resolve react/jsx-ru
 	const { exports, errors } = loadClientHalf(() => {
 		throw new Error("missed the module table");
 	});
-	exports.apply();
+	exports.apply(stubSlotsCtx().ctx);
 	assert.equal(errors.length, 1);
 	assert.match(errors[0], /@blind-flange\/dsh-client-ui-base/);
 	assert.match(errors[0], /react\/jsx-runtime/);
@@ -79,10 +108,31 @@ test("names the package and the module when the host cannot resolve react/jsx-ru
 
 test("names every missing export when the host's react/jsx-runtime is incomplete", () => {
 	const { exports, errors } = loadClientHalf(() => ({ jsx: () => {} }));
-	exports.apply();
+	exports.apply(stubSlotsCtx().ctx);
 	assert.equal(errors.length, 1);
 	assert.match(errors[0], /jsxs/);
 	assert.match(errors[0], /Fragment/);
+});
+
+test("occupies both places the DeepSeek whale used to render: the hero and the sidebar rail", () => {
+	const { exports } = loadClientHalf(() => healthyJsxRuntime);
+	const { ctx, registered } = stubSlotsCtx();
+	exports.apply(ctx);
+	const names = registered.map((call) => call.options.name).sort();
+	assert.deepEqual(names, ["conversation.hero.brand.mark", "sidebar.brand.mark"]);
+});
+
+test("the registered mark renders an svg path with fill=currentColor, not a hand-rolled hex", () => {
+	const { exports } = loadClientHalf((specifier) => (specifier === "react/jsx-runtime" ? healthyJsxRuntime : undefined));
+	const { ctx, registered } = stubSlotsCtx();
+	exports.apply(ctx);
+	const hero = registered.find((call) => call.options.name === "conversation.hero.brand.mark");
+	const svg = hero.Component({ size: 20, className: "hero-mark" });
+	assert.equal(svg.type, "svg");
+	assert.equal(svg.props.width, 20);
+	assert.equal(svg.props.className, "hero-mark");
+	assert.equal(svg.props.children.type, "path");
+	assert.equal(svg.props.children.props.fill, "currentColor");
 });
 
 test("the install document names the package and the insert row it tells you to add", () => {

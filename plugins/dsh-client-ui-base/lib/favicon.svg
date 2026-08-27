@@ -1,0 +1,27 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none">
+	<!--
+		The Blind Flange mark: a bolted-shut pipe flange, the metaphor the
+		project is named for. Same path used for the browser favicon and the
+		conversation.hero.brand.mark slot (client.js), just without currentColor
+		here — a favicon has no CSS cascade to inherit from, so this file mirrors
+		the shipped harness favicon.svg's own light/dark convention instead
+		(literal fill, swapped under prefers-color-scheme).
+	-->
+	<style>
+		path { fill: #1f2937; }
+		@media (prefers-color-scheme: dark) {
+			path { fill: #e5e7eb; }
+		}
+	</style>
+	<path
+		fill-rule="evenodd"
+		clip-rule="evenodd"
+		d="M 1.5,12 A 10.5,10.5 0 1,0 22.5,12 A 10.5,10.5 0 1,0 1.5,12 Z
+			M 10.6,4.5 A 1.4,1.4 0 1,0 13.4,4.5 A 1.4,1.4 0 1,0 10.6,4.5 Z
+			M 17.1,8.25 A 1.4,1.4 0 1,0 19.9,8.25 A 1.4,1.4 0 1,0 17.1,8.25 Z
+			M 17.1,15.75 A 1.4,1.4 0 1,0 19.9,15.75 A 1.4,1.4 0 1,0 17.1,15.75 Z
+			M 10.6,19.5 A 1.4,1.4 0 1,0 13.4,19.5 A 1.4,1.4 0 1,0 10.6,19.5 Z
+			M 4.1,15.75 A 1.4,1.4 0 1,0 6.9,15.75 A 1.4,1.4 0 1,0 4.1,15.75 Z
+			M 4.1,8.25 A 1.4,1.4 0 1,0 6.9,8.25 A 1.4,1.4 0 1,0 4.1,8.25 Z"
+	/>
+</svg>

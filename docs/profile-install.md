@@ -232,6 +232,56 @@ described as having "No network-capable tool." Settings → Plugins → Web sear
 session under any built-in preset besides the sealed copies would still show it — the sealed
 presets are what must stay selected, not a property of the profile as a whole.
 
+## Story 1.5: our mark, our tab title, our favicon
+
+Append to `~/.dsh/profiles/web/cordis.patch.yml` (see the file's own comment for why):
+
+```yaml
+- id: ui-brand-official
+  disabled: true
+```
+
+`@deepseek-ai/dsh-client-ui-brand-official` is the plugin behind the DeepSeek whale, and it
+turns out to fill **two** places, not one: the hero (`conversation.hero.brand.mark`) and the
+collapsed sidebar rail icon (`sidebar.brand.mark`, a slot `ui-brand-official` itself declares —
+it is not in the verified seat table because nothing declares it independently). Registering our
+own mark into `conversation.hero.brand.mark` alone, with `ui-brand-official` still active, does
+nothing visible: dynamically-registered (out-of-tree) entries get a **lower** priority than a
+shipped one for a `single` slot — the same rule the harness notes call out for the literal `root`
+slot, just true more generally. Disabling the row is what actually clears both seats. Confirmed
+empirically, not from documentation: with the row disabled but our plugin *not yet* registering
+into `sidebar.brand.mark`, that rail icon still showed a whale — ui-layout's own built-in
+fallback for an unfilled slot, not `ui-brand-official`'s. Take both slots, or one keeps the
+whale.
+
+No new patch row is needed for the plugin package itself — this rides the `bf-base` insert row
+already mounted in step 3. Two new extension points on the same package:
+
+- **Host half** (`lib/index.js`): `ctx.webServer.register()` claims an exact route,
+  `/blind-flange/favicon.svg`, serving `lib/favicon.svg`; `ctx.webServer.tapIndex()` swaps the
+  shipped `<title>DeepSeek Harness</title>` for `<title>Blind Flange</title>` and the favicon
+  `<link>` href for our route. Both are the harness's own documented escape hatches for the
+  built `dsh-web-frontend/dist/index.html` — no file under that dist is touched (NFR5).
+- **Client half** (`lib/client.js`): `ctx.slots.register(..., BlindFlangeMark)` into both
+  `conversation.hero.brand.mark` and `sidebar.brand.mark`. `BlindFlangeMark` fills with
+  `currentColor`, not a literal hex, so it renders correctly in both themes without its own
+  media query — confirmed by screenshot, not assumed (`docs/screenshots/1-5-brand-mark-*.png`).
+
+The DeepSeek Harness and Cordis MIT copyright notices are retained in `THIRD_PARTY_NOTICES.md`
+at the repo root (NFR11).
+
+**Checking it worked:**
+
+```sh
+curl -s http://127.0.0.1:3080/blind-flange/favicon.svg   # our svg, 200
+curl -s http://127.0.0.1:3080/ | grep -o '<title>[^<]*</title>'   # <title>Blind Flange</title>
+dsh --profile web --dump-config | grep -A1 "id: ui-brand-official"   # disabled: true
+```
+
+In the running app: the browser tab reads "Blind Flange" and shows our favicon; the flange mark
+appears both in the collapsed sidebar rail and in the hero at the top of the conversation; the
+whale appears nowhere.
+
 ## Removing it
 
 ```sh
