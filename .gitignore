@@ -16,7 +16,10 @@ Thumbs.db
 models/
 .cache/
 
-# BMAD working output
-_bmad-output/
+# BMAD working output — scratch is ignored, planning artifacts are KEPT.
+# The brief and the epics/stories are the plan; losing them to a machine failure
+# would cost more than the repo weight of a few markdown files.
+_bmad-output/*
+!_bmad-output/planning-artifacts/
 
 # local tracker scratch is KEPT - it is the issue tracker, not throwaway

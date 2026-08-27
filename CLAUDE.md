@@ -46,8 +46,47 @@ because `/wayfinder` may still be useful for a genuinely foggy effort in a later
 - Domain docs are single-context: `CONTEXT.md` at root, ADRs in `docs/adr/`. Three exist.
 - `.scratch/` holds the pre-BMAD Phase 0 spec. Treat it as input, not authority — BMAD's
   own planning artifacts supersede it.
-- `_bmad-output/` is BMAD's working output and is gitignored.
+- `_bmad-output/` is BMAD's working output. `planning-artifacts/` inside it is tracked
+  (the brief and the stories are the plan); everything else there is gitignored.
 - If `bmad-project-context` offers to write an `AGENTS.md` block: fine, but this file
   (`CLAUDE.md`) is what Claude Code auto-loads. Keep them consistent rather than divergent.
 - This folder is inside OneDrive. Expect sync churn once `node_modules` and a Python venv
   appear; both are gitignored.
+
+## UI design language — non-negotiable
+
+**Everything we add must look like it shipped with the harness.** The product has to read as
+one application, not as our panels bolted onto someone else's app. A colourful mess is worse
+than plain, and it hands a judge the "they just skinned an existing tool" conclusion.
+
+- Build from `@deepseek-ai/dsh-client-ui-primitives` and the `ui-theme` tokens. Do not
+  hand-roll hex colours, radii, spacing, shadows or font stacks.
+- Match the density, typography and border conventions of the surface a component sits on.
+  A control in the composer row looks like the controls already in that row.
+- **Every panel must render correctly in light *and* dark.** The theme is user-selectable in
+  Settings; a component that only works in one is unfinished.
+- New surfaces take a declared slot (see `docs/deepseek-harness-notes.md` for the table).
+  Do not register into `root`.
+- Restraint over decoration. This is industrial control software, not a landing page.
+
+The counter-example is ours: the egress monitor built during the 27 Aug spike used
+hand-written greens and a hand-rolled pill, and read as pasted on. That is the failure mode
+this rule exists to prevent — rewrite it against the primitives before it ships.
+
+Verification before a story is called done: screenshot the surface in both themes.
+
+## Commit discipline
+
+The repo is `https://github.com/RudraO2/blind-flange` (private, `main`). It exists so work
+survives a machine failure, which only holds if it is actually pushed.
+
+- **Commit at the end of every story, and push.** Not at the end of the day, not at the end
+  of the epic. A story that is done and unpushed is not done.
+- Conventional Commits for the subject; a body only when the *why* is not obvious from the
+  diff. Write commit messages in normal English, not compressed.
+- Never commit: model weights, `node_modules/`, the `~/.dsh` profile, `.env`, anything in
+  `docs/licence-policy.md`'s prohibited set.
+- `_bmad-output/planning-artifacts/` **is** tracked — the brief and the stories are the plan.
+  The rest of `_bmad-output/` is not.
+- Before pushing, `git status` should show nothing unexpected. This folder is inside
+  OneDrive; sync churn can surface files you did not intend to add.
