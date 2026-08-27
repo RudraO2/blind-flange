@@ -104,6 +104,43 @@ of MRPL until it has. See `licence-policy.md`.
    Nothing depends on it. The egress monitor is rebuilt from the UI primitives in Epic 2; the
    spike's hand-written colours are the counter-example our UI rules exist to prevent.
 
+6. **Remove the cloud providers.** Story 1.3. The only two LLM adapter rows in the resolved
+   tree are `llm-deepseek` (the deepseek-official provider) and `llm-pi-ai` (the Earendil
+   pi-ai multi-vendor gateway). Disable both in `cordis.patch.yml`:
+
+   ```yaml
+   - id: llm-deepseek
+     disabled: true
+
+   - id: llm-pi-ai
+     disabled: true
+   ```
+
+   Verified after restart, 28 August 2026:
+
+   - `dsh --profile web --dump-config` shows both rows with `disabled: true`, and no other
+     `llm-*` row is a provider adapter (`llm`, `llm-retry`, `session-title-llm` are framework
+     glue, not adapters).
+   - Settings → Models renders with an empty provider list — no `deepseek-official`, no other
+     provider — `Add provider` and `Add a custom provider` present but inert.
+   - **The "Add an API key" modal no longer appears on load.** It disappeared as a side effect
+     of there being no provider left to configure, exactly as `deepseek-harness-notes.md`
+     guessed. Epic 7's local/replay provider onboarding replaces the gap this leaves, not the
+     modal itself.
+   - **`@anthropic-ai`, `@aws-sdk`, `@google`, `@mistralai` and `openai` are still resolvable**,
+     and disabling the two rows cannot change that. `node -e "require.resolve('openai')"` from
+     inside `~/.dsh/profiles/web` resolves to
+     `%APPDATA%/npm/node_modules/@deepseek-ai/dsh/node_modules/openai/index.js` — the
+     **global `dsh` package's own install**, not this profile and not
+     `~/.dsh/profiles/node_modules`. Those five SDKs are transitive dependencies of
+     `dsh-llm-pi-ai` bundled into the harness's own global install at `npm install -g` time.
+     Removing them means deleting files under `$(npm root -g)/@deepseek-ai/dsh`, which is
+     exactly the harness install NFR5 forbids touching. Disabling the plugin rows means no code
+     path ever `require()`s them at runtime — nothing they contain executes and no network call
+     they could make ever fires — but static `require.resolve()` still finds the files on disk.
+     Sovereignty holds in behaviour; it does not hold in a filesystem grep of the global
+     install, and no in-profile change can make it hold there.
+
 ## Checking it worked
 
 ```sh
