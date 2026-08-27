@@ -29,3 +29,6 @@ _bmad-output/*
 _bmad-output/implementation-artifacts/*
 !_bmad-output/implementation-artifacts/sprint-status.yaml
 !_bmad-output/implementation-artifacts/*.md
+
+# Claude Code worktrees — Lane B works in one; never commit a worktree tree.
+.claude/worktrees/

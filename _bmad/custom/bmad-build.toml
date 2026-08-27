@@ -1,0 +1,31 @@
+# Team overrides for bmad-build on Blind Flange.
+#
+# Committed deliberately: the four-day budget is spent on a rate-limited account,
+# and the default fan-out exhausts it faster than it builds.
+
+[workflow]
+
+# Disable the Blind Hunter review layer.
+#
+# Its prompt mandates "find at least ten issues" and "if you have zero findings,
+# re-check and keep thinking; do not stop with an empty list." Most stories in
+# this build are small and mechanical — a profile patch row, a YAML registry, a
+# favicon swap — and forcing ten findings on a thirty-line diff manufactures
+# noise that then has to be triaged, paying for the same tokens twice.
+#
+# Edge Case Hunter and Verification Gap Reviewer remain active. They stop when
+# they have nothing to say, which is the property that makes them worth running
+# on a small diff.
+#
+# An empty `instruction` disables a layer; the `id` matches the base entry so
+# this replaces it rather than adding a fourth.
+
+[[workflow.review_layers]]
+id = "blind-hunter"
+name = "Blind Hunter"
+instruction = ""
+
+[[workflow.oneshot_review_layers]]
+id = "blind-hunter"
+name = "Blind Hunter"
+instruction = ""

@@ -69,20 +69,26 @@ are — honour the timebox. When it expires, take the recorded fallback or escal
 **If the story needs a decision that nothing in the repo records, stop and ask.** Do not invent
 one and carry on. That is how a plan quietly stops being the plan.
 
-## Step 4 — Review it
+**Bound the investigation.** Build's planning step spawns subagents to explore the codebase.
+Most of what they would go looking for is already written down — the slot table, the plugin
+format, the extension-point map and the installation path are all in
+`docs/deepseek-harness-notes.md`, verified from source. Read that first and cap the exploration
+at **one** subagent, or none when the story's Code Map is already obvious. Say what you skipped
+and why.
 
-Invoke the `bmad-code-review` skill on the changes.
+## Step 4 — Let build finish its own review
 
-Review the diff, not your memory of what you wrote.
+**Do not invoke `bmad-code-review`.** `bmad-build` already runs a review step with the same
+layers and its own patch-and-re-verify loop. Running a second review skill on top of it, and
+then re-running that, triples the model calls for a third opinion from the same mind — and this
+build has a rate limit to respect, not just a deadline.
 
-## Step 5 — Fix and re-review
+Read what build's review reported and make sure its patch findings were actually applied. That
+is the review.
 
-Fix every finding. Then run `bmad-code-review` again on the result.
+`bmad-code-review` is for later, run by hand on a change that worries you — not once per story.
 
-Do this at most **twice**. If findings survive two rounds, stop and report them rather than
-looping — a third pass by the same mind rarely finds anything the second did not.
-
-## Step 6 — The gate
+## Step 5 — The gate
 
 **Do not mark the story done unless every one of these is true.** Check them one at a time and
 say so explicitly.
@@ -102,7 +108,7 @@ say so explicitly.
 and stop. Do not mark it done. Do not paper over it. A story that is nearly done is not done, and
 saying otherwise costs more than the hour you saved.
 
-## Step 7 — Commit and push
+## Step 6 — Commit and push
 
 - Conventional Commits subject. A body only when the *why* is not obvious from the diff.
 - Normal English in the message, not compressed.
@@ -111,14 +117,14 @@ saying otherwise costs more than the hour you saved.
 - Never commit model weights, `node_modules/`, the `~/.dsh` profile, or `.env`.
 - **Push.** A story that is done and unpushed is not done.
 
-## Step 8 — Update the tracker
+## Step 7 — Update the tracker
 
 Set the story's status to `done` in `_bmad-output/implementation-artifacts/sprint-status.yaml`.
 If every story in its epic is now `done`, set the epic to `done` too.
 
 Commit that change with the story, or immediately after it.
 
-## Step 9 — Report and stop
+## Step 8 — Report and stop
 
 In plain language, short:
 
@@ -131,6 +137,27 @@ In plain language, short:
 Then **stop**. Do not start it. The next story goes in a new chat.
 
 ---
+
+## Which model to run a story on
+
+Every subagent runs at the session's model capability — `step-04-review.md` says so outright.
+So the session model multiplies across roughly six calls per story, and running all thirty-three
+on the largest model exhausts a five-hour window long before it exhausts the backlog.
+
+**Run on Opus** the stories where a wrong judgement is expensive and hard to notice:
+
+| Story | Why |
+|---|---|
+| 3.1 | The unproven `LlmAdapter` seam, and the fallback call is a real decision |
+| 3.5, 3.6 | Router classification and scoring — the design is genuinely open |
+| 4.2 | Reading OCR results and deciding whether to escalate |
+| 4.5 | Mapping bounding boxes to a rendered region; fiddly and easy to get subtly wrong |
+| 5.4 | The `.docx` with its provenance footer and content hash |
+
+**Sonnet is enough** for the rest, and most of the rest is mechanical: `disabled: true` rows in
+a patch file, a YAML registry, a favicon and a tab title, a build check that greps for `http`,
+the rebrand pass. Switch with `/model`. If a Sonnet session starts flailing, stop it and rerun
+that one story on Opus — cheaper than running all of them there by default.
 
 ## Running two chats at once
 
