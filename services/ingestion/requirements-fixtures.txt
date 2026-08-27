@@ -1,0 +1,22 @@
+# Dependencies of the sample-report generator in fixtures/ only.
+#
+# This is a build-time tool, not part of the ingestion service at runtime: what ships
+# is the committed page images and PDF. The ingestion service's own dependencies are
+# pinned separately when Story 4.3 builds it.
+#
+# Licences are verified from the LICENSE file at these exact versions and recorded in
+# LICENCES.md. Pinned, per docs/licence-policy.md: permissive today is not permissive
+# forever.
+
+# WARNING: reportlab pulls pillow>=9.0.0 and charset-normalizer transitively, and
+# imports pillow at module load. Pillow's licence is MIT-CMU, which is NOT on the
+# allow-list. See LICENCES.md — that decision is open and needs an ADR.
+
+numpy==2.4.3
+pypdfium2==4.30.0
+reportlab==4.5.0
+
+# Installed transitively by reportlab, pinned here so the tree is declared rather
+# than resolved on the day. Licences recorded in LICENCES.md.
+pillow==11.3.0
+charset-normalizer==3.4.4
