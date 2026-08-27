@@ -94,6 +94,27 @@ There are three honest ways out, and choosing between them is an ADR-level decis
 
 Recorded, not decided. Raised to the user on 28 August 2026 at the close of Story 4.1.
 
+## Story 4.2 — OCR proof tooling
+
+Verified 28 August 2026, from the `LICENSE` file shipped at the pinned version, same
+standard as above. These are proof-script dependencies (`services/ingestion/proof/`), not
+yet the ingestion service's own runtime dependencies — Story 4.3 pins those separately, and
+may reuse some of these names.
+
+| Component | Version | Licence | How it was verified |
+|---|---|---|---|
+| `tesseract-ocr/tesseract` (binary, via `winget install tesseract-ocr.tesseract`) | 5.5.3.20260724 | Apache-2.0 | `C:\Program Files\Tesseract-OCR\doc\LICENSE`, the Apache License 2.0 text verbatim. |
+| `pytesseract` | 0.3.13 | Apache-2.0 | `pytesseract-0.3.13.dist-info/LICENSE`, the Apache License 2.0 text verbatim. |
+| `psutil` | 7.2.2 | BSD-3-Clause | `psutil-7.2.2.dist-info/LICENSE`, the three-clause text verbatim (Jay Loden, Dave Daeschler, Giampaolo Rodola). |
+
+`pytesseract` pulls in Pillow (`MIT-CMU`) the same way `reportlab` does — the second route
+into this tree the Story 4.1 gate result already anticipated. It does not open a new
+question; see "The open decision — Pillow's licence" above, which this story does not
+resolve or need to.
+
+All three rows above are individually inside the allow-list. The Pillow question stands as
+recorded in Story 4.1's gate result and is unaffected by this story.
+
 ## Gate result for Story 4.1
 
 The story's third acceptance criterion — "**Given** the generator's dependencies **When**
