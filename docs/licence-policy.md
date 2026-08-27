@@ -6,7 +6,17 @@ violates it is rejected regardless of technical merit.
 
 ## The rule
 
-**Apache-2.0 and MIT only.** Nothing else ships.
+**Apache-2.0, MIT, BSD-2-Clause and BSD-3-Clause only.** Nothing else ships.
+
+Amended 28 August 2026 by ADR-0005, from an earlier "Apache-2.0 and MIT only". The four
+licences on this list sit in one legal class for the buyer this policy exists to satisfy: no
+copyleft, no user cap, no field-of-use restriction, no disclosure obligation. A PSU legal
+reviewer reads BSD-2 and BSD-3 the same way they read MIT — BSD-3-Clause is in fact simpler
+than Apache-2.0, which carries a patent grant. The list was widened deliberately and in
+writing because the value of this policy is that it is *enforced* rather than asserted, and
+quietly tolerating a third licence would destroy that.
+
+**Widening the list is an ADR-level decision, not a judgement call made at the point of use.**
 
 ## Why it is absolute
 
@@ -41,14 +51,36 @@ Saying "we only use permissive licences" proves nothing. Three mechanisms make i
 | Component | Licence | Verified |
 |---|---|---|
 | DeepSeek Harness (`deepseek-ai/deepseek-harness`) | MIT | 27 Aug 2026, read from repo `LICENSE`, not from documentation |
+| Cordis (`cordiverse/cordis`) | MIT | 27 Aug 2026, read from repo `LICENSE` at `main` |
+| `@deepseek-ai/dsh` (npm) | MIT | 27 Aug 2026, `license` field in `apps/cli/package.json` |
+| Tesseract (`tesseract-ocr/tesseract`) | Apache-2.0 | 28 Aug 2026 — **re-verify by reading `LICENSE` at the pinned version before the claim ships** |
+| tessdata (`tesseract-ocr/tessdata`, `tessdata_fast`, `tessdata_best`) | Apache-2.0 | 28 Aug 2026 — **re-verify by reading `LICENSE` at the pinned version before the claim ships** |
+| pytesseract (`madmaze/pytesseract`) | Apache-2.0 | 28 Aug 2026 — **re-verify by reading `LICENSE` at the pinned version before the claim ships** |
+| pypdfium2 (`pypdfium2-team/pypdfium2`) | Apache-2.0; bundled PDFium engine BSD-3-Clause | 28 Aug 2026 — **re-verify by reading `LICENSE` at the pinned version before the claim ships** |
 
-Everything else must be verified the same way before it enters the stack: read the actual
-`LICENSE` file at the version you will pin, not the README, not a blog post, not a summary.
+The four rows added on 28 August were established from published project documentation, not
+yet from the `LICENSE` file at a pinned version. They are recorded here so the work is not
+repeated, but they do **not** yet satisfy this policy's own standard. Close that gap before
+the claim goes in front of MRPL.
+
+## Rejected
+
+A rejected row is evidence the gate ran. An absence proves nothing — in exactly the way the
+egress monitor's zero proves nothing without the canary.
+
+| Component | Licence | Why rejected |
+|---|---|---|
+| `ds4sd/docling-models` (Docling's layout + TableFormer models) | CDLA-Permissive-2.0 | Outside the allow-list. Docling's own code is MIT, but its models are not, and the models are the part that ships. **Not a legal hazard** — CDLA-Permissive-2.0 permits commercial use and places no restriction on results or models built from the data; the only obligation is shipping the licence text when redistributing the data itself, which we would be doing since artefacts are pre-staged offline. Rejected on fit and cost: a third licence name on the attestation report, and a much heavier stack (PyTorch + transformers) than Phase 0 needs. Replaced by the Tesseract stack — see ADR-0005 for the full reasoning. |
+| PyMuPDF | AGPL-3.0 | Copyleft with a disclosure obligation. Named here explicitly because it is the library every PDF tutorial reaches for and the default an agent will select unprompted. Use pypdfium2. |
 
 ## What this rules out
 
 - Weights under bespoke community licences with user caps or use restrictions
 - Anything AGPL, SSPL, BUSL, or a source-available licence with a commercial-use carve-out
+- **Data and model licences outside the allow-list, including the CDLA family** — not because
+  their terms are restrictive (CDLA-Permissive-2.0's are not), but because each additional
+  licence class costs some of the checkability that makes this policy worth having. Admitting
+  one is an ADR-level decision, and a reasonable one when the component earns it.
 - Any dependency whose licence cannot be established at all
 
 When a component fails this test, the answer is to find a permissive equivalent, not to seek
