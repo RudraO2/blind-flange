@@ -37,6 +37,14 @@
  * It shipped as a dropdown and was corrected to a read-only indicator on
  * 28 Aug 2026: SIH26117 requires the system to pick automatically, so a control
  * asking the operator to classify the task contradicts the entry's own claim.
+ *
+ * Story 3.2 takes one more seat: `conversation.session.header.utilities`, a
+ * read-only pill naming the active model-plane provider. When `replay` is the
+ * provider it says so in plain words and says the responses are authored, not
+ * captured (ADR-0001 amendment, 28 Aug 2026). The provider name is read from
+ * the host's `llm.providers` directory — the Blind Flange adapter registered
+ * in the host half (`index.js`) surfaces there as `Blind Flange (<provider>)` —
+ * so this indicator reports the configured provider rather than guessing it.
  */
 window.__ModuleLoader__.load({
 	id: "@blind-flange/dsh-client-ui-base",
@@ -205,6 +213,98 @@ window.__ModuleLoader__.load({
 		}
 
 		/**
+		 * Plain-words disclosure for each model-plane provider. Keyed by the
+		 * provider token the host half selects (`config.modelPlane.provider`) and
+		 * reports back through `llm.providers`.
+		 *
+		 * The `replay` wording is load-bearing: it says "replay" outright, and it
+		 * says the responses are *authored* rather than captured, because for
+		 * Phase 0 there is no `local` run to capture from (ADR-0001 amendment,
+		 * 28 August 2026). None of these read as a warning or an apology — the
+		 * pill states the operating mode the way an instrument states a reading.
+		 */
+		const PROVIDER_DISCLOSURE = {
+			replay: {
+				label: "Replay — authored responses",
+				title:
+					"Blind Flange is answering from the replay provider: stored responses authored by hand for this Phase 0 build, served in place of live model inference and disclosed here as the operating mode. Per the 28 August 2026 amendment to ADR-0001 there is no local run to capture from yet, so replacing an authored response with a captured one later is a data change, not a code change.",
+			},
+			local: {
+				label: "Local — offline inference",
+				title:
+					"Blind Flange is answering from the local provider: llama.cpp on this machine, with no network path off the box.",
+			},
+			remote: {
+				label: "Remote — development only",
+				title:
+					"Blind Flange is answering from the remote provider: a rented GPU used only during development. ADR-0001 keeps it out of every demo and recording.",
+			},
+		};
+
+		/**
+		 * Build the header's active-provider disclosure.
+		 *
+		 * A read-only pill, never a control: which provider answers is a
+		 * `cordis.patch.yml` value (`config.modelPlane.provider`), not something
+		 * an operator sets from the UI. Built inside a function so every host
+		 * module it needs is resolved once, at mount time.
+		 * @returns the component.
+		 */
+		function buildProviderDisclosure() {
+			const { useEffect, useState } = require("react");
+			const { jsx, jsxs } = require("react/jsx-runtime");
+			const { Pill, StateDot } = require("@deepseek-ai/dsh-client-ui-primitives");
+
+			/**
+			 * The active model-plane provider, named without a menu.
+			 *
+			 * Reads the host's `llm.providers` directory and finds the Blind
+			 * Flange adapter by its `Blind Flange (<provider>)` display name — the
+			 * shape `createLlmAdapter` gives it in `model-plane/llm-adapter.js`.
+			 * Renders nothing until that lookup resolves and nothing if it fails:
+			 * an unproven provider name is worse than an absent pill (NFR8).
+			 * @returns the pill, or null.
+			 */
+			function ProviderDisclosure() {
+				const [provider, setProvider] = useState(null);
+
+				useEffect(() => {
+					let cancelled = false;
+					callApi("llm.providers", {}).then((result) => {
+						if (cancelled || !result.ok) return;
+						const ours = result.value.providers.find(
+							(row) =>
+								typeof row.displayName === "string" &&
+								row.displayName.startsWith("Blind Flange (") &&
+								row.active === true,
+						);
+						if (ours) setProvider(ours.provider);
+					});
+					return () => {
+						cancelled = true;
+					};
+				}, []);
+
+				if (provider === null) return null;
+
+				const disclosure = PROVIDER_DISCLOSURE[provider] ?? {
+					label: `Model plane — ${provider}`,
+					title: `Blind Flange is answering from the ${provider} provider.`,
+				};
+
+				return jsx(Pill, {
+					children: jsxs("span", {
+						title: disclosure.title,
+						style: { display: "inline-flex", alignItems: "center", gap: "4px" },
+						children: [jsx(StateDot, { state: "done", size: 8 }), disclosure.label],
+					}),
+				});
+			}
+
+			return ProviderDisclosure;
+		}
+
+		/**
 		 * Hold the tab title against the harness, which rewrites it after hydration.
 		 *
 		 * `@deepseek-ai/dsh-client-ui-renderer` renders a `DocumentTitle` component
@@ -253,7 +353,7 @@ window.__ModuleLoader__.load({
 		}
 
 		/**
-		 * Client plugin body. Checks the React seam, then takes three seats.
+		 * Client plugin body. Checks the React seam, then takes four seats.
 		 *
 		 * Story 1.5's mark goes into `conversation.hero.brand.mark` — `single`,
 		 * so occupying it replaces whatever the host registered there (the
@@ -275,9 +375,15 @@ window.__ModuleLoader__.load({
 		 * replacing the host's own chip for this deployment. It displays; it does not
 		 * choose (corrected 28 Aug 2026 — see `buildTaskTypeIndicator`).
 		 *
-		 * A broken React seam aborts all three: every one of them renders
+		 * Story 3.2's provider disclosure goes into
+		 * `conversation.session.header.utilities` — a session-scoped `list` slot,
+		 * so it is additive rather than a replacement — naming the active
+		 * model-plane provider, and saying "replay" and "authored" in plain words
+		 * when that is the provider (see `buildProviderDisclosure`).
+		 *
+		 * A broken React seam aborts all four: every one of them renders
 		 * through the host's `react/jsx-runtime`, so registering into a slot
-		 * without it would trade one loud console error for three obscure
+		 * without it would trade one loud console error for four obscure
 		 * render failures.
 		 * @param ctx - client root context, carrying the `slots` service
 		 * declared in `inject` below.
@@ -286,6 +392,7 @@ window.__ModuleLoader__.load({
 			if (!checkHostReactSeam()) return;
 			const disposeTabTitle = holdTabTitle();
 			const TaskTypeIndicator = buildTaskTypeIndicator();
+			const ProviderDisclosure = buildProviderDisclosure();
 			const disposeSidebarMark = ctx.slots.inject("sidebar.brand.mark", function* () {
 				yield ctx.slots.register({ name: "sidebar.brand.mark" }, BlindFlangeMark);
 			});
@@ -303,11 +410,22 @@ window.__ModuleLoader__.load({
 				);
 				return () => { dispose(); };
 			});
+			// `conversation.session.header.utilities` is a session-scoped list slot
+			// ui-conversation declares — additive, so this pill sits alongside
+			// whatever else registers there (the egress chip, in a later story).
+			const disposeProviderDisclosure = ctx.slots.inject("conversation.session.header.utilities", () => {
+				const dispose = ctx.slots.register(
+					{ name: "conversation.session.header.utilities", id: "bf-provider-disclosure" },
+					ProviderDisclosure,
+				);
+				return () => { dispose(); };
+			});
 			return () => {
 				disposeTabTitle();
 				disposeSidebarMark();
 				disposeHeroMark();
 				disposeIndicator?.();
+				disposeProviderDisclosure?.();
 			};
 		}
 

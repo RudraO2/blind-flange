@@ -69,14 +69,40 @@ const healthyJsxRuntime = {
 	Fragment: Symbol("Fragment"),
 };
 
-/** Every module `buildAgentPresetPicker` resolves, once the React seam is healthy. */
+/**
+ * Every module the slot builders resolve, once the React seam is healthy.
+ * `react.useState` echoes its initial value, so a component reads as
+ * "still loading" unless a test overrides `useState` to seat a value.
+ */
 const healthyHostModules = {
 	"react/jsx-runtime": healthyJsxRuntime,
 	react: { useEffect: () => {}, useState: (initial) => [initial, () => {}] },
 	"@deepseek-ai/dsh-client-ui-primitives": {
 		IconAgentPresetOutline16: () => {},
+		Pill: (props) => ({ type: "Pill", props }),
+		StateDot: (props) => ({ type: "StateDot", props }),
 	},
 };
+
+/** Host modules with `useState` forced to seat `seated` on its first call, then echo. */
+function hostModulesWithSeatedState(seated) {
+	let first = true;
+	return (specifier) => {
+		if (specifier === "react") {
+			return {
+				useEffect: () => {},
+				useState: (initial) => {
+					if (first) {
+						first = false;
+						return [seated, () => {}];
+					}
+					return [initial, () => {}];
+				},
+			};
+		}
+		return healthyHostModules[specifier];
+	};
+}
 
 /**
  * A stub `ctx.slots` recording every `inject` name and every `register` call.
@@ -149,8 +175,63 @@ test("occupies both places the DeepSeek whale used to render, and the hero's tas
 	assert.deepEqual(names, [
 		"conversation.hero.agentPreset",
 		"conversation.hero.brand.mark",
+		"conversation.session.header.utilities",
 		"sidebar.brand.mark",
 	]);
+});
+
+test("registers the provider disclosure into conversation.session.header.utilities", () => {
+	const { exports } = loadClientHalf((specifier) => healthyHostModules[specifier]);
+	const { ctx, injectedNames, registered } = stubSlots();
+	exports.apply(ctx);
+	assert.ok(injectedNames.includes("conversation.session.header.utilities"));
+	const disclosure = registered.find(
+		(call) => call.options.name === "conversation.session.header.utilities",
+	);
+	assert.equal(disclosure.options.id, "bf-provider-disclosure");
+	assert.equal(typeof disclosure.component, "function");
+});
+
+test("the provider disclosure renders nothing until the llm.providers lookup resolves", () => {
+	const { exports } = loadClientHalf((specifier) => healthyHostModules[specifier]);
+	const { ctx, registered } = stubSlots();
+	exports.apply(ctx);
+	const disclosure = registered.find(
+		(call) => call.options.name === "conversation.session.header.utilities",
+	);
+	// useState echoes its initial (null), i.e. the lookup has not resolved.
+	assert.equal(disclosure.component(), null);
+});
+
+test("the provider disclosure says 'replay' in plain words and calls the responses authored, not captured", () => {
+	const { exports } = loadClientHalf(hostModulesWithSeatedState("replay"));
+	const { ctx, registered } = stubSlots();
+	exports.apply(ctx);
+	const disclosure = registered.find(
+		(call) => call.options.name === "conversation.session.header.utilities",
+	);
+	const pill = disclosure.component();
+	assert.equal(pill.type, healthyHostModules["@deepseek-ai/dsh-client-ui-primitives"].Pill);
+	const span = pill.props.children;
+	assert.equal(span.type, "span");
+	assert.match(JSON.stringify(span.props.children), /Replay/);
+	assert.match(JSON.stringify(span.props.children), /authored/i);
+	// The wording must not imply the responses were captured from a live run.
+	assert.doesNotMatch(span.props.title, /captured from|recorded from a live/i);
+	assert.match(span.props.title, /authored by hand/i);
+	// A deliberate operating mode, not a warning or an apology (UX-DR9).
+	assert.doesNotMatch(span.props.title, /warning|caution|sorry|apolog|unfortunately/i);
+});
+
+test("the provider disclosure names an unrecognised provider rather than guessing its story", () => {
+	const { exports } = loadClientHalf(hostModulesWithSeatedState("local"));
+	const { ctx, registered } = stubSlots();
+	exports.apply(ctx);
+	const disclosure = registered.find(
+		(call) => call.options.name === "conversation.session.header.utilities",
+	);
+	const span = disclosure.component().props.children;
+	assert.match(JSON.stringify(span.props.children), /Local/);
 });
 
 test("the registered mark renders an svg path with fill=currentColor, not a hand-rolled hex", () => {
