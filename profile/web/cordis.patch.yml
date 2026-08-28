@@ -107,3 +107,31 @@
 # way the canary is denied, so the sandbox's shell is sealed too.
 - id: tool-pwsh
   disabled: false
+
+
+# Story 6.4: the licence claim is safe to make.
+#
+# A row disabling `attachment-local` was written here and then reverted, because
+# it does not work and the reason is worth keeping. `attachment-local` is the
+# only thing in the harness tree that depends on `sharp`, whose platform binary
+# for this machine (@img/sharp-win32-x64) is `Apache-2.0 AND LGPL-3.0-or-later`
+# — the LGPL half being the libvips image library it bundles. Weak copyleft
+# inside the runtime, the same class of problem as the GEOS one ocr.py excised.
+#
+# Measured on 28 Aug 2026: the running workbench process had
+# `sharp-win32-x64-0.35.4.node`, `libvips-cpp-8.18.6.dll` and `libvips-42.dll`
+# loaded. So it is genuinely linked, not merely present on disk.
+#
+# Disabling the row makes the workbench fail to boot:
+#
+#   dsh: 1 entry did not activate
+#   @deepseek-ai/dsh-host-apiproxy: pending (waiting for service: attachments)
+#
+# `attachment-local` is the sole provider of the `attachments` service, and
+# `dsh-host-apiproxy` — the API gateway carrying sessions, workspaces, presets
+# and settings — requires it. No sharp-free attachment provider ships. NFR5
+# forbids fixing it by editing harness source.
+#
+# So libvips is disclosed rather than excised: docs/licence-decisions.json
+# records it, with this measurement as the evidence. Do not re-add the row
+# without a replacement provider.

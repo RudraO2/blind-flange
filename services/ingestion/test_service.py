@@ -116,6 +116,36 @@ class IngestionServiceTest(unittest.TestCase):
             "shapely.geometry.Polygon is not our GEOS-free stub",
         )
 
+    def test_http_client_is_never_loaded(self) -> None:
+        """The MPL-2.0 line, and an HTTP client in an air-gapped product.
+
+        RapidOCR imports `requests` and `tqdm` at module scope, from its model downloader
+        and its load-image-from-URL branch. `requests` pulls in `certifi` (MPL-2.0) and
+        `tqdm` is itself MPL-2.0 AND MIT — both outside the allow-list, and both weak
+        copyleft rather than merely off-list. ocr.py registers raising stubs under those
+        two names before RapidOCR can import the real ones (ADR-0006, Story 6.4).
+
+        Asserts two things: the real packages never loaded, and the stubs are the raising
+        kind. A dependency bump that moves real work behind those imports fails here.
+        """
+        import sys
+
+        import ocr
+
+        ocr._get_engine()
+
+        for name in ("certifi", "urllib3", "idna"):
+            self.assertNotIn(name, sys.modules, f"the real requests stack was loaded: {name}")
+        for name in ("requests", "tqdm"):
+            self.assertFalse(
+                hasattr(sys.modules[name], "__file__"),
+                f"{name} is the real package, not our stub — the seal did not hold",
+            )
+        with self.assertRaises(ocr._SealedHTTPError):
+            sys.modules["requests"].get("http://example.invalid")
+        with self.assertRaises(ocr._SealedHTTPError):
+            sys.modules["tqdm"].tqdm(total=1)
+
     def test_ingest_rejects_non_image_content_type(self) -> None:
         conn = self._client()
         payload = b"not an image"

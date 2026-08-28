@@ -227,3 +227,76 @@ the Tesseract rows above are kept rather than deleted.
 
 This is now the **second** open licence question in this service, alongside Pillow's MIT-CMU.
 Both are recorded, neither is resolved, and neither may be waved through at the point of use.
+
+---
+
+## Story 6.4 — both open questions are closed, and two more were found
+
+Verified 28 August 2026. `npm run licence-audit` now enumerates this directory's tree
+alongside the harness's and the fleet's — 490 components in total — and
+`docs/licence-audit.md` is its output. This file remains the narrative record of how each
+row here was established; the audit is the mechanism that fails when one goes undecided.
+
+**Pillow's `MIT-CMU` is admitted.** ADR-0006 turned the allow-list into a rule — OSI-approved,
+no copyleft, no user cap, no field-of-use restriction — with an enumerated set of eleven
+names, and MIT-CMU is one of them. It is the Carnegie Mellon variant of MIT and a PSU legal
+reviewer reads it as MIT. This was option 1 of the three recorded above, and it closes both
+routes into the tree at once exactly as predicted: neither ReportLab's module-load import nor
+`pytesseract`'s dependency has to be rebuilt.
+
+**Clipper's `BSL-1.0` is admitted**, by the same ADR and the same rule. BSL-1.0 waives
+attribution for binary distribution, which makes it *more* permissive than MIT rather than
+less. `ocr.py` keeps RapidOCR's detector and `proof/PROOF.md` no longer has to be held in
+reserve as a revert path — though it stays, because a superseded proof is still evidence the
+engine choice was measured.
+
+### What the audit found that this file had not
+
+**`opencv-python` and `numpy` were never pinned.** Both are loaded by every OCR pass —
+measured, not assumed — and `requirements.txt`'s own rule is that an unpinned transitive is
+an unverified licence. They are pinned now. `opencv-python` matters more than its Apache-2.0
+metadata suggests: it redistributes a 28.6 MB FFmpeg DLL under **LGPL-2.1-or-later**, which
+neither its `METADATA` nor its `LICENSE.txt` mentions and only `LICENSE-3RD-PARTY.txt` does.
+
+That DLL is a lazily-loaded video-I/O plugin and this service never opens a video. Measured
+across a full pass on the Story 4.1 fixture: `cv2.pyd` loads, `opencv_videoio_ffmpeg4130_64.dll`
+does not. Redistributed but not linked — recorded as `mitigated`, which is a weaker position
+than the GEOS fix (that one removed the package) and a stronger one than disclosure alone.
+
+**`requests` and `tqdm` are now sealed out, the same way `shapely` was.** `certifi` is
+MPL-2.0 and `tqdm` is `MPL-2.0 AND MIT` — weak copyleft, and outside the allow-list even
+after ADR-0006 widened it, because copyleft is never admitted by widening. RapidOCR imports
+both at module scope but only calls them from `utils/download_file.py` (fetching model
+weights) and `utils/load_image.py` (opening an image from a URL). The three PP-OCRv6 models
+ship inside the wheel and `findings_from_image` is handed a decoded `PIL.Image`, so neither
+branch is reachable.
+
+`ocr.py::_seal_out_http` registers raising stubs under both names before RapidOCR can import
+the real ones. The stubs raise rather than no-op, so a future RapidOCR that moves real work
+behind those imports fails on the first request instead of quietly downloading something.
+
+Verified: **97 regions at 99.68 mean confidence** — identical to the GEOS-free run recorded
+in `PROOF-RAPIDOCR.md` — with `certifi`, `urllib3` and `idna` never entering `sys.modules`.
+`test_service.py::test_http_client_is_never_loaded` holds the line.
+
+Removing an HTTP client from an air-gapped product is worth doing for NFR2 whatever the
+licence said.
+
+**`Eigen` (MPL-2.0) inside `onnxruntime` is disclosed, not removed.** Header-only, compiled
+into `onnxruntime.dll`, named in that package's `ThirdPartyNotices.txt`. Genuinely linked, so
+no not-loaded argument is available. MPL-2.0's obligations are file-level and attach only to
+modified MPL files; we modify none. It is named in the root `THIRD_PARTY_NOTICES.md`.
+
+**Seven free-text licence strings were resolved by reading the file.** `antlr4-python3-runtime`,
+`colorama`, `mpmath`, `omegaconf`, `protobuf`, `reportlab` and `sympy` all declare some
+variant of "BSD" in their metadata, which does not say two-clause or three. All seven were
+read and all seven are BSD-3-Clause; `antlr4-python3-runtime` ships no licence file at all in
+its distribution, so its row was read from the upstream repository at tag `4.9.3`. The
+resolutions are recorded in `docs/licence-decisions.json` under `resolved_by_reading`, and the
+audit refuses to guess at any string not in that list.
+
+### The gate result for Story 4.1, revisited
+
+Story 4.1's third acceptance criterion — "every one is inside the licence allow-list" — was
+recorded above as **not met** because of Pillow. It is met now, under the allow-list ADR-0006
+defines. The story's other criteria were already met, so nothing else about it changes.

@@ -6,12 +6,23 @@ the file map, and the decisions that are closed and must not be reopened.
 `CONTEXT.md` is the shared language. Use its terms in prose, code, commits and UI copy;
 don't drift to the synonyms listed under `_Avoid_`.
 
-`docs/licence-policy.md` is a hard constraint, not a preference. Apache-2.0, MIT,
-BSD-2-Clause and BSD-3-Clause only, across weights, dependencies and the harness. Read it
-before proposing any dependency. The list was widened from two licences to four on 28 Aug
-2026 by ADR-0005; widening it again is an ADR-level decision, never a judgement call made at
-the point of use. **`PyMuPDF` is AGPL-3.0 and must never be used** — it is the default an
-agent reaches for unprompted, and `pypdfium2` is the substitute.
+`docs/licence-policy.md` is a hard constraint, not a preference. The rule: **OSI-approved, no
+copyleft, no user cap, no field-of-use restriction, no disclosure obligation** — eleven
+enumerated names across weights, dependencies and the harness:
+
+> Apache-2.0 · MIT · BSD-2-Clause · BSD-3-Clause · ISC · 0BSD · Python-2.0 · MIT-CMU ·
+> BSL-1.0 · Zlib · CC0-1.0
+
+Read the policy before proposing any dependency. The list went from two names to four on
+28 Aug 2026 (ADR-0005), then to eleven the same day (ADR-0006) after the Story 6.4 audit
+enumerated 490 components and found 27 outside the four. **Widening it again is an
+ADR-level decision, never a judgement call made at the point of use, and copyleft is never
+admitted by widening** — each copyleft component is decided one at a time in
+`docs/licence-decisions.json`, with evidence.
+
+Run `npm run licence-audit` before you add anything. It is part of `npm test` and it fails
+on an undecided licence. **`PyMuPDF` is AGPL-3.0 and must never be used** — it is the
+default an agent reaches for unprompted, and `pypdfium2` is the substitute.
 
 `videos/sovereign-workbench-explainer` is finished output only. Nothing reads back from it.
 

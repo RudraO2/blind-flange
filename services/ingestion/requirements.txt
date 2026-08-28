@@ -37,6 +37,28 @@ omegaconf==2.3.1
 antlr4-python3-runtime==4.9.3
 colorlog==6.12.0
 
+# Both were missing from this file until Story 6.4's audit measured what a real OCR pass
+# actually loads, and found `cv2` and `numpy` in the process. requirements.txt's own rule
+# — "an unpinned transitive is an unverified licence" — was being broken by the two
+# heaviest packages in the tree, one of which bundles FFmpeg. Pinned now, licences in
+# LICENCES.md, the FFmpeg question decided in docs/licence-decisions.json.
+opencv-python==4.13.0.92
+numpy==2.4.3
+
+# NOT pinned, and sealed out at import: `requests`, `tqdm`, and the `certifi` / `urllib3` /
+# `idna` stack requests brings with it.
+#
+# `certifi` is MPL-2.0 and `tqdm` is MPL-2.0 AND MIT — weak copyleft, outside the
+# allow-list even after ADR-0006 widened it. RapidOCR imports both at module scope, but
+# only ever calls them from its model downloader and its load-image-from-URL branch. The
+# models ship inside the wheel and this service is handed decoded images, so neither branch
+# is reachable. `ocr.py::_seal_out_http` registers raising stubs under those names before
+# RapidOCR can import the real ones, exactly as it already does for shapely.
+#
+# Verified: 97 regions at 99.68 mean confidence with certifi, urllib3 and idna never
+# entering sys.modules. `test_service.py::test_http_client_is_never_loaded` holds the line.
+# Removing an HTTP client from an air-gapped product is worth doing for NFR2 alone.
+
 # Image decoding. Its licence (MIT-CMU) is the open question recorded in LICENCES.md since
 # Story 4.1 — not resolved by this change, not reopened by it either.
 pillow==11.3.0

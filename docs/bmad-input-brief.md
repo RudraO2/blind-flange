@@ -30,7 +30,9 @@ work, built on open-weight multimodal models. Smart India Hackathon 2026 problem
 
 These are not up for elicitation. Challenge them only if you can show a contradiction.
 
-1. **Licences: Apache-2.0, MIT, BSD-2-Clause and BSD-3-Clause only.** Weights, dependencies,
+1. **Licences: permissive only.** Apache-2.0, MIT, BSD-2-Clause and BSD-3-Clause as written here;
+   ADR-0006 widened this to eleven enumerated names on 28 August 2026 and `docs/licence-policy.md`
+   is the current list. Weights, dependencies,
    harness, everything. The reasoning is in `docs/licence-policy.md` and it is the
    client-facing differentiator, not an engineering preference. Widened from two licences to
    four on 28 Aug 2026 by ADR-0005. `PyMuPDF` is AGPL-3.0 and is banned by name.

@@ -169,7 +169,9 @@ mid-session. Then the scanned report becoming a signed `.docx`.
 
 ## Constraints — not negotiable
 
-1. **Apache-2.0, MIT, BSD-2-Clause and BSD-3-Clause only**, across weights, dependencies and
+1. **Permissive licences only** — Apache-2.0, MIT, BSD-2-Clause and BSD-3-Clause as written here,
+   widened to eleven enumerated names by ADR-0006 on 28 August 2026 (see `docs/licence-policy.md`)
+   — across weights, dependencies and
    harness (`docs/licence-policy.md`). Verified by reading `LICENSE` at the pinned version.
    Widened from two licences to four on 28 Aug 2026 by ADR-0005, which also rejected Docling
    (its models are CDLA-Permissive-2.0) in favour of the Tesseract stack.

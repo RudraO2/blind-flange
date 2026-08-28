@@ -26,10 +26,33 @@
  * behaves identically without a code change.
  */
 
-import { isLicenceAllowed, readFleet } from "./fleet.js";
+import { ALLOWED_LICENCES, isLicenceAllowed, readFleet } from "./fleet.js";
 
-/** The allow-list as one human-readable string, for the refusal reason. Mirrors `ALLOWED_LICENCES` in `fleet.js` (ADR-0005). */
-export const ALLOWED_LICENCES_DISPLAY = "Apache-2.0, MIT, BSD-2-Clause, BSD-3-Clause";
+/** SPDX ids as they are written, keyed by the lower-case form the gate matches on. */
+const CANONICAL_CASE = {
+	"apache-2.0": "Apache-2.0",
+	"bsd-2-clause": "BSD-2-Clause",
+	"bsd-3-clause": "BSD-3-Clause",
+	"mit-cmu": "MIT-CMU",
+	"python-2.0": "Python-2.0",
+	"bsl-1.0": "BSL-1.0",
+	"cc0-1.0": "CC0-1.0",
+	"0bsd": "0BSD",
+	zlib: "Zlib",
+};
+
+/**
+ * The allow-list as one human-readable string, for the refusal reason.
+ *
+ * Derived from `ALLOWED_LICENCES` rather than written out again, so a name
+ * admitted by a future ADR appears in the refusal message without a second
+ * edit. The canonical casing is restored here because the gate matches
+ * lower-case and a refusal a human reads should say "Apache-2.0", not
+ * "apache-2.0".
+ */
+export const ALLOWED_LICENCES_DISPLAY = [...ALLOWED_LICENCES]
+	.map((id) => CANONICAL_CASE[id] ?? id.toUpperCase())
+	.join(", ");
 
 /**
  * @typedef {object} LicenceRefusal
@@ -64,7 +87,7 @@ export function loadFleet(registryPath) {
 			licence,
 			reason:
 				`Blind Flange refuses to load "${member.name}": its licence "${licence}" is outside the ` +
-				`permissive allow-list (${ALLOWED_LICENCES_DISPLAY}). See docs/licence-policy.md (ADR-0005).`,
+				`permissive allow-list (${ALLOWED_LICENCES_DISPLAY}). See docs/licence-policy.md (ADR-0006).`,
 		});
 	}
 

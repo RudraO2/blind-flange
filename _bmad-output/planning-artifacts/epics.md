@@ -91,7 +91,7 @@ FR23: [P1] The remainder of the identity pass — wordmark, hero text, package s
 
 ### NonFunctional Requirements
 
-NFR1: Apache-2.0, MIT, BSD-2-Clause and BSD-3-Clause only, across model weights, every runtime dependency, and the harness. Verified by reading the `LICENSE` file at the version being pinned — not a README, not a summary. The allow-list was widened from two licences to four on 28 August 2026 by ADR-0005; widening it again is an ADR-level decision, never a judgement call made at the point of use.
+NFR1: Apache-2.0, MIT, BSD-2-Clause and BSD-3-Clause only, across model weights, every runtime dependency, and the harness. Verified by reading the `LICENSE` file at the version being pinned — not a README, not a summary. The allow-list was widened from two licences to four on 28 August 2026 by ADR-0005, and to eleven the same day by **ADR-0006** after Story 6.4's audit enumerated 490 components and found 27 outside the four — the rule is now "OSI-approved, no copyleft, no user cap, no field-of-use restriction", with the names enumerated in `docs/licence-policy.md`. Widening it again is an ADR-level decision, never a judgement call made at the point of use, and **copyleft is never admitted by widening**.
 NFR2: Offline by construction. No component reaches the network at runtime and every model artefact is pre-staged. A blocked call must fail fast; a hang looks like a crash on stage.
 NFR3: No external URL may enter the frontend bundle. A build check fails on `http` in the built output, not merely in source.
 NFR4: Runs within the fixed hardware envelope — MSI GF63, i5-11260H, 15.7 GB RAM, GTX 1650 Max-Q with 4 GB VRAM. No cloud GPU during any demo or recording.

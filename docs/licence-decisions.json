@@ -1,0 +1,251 @@
+{
+  "$comment": [
+    "The decisions recorded against every component outside the allow-list (Story 6.4).",
+    "",
+    "docs/licence-policy.md is the policy: OSI-approved, no copyleft, no user cap, no field-of-use",
+    "restriction — eleven enumerated names as of ADR-0006, across weights, dependencies and the",
+    "harness. This file is the other half of that sentence — the record of what was found outside",
+    "it and what was decided about each one. It is read by scripts/licence-audit.mjs, which fails",
+    "when something outside the set has no decision here, has one recorded as `open`, is keyed",
+    "twice, or carries an evidence path that no longer exists on disk.",
+    "",
+    "DECISION KINDS",
+    "  accepted     The allow-list was widened, or this component was admitted, by an ADR. Requires `adr`.",
+    "  mitigated    It ships, but the part with the offending licence is provably not loaded or linked.",
+    "               Requires `evidence`, and the evidence must be a measurement, not an argument.",
+    "  not-shipped  Present on a development machine, not in what ships. Requires `evidence`.",
+    "  disclosed    It ships and is genuinely linked. Its own terms permit that, and it is named on",
+    "               the attestation report rather than argued away. Requires `adr` and `evidence`.",
+    "  refused      Present on purpose so the gate can refuse it, and the refusal is the evidence.",
+    "  rejected     Must not appear in the tree at all. The audit fails if it does.",
+    "  open         No decision has been taken. The audit fails. This is not a status a story ships in.",
+    "",
+    "`evidence` paths are project-relative, or `~`-prefixed for the two trees that live outside the",
+    "repo (the harness under ~/.dsh, and Python's site-packages). The audit checks every one exists.",
+    "",
+    "`resolved_by_reading` is separate: those are not decisions, they are free-text licence strings",
+    "resolved to an SPDX id by reading the licence text at the pinned version, which is the standard",
+    "docs/licence-policy.md sets. A package whose metadata says only \"BSD\" is ambiguous until",
+    "somebody opens the file and sees whether the third clause is there."
+  ],
+  "resolved_by_reading": {
+    "$comment": "name@version -> the SPDX id the licence text at that version actually is. Read 28 August 2026.",
+    "antlr4-python3-runtime@4.9.3": "BSD-3-Clause",
+    "colorama@0.4.6": "BSD-3-Clause",
+    "mpmath@1.3.0": "BSD-3-Clause",
+    "omegaconf@2.3.1": "BSD-3-Clause",
+    "protobuf@5.29.6": "BSD-3-Clause",
+    "reportlab@4.5.0": "BSD-3-Clause",
+    "sympy@1.14.0": "BSD-3-Clause"
+  },
+  "bundled": [
+    {
+      "component": "libvips",
+      "inside": "@img/sharp-win32-x64@0.35.4 and @img/sharp-wasm32@0.35.4, which sharp@0.35.4 resolves for this platform",
+      "licence": "LGPL-3.0-or-later",
+      "version": "8.x (shipped prebuilt, no version file)",
+      "role": "runtime",
+      "note": "No metadata field on sharp names it. sharp's own package.json says Apache-2.0; the platform binary packages say `Apache-2.0 AND LGPL-3.0-or-later`, and the LGPL half is libvips. Reached from @deepseek-ai/dsh-attachment-local, a harness plugin."
+    },
+    {
+      "component": "FFmpeg",
+      "inside": "opencv-python@4.13.0.92",
+      "licence": "LGPL-2.1-or-later",
+      "version": "4.13.0 (opencv_videoio_ffmpeg4130_64.dll, 28.6 MB)",
+      "role": "runtime",
+      "note": "opencv-python's METADATA says Apache 2.0 and its own LICENSE.txt says MIT; neither mentions FFmpeg. LICENSE-3RD-PARTY.txt does: \"FFmpeg is redistributed within all opencv-python packages\", followed by the LGPL text."
+    },
+    {
+      "component": "Clipper",
+      "inside": "pyclipper@1.4.0",
+      "licence": "BSL-1.0",
+      "version": "6.4.2",
+      "role": "runtime",
+      "note": "pyclipper's own wrapper is MIT and its dist-info LICENSE is the MIT text. The C++ library it embeds — which does the polygon offsetting RapidOCR's detector needs — is Boost Software License."
+    },
+    {
+      "component": "Eigen",
+      "inside": "onnxruntime@1.24.4",
+      "licence": "MPL-2.0",
+      "version": "shipped prebuilt inside onnxruntime.dll",
+      "role": "runtime",
+      "note": "onnxruntime is MIT and ships its LICENSE. Its ThirdPartyNotices.txt names Eigen under MPL v2.0."
+    },
+    {
+      "component": "PDFium third-party sources",
+      "inside": "pypdfium2@4.30.0",
+      "licence": "LicenseRef-PdfiumThirdParty",
+      "version": "bundled with pdfium.dll",
+      "role": "runtime",
+      "note": "libpng, LibTIFF and similar under the zlib licence, the libpng licence and public-domain dedications. Permissive with no disclosure obligation, but not SPDX-identified, so the audit cannot classify it and it needs a decision like anything else."
+    },
+    {
+      "component": "OpenBLAS",
+      "inside": "numpy@2.4.3",
+      "licence": "BSD-3-Clause",
+      "version": "bundled as numpy.libs/libscipy_openblas64_*.dll",
+      "role": "runtime",
+      "note": "On the allow-list. Recorded because the attestation report has to be able to name it, not because it needs deciding."
+    },
+    {
+      "component": "DarkGarden font family",
+      "inside": "reportlab@4.5.0",
+      "licence": "GPL-2.0-or-later",
+      "version": "shipped as reportlab/fonts/DarkGardenMK.pfb and DarkGarden.sfd",
+      "role": "build-time",
+      "note": "The one copyleft file in the tree that is unambiguously copyleft with no argument available. The fixture generator draws with the PDF base-14 names only, so no font file is embedded in any output — but the file ships inside a dependency and belongs on the attestation report either way."
+    }
+  ],
+  "decisions": [
+    {
+      "ecosystem": "model",
+      "component": "Qwen/Qwen2.5-3B-Instruct",
+      "licence": "Qwen RESEARCH LICENSE AGREEMENT",
+      "decision": "refused",
+      "recorded": "2026-08-28",
+      "reason": "Declared in registry/models.yaml on purpose so the loader refuses it and the refusal is checkable — same family, publisher and release as Qwen2.5-7B-Instruct, different licence. It never loads, and the refusal is the evidence.",
+      "evidence": [
+        "plugins/dsh-client-ui-base/lib/registry/loader.js",
+        "plugins/dsh-client-ui-base/test/loader.test.js"
+      ]
+    },
+    {
+      "ecosystem": "bundled",
+      "component": "libvips",
+      "licence": "LGPL-3.0-or-later",
+      "decision": "disclosed",
+      "recorded": "2026-08-28",
+      "reason": "Measured loaded on 28 August 2026: the running workbench process carried sharp-win32-x64-0.35.4.node, libvips-cpp-8.18.6.dll and libvips-42.dll. So it is genuinely linked, not merely present on disk. The obvious fix was tried and reverted: a `disabled: true` row for attachment-local makes the workbench fail to boot, because it is the sole provider of the `attachments` service and dsh-host-apiproxy — the API gateway carrying sessions, workspaces, presets and settings — requires it. No sharp-free attachment provider ships and NFR5 forbids editing harness source. LGPL-3.0 permits redistributing an unmodified library with notice and the ability to relink, which we satisfy: compliant, not permissive, and named on the attestation report.",
+      "evidence": [
+        "~/.dsh/profiles/node_modules/@deepseek-ai/dsh/node_modules/@img/sharp-win32-x64/package.json",
+        "~/.dsh/profiles/node_modules/@deepseek-ai/dsh/node_modules/@img/sharp-wasm32/package.json"
+      ],
+      "adr": "ADR-0006"
+    },
+    {
+      "ecosystem": "bundled",
+      "component": "FFmpeg",
+      "licence": "LGPL-2.1-or-later",
+      "decision": "mitigated",
+      "recorded": "2026-08-28",
+      "reason": "Measured not loaded. A full OCR pass over the Story 4.1 fixture returns 97 regions at 99.68 mean confidence with cv2.pyd loaded and opencv_videoio_ffmpeg4130_64.dll never entering the process — it is a lazily-loaded video-I/O plugin and this service never opens a video. Redistributed but not linked: weaker than the shapely fix, which removed the package outright, and stronger than disclosure alone.",
+      "evidence": [
+        "~/AppData/Local/Programs/Python/Python313/Lib/site-packages/opencv_python-4.13.0.92.dist-info/LICENSE-3RD-PARTY.txt",
+        "~/AppData/Local/Programs/Python/Python313/Lib/site-packages/cv2/opencv_videoio_ffmpeg4130_64.dll"
+      ],
+      "adr": "ADR-0006"
+    },
+    {
+      "ecosystem": "bundled",
+      "component": "Eigen",
+      "licence": "MPL-2.0",
+      "decision": "disclosed",
+      "recorded": "2026-08-28",
+      "reason": "Header-only linear algebra compiled into onnxruntime.dll and named in its ThirdPartyNotices.txt. Genuinely linked, so no not-loaded argument is available. MPL-2.0's obligations are file-level and attach only to modified MPL files; we modify none, and Eigen chose MPL-2.0 precisely because that scope makes it behave permissively for a header library.",
+      "evidence": [
+        "~/AppData/Local/Programs/Python/Python313/Lib/site-packages/onnxruntime/ThirdPartyNotices.txt"
+      ],
+      "adr": "ADR-0006"
+    },
+    {
+      "ecosystem": "bundled",
+      "component": "DarkGarden font family",
+      "licence": "GPL-2.0-or-later",
+      "decision": "not-shipped",
+      "recorded": "2026-08-28",
+      "reason": "reportlab is the fixture generator's dependency and the generator is build-time only: its output, a PNG and a PDF, is committed and the tool is not run on the box. It draws with the PDF base-14 font names, which are metric-only and substituted at raster time, so no font file is embedded in any output.",
+      "evidence": [
+        "~/AppData/Local/Programs/Python/Python313/Lib/site-packages/reportlab/fonts/DarkGarden-copying-gpl.txt",
+        "services/ingestion/fixtures/generate_sample_report.py"
+      ],
+      "adr": "ADR-0006"
+    },
+    {
+      "ecosystem": "bundled",
+      "component": "PDFium third-party sources",
+      "licence": "LicenseRef-PdfiumThirdParty",
+      "decision": "accepted",
+      "recorded": "2026-08-28",
+      "reason": "libpng, LibTIFF, zlib and public-domain dedications inside pypdfium2's pdfium.dll. Admitted by ADR-0006's rule — permissive, no copyleft, no cap, no field-of-use restriction — but it cannot go on the enumerated set, because LicenseRef-* has no SPDX identity to enumerate. So it carries a per-component decision instead.",
+      "evidence": [
+        "~/AppData/Local/Programs/Python/Python313/Lib/site-packages/pypdfium2-4.30.0.dist-info/LicenseRef-PdfiumThirdParty.txt"
+      ],
+      "adr": "ADR-0006"
+    },
+    {
+      "ecosystem": "python",
+      "component": "pymupdf",
+      "licence": "AGPL-3.0",
+      "decision": "rejected",
+      "recorded": "2026-08-28",
+      "reason": "Copyleft with a network disclosure obligation. Named explicitly because it is the library every PDF tutorial reaches for and the default an agent selects unprompted (ADR-0005, CLAUDE.md). pypdfium2 is the substitute. The audit fails if this ever appears in the tree."
+    },
+    {
+      "ecosystem": "python",
+      "component": "shapely",
+      "licence": "BSD-3-Clause, bundling GEOS under LGPL-2.1",
+      "decision": "rejected",
+      "recorded": "2026-08-28",
+      "reason": "shapely's own licence is fine; the geos-*.dll it bundles is LGPL-2.1 and was confirmed loading during a real OCR pass. ocr.py now supplies the two Polygon properties RapidOCR's detector uses and registers them under `shapely` in sys.modules before RapidOCR can import the real package; output is identical. The audit fails if shapely returns, and so does test_service.py::test_geos_is_never_loaded.",
+      "evidence": [
+        "services/ingestion/ocr.py",
+        "services/ingestion/test_service.py"
+      ]
+    },
+    {
+      "ecosystem": "python",
+      "component": "docling-models",
+      "licence": "CDLA-Permissive-2.0",
+      "decision": "rejected",
+      "recorded": "2026-08-28",
+      "reason": "Rejected on fit and cost rather than legal hazard — CDLA-Permissive-2.0 permits commercial use and restricts nothing about results. A third licence name on the attestation report and a PyTorch-sized stack for what Phase 0 needs. See ADR-0005 and docs/licence-policy.md."
+    },
+    {
+      "ecosystem": "python",
+      "component": "certifi",
+      "licence": "MPL-2.0",
+      "decision": "mitigated",
+      "adr": "ADR-0006",
+      "recorded": "2026-08-28",
+      "reason": "Reached only from rapidocr via requests, which rapidocr calls only from its model downloader and its load-image-from-URL branch. ocr.py::_seal_out_http registers raising stubs under `requests` and `tqdm` before RapidOCR can import the real ones. Verified: 97 regions at 99.68 mean confidence with certifi, urllib3 and idna never entering sys.modules. Still listed in rapidocr's Requires-Dist, which is why it still appears in this audit at all.",
+      "evidence": [
+        "services/ingestion/ocr.py",
+        "services/ingestion/test_service.py"
+      ]
+    },
+    {
+      "ecosystem": "python",
+      "component": "tqdm",
+      "licence": "MPL-2.0 AND MIT",
+      "decision": "mitigated",
+      "adr": "ADR-0006",
+      "recorded": "2026-08-28",
+      "reason": "A progress bar for RapidOCR's model downloader, which never runs here — the three PP-OCRv6 models ship inside the wheel. Sealed out by the same stub as requests, and the stub raises rather than no-ops so a future RapidOCR that moves real work behind the import fails loudly instead of quietly downloading something.",
+      "evidence": [
+        "services/ingestion/ocr.py",
+        "services/ingestion/test_service.py"
+      ]
+    },
+    {
+      "licence": "LGPL-3.0-or-later",
+      "decision": "disclosed",
+      "adr": "ADR-0006",
+      "recorded": "2026-08-28",
+      "reason": "Covers the sharp platform binaries themselves (@img/sharp-win32-x64, @img/sharp-wasm32), whose package.json declares `Apache-2.0 AND LGPL-3.0-or-later`, as well as the libvips entry under `bundled` — they are the same finding seen from the manifest and from the vendored library. Measured loaded, cannot be disabled without taking the workbench's API gateway down, disclosed on the attestation report. See the `libvips` entry for the full record and ADR-0006 for the decision.",
+      "evidence": [
+        "docs/adr/0006-the-allow-list-becomes-a-rule-and-copyleft-is-decided-per-component.md",
+        "profile/web/cordis.patch.yml"
+      ]
+    },
+    {
+      "licence": "LicenseRef-PdfiumThirdParty",
+      "decision": "accepted",
+      "adr": "ADR-0006",
+      "recorded": "2026-08-28",
+      "reason": "Covers `pypdfium2` itself, whose declared expression is `(Apache-2.0 OR BSD-3-Clause) AND LicenseRef-PdfiumThirdParty` — the dual-licensed half is a choice we take, and this half is the vendored PDFium third-party set. Permissive with no disclosure obligation, admitted by ADR-0006's rule, and unable to go on the enumerated set because a LicenseRef-* has no SPDX identity to enumerate.",
+      "evidence": [
+        "~/AppData/Local/Programs/Python/Python313/Lib/site-packages/pypdfium2-4.30.0.dist-info/LicenseRef-PdfiumThirdParty.txt"
+      ]
+    }
+  ]
+}

@@ -80,6 +80,67 @@ def _seal_out_geos() -> None:
     sys.modules["shapely"] = shapely
     sys.modules["shapely.geometry"] = geometry
 
+
+class _SealedHTTPError(RuntimeError):
+    """Raised if anything in the OCR path actually tries to make an HTTP request."""
+
+
+def _sealed_get(*_args, **_kwargs):
+    raise _SealedHTTPError(
+        "Blind Flange sealed `requests` out of the OCR path. RapidOCR reached for the "
+        "network — its model downloader or its load-from-URL branch. Neither is reachable "
+        "here: the models ship inside the wheel and images arrive as PIL objects. See "
+        "docs/licence-policy.md and services/ingestion/LICENCES.md."
+    )
+
+
+def _seal_out_http() -> None:
+    """Register stubs for `requests` and `tqdm` before RapidOCR can import the real ones.
+
+    Same technique as `_seal_out_geos`, for the same two reasons in the same order.
+
+    **Licence.** `requests` pulls in `certifi`, and `certifi` is **MPL-2.0** — file-level
+    weak copyleft, outside the allow-list. `tqdm` is **MPL-2.0 AND MIT**, so both halves
+    apply. Sealing them removes the last two MPL rows from the runtime tree
+    (`docs/licence-decisions.json`, ADR-0006).
+
+    **Sovereignty.** They are only reachable from `rapidocr/utils/download_file.py`, which
+    fetches model weights, and `rapidocr/utils/load_image.py`, which opens an image from a
+    URL. This service does neither: the three PP-OCRv6 models ship inside the wheel, and
+    `findings_from_image` is handed an already-decoded `PIL.Image`. An HTTP client that
+    exists but is unreachable is still an HTTP client on the attestation report of an
+    air-gapped product (NFR2).
+
+    The stubs raise rather than no-op. If a future RapidOCR moves real work behind these
+    imports, the service fails loudly on the first request instead of quietly downloading
+    something.
+    """
+    if "requests" not in sys.modules:
+        requests = types.ModuleType("requests")
+        requests.get = _sealed_get
+        requests.post = _sealed_get
+        # `download_file.py` annotates with `requests.Response` and catches
+        # `requests.RequestException`, so both have to exist as real objects — and the
+        # exception has to be a class `except` will accept.
+        requests.Response = type("Response", (), {})
+        requests.RequestException = _SealedHTTPError
+        sys.modules["requests"] = requests
+
+    if "tqdm" not in sys.modules:
+        tqdm_module = types.ModuleType("tqdm")
+
+        class _SealedTqdm:
+            """`download_file.py` uses this as a context manager around a download."""
+
+            def __init__(self, *_args, **_kwargs):
+                raise _SealedHTTPError(
+                    "Blind Flange sealed `tqdm` out of the OCR path — it is only reached "
+                    "from RapidOCR's model downloader, which never runs here."
+                )
+
+        tqdm_module.tqdm = _SealedTqdm
+        sys.modules["tqdm"] = tqdm_module
+
 _engine = None
 _engine_lock = threading.Lock()
 
@@ -103,6 +164,7 @@ def _get_engine():
         with _engine_lock:
             if _engine is None:
                 _seal_out_geos()
+                _seal_out_http()
                 from rapidocr import RapidOCR
 
                 _engine = RapidOCR()

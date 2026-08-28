@@ -194,11 +194,39 @@ export function readFleet(registryPath = REGISTRY_PATH) {
 }
 
 /**
- * The licence allow-list from `docs/licence-policy.md` (ADR-0005). Matching is
+ * The licence allow-list from `docs/licence-policy.md`. Matching is
  * case-insensitive on the trimmed `licence` string. Widening this list is an
  * ADR-level decision, never an edit made here.
+ *
+ * The rule these eleven names satisfy (ADR-0006): OSI-approved, no copyleft, no
+ * user cap, no field-of-use restriction, no disclosure obligation. The set stays
+ * enumerated rather than becoming a judgement call at the point of use, because
+ * an enumerated set is what this loader can refuse on and what
+ * `scripts/licence-audit.mjs` can fail on. The rule explains the set; it does
+ * not replace it.
+ *
+ * ADR-0005 admitted BSD-2 and BSD-3 to the original Apache-2.0/MIT pair.
+ * ADR-0006 added the remaining seven after Story 6.4's audit enumerated 490
+ * components and found 27 outside the four. Copyleft is never admitted here —
+ * `docs/licence-decisions.json` decides those one at a time.
+ *
+ * Exported because the audit gates the whole dependency tree on the same names
+ * the model loader gates the fleet on. Two copies of an allow-list is how a
+ * policy ends up enforced in one place and asserted in the other.
  */
-const ALLOWED_LICENCES = new Set(["apache-2.0", "mit", "bsd-2-clause", "bsd-3-clause"]);
+export const ALLOWED_LICENCES = new Set([
+	"apache-2.0",
+	"mit",
+	"bsd-2-clause",
+	"bsd-3-clause",
+	"isc",
+	"0bsd",
+	"python-2.0",
+	"mit-cmu",
+	"bsl-1.0",
+	"zlib",
+	"cc0-1.0",
+]);
 
 /**
  * Whether a fleet member's declared licence is inside the allow-list.
