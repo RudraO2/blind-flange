@@ -4,7 +4,7 @@
  * extension points (`register`, `tapIndex`) rather than any harness file
  * edit, plus the egress denial waterfall (Story 2.1) registered on
  * `tools/pre-execute`, plus the model plane adapter registration (Story 3.1)
- * on `ctx.llm`.
+ * on `ctx.llm`, plus the router's classifier (Story 3.5) on `agent/pre-step`.
  *
  *     node --test plugins/dsh-client-ui-base/test/
  */
@@ -40,6 +40,7 @@ function stubHostCtx({ webServer = true, llm = true } = {}) {
 	const taps = [];
 	const registeredAdapters = [];
 	let preExecuteListener;
+	let preStepListener;
 	const webServerService = {
 		register: (route) => {
 			routes.push(route);
@@ -60,6 +61,7 @@ function stubHostCtx({ webServer = true, llm = true } = {}) {
 		effect: (run) => run(),
 		on: (name, fn) => {
 			if (name === "tools/pre-execute") preExecuteListener = fn;
+			if (name === "agent/pre-step") preStepListener = fn;
 		},
 		inject: (names, run) => {
 			if (names.some((name) => name === "webServer" && !webServer)) return;
@@ -73,6 +75,9 @@ function stubHostCtx({ webServer = true, llm = true } = {}) {
 		registeredAdapters,
 		get preExecuteListener() {
 			return preExecuteListener;
+		},
+		get preStepListener() {
+			return preStepListener;
 		},
 		ctx: base,
 	};
@@ -260,4 +265,76 @@ test("warns and skips registration instead of crashing on an unknown modelPlane.
 	assert.deepEqual(host.registeredAdapters, []);
 	assert.equal(warnings.length, 1);
 	assert.match(warnings[0], /model plane not mounted/);
+});
+
+/** A fake agent whose session records every appended event. */
+function stubAgent() {
+	const events = [];
+	return {
+		events,
+		session: {
+			append: (type, data) => {
+				events.push({ type, data });
+				return { type, data };
+			},
+		},
+	};
+}
+
+test("classifies the request entering a fresh turn and records it on the session log (Story 3.5)", async () => {
+	const host = stubHostCtx({ webServer: false });
+	apply(host.ctx);
+	assert.equal(typeof host.preStepListener, "function", "no agent/pre-step listener registered");
+
+	const agent = stubAgent();
+	const messages = [{ role: "user", content: [{ type: "text", text: "Refactor this Python function and add unit tests" }] }];
+	const decision = await host.preStepListener({ agent, turn: 1, step: 1 }, async () => ({ kind: "enter", messages }));
+
+	assert.deepEqual(decision, { kind: "enter", messages }, "the listener must pass the loop's decision through unchanged");
+	assert.equal(agent.events.length, 1);
+	assert.equal(agent.events[0].type, "router/classified");
+	assert.equal(agent.events[0].data.taskType, "code");
+	assert.equal(agent.events[0].data.turn, 1);
+	assert.equal(typeof agent.events[0].data.scores.document, "number");
+});
+
+test("does not re-classify a tool-loop continuation step", async () => {
+	const host = stubHostCtx({ webServer: false });
+	apply(host.ctx);
+	const agent = stubAgent();
+	const messages = [{ role: "user", content: [{ type: "text", text: "read the inspection report" }] }];
+	await host.preStepListener({ agent, turn: 1, step: 2 }, async () => ({ kind: "enter", messages }));
+	assert.deepEqual(agent.events, [], "step 2 is the same request, not a new one");
+});
+
+test("records nothing when the proposed step is rejected", async () => {
+	const host = stubHostCtx({ webServer: false });
+	apply(host.ctx);
+	const agent = stubAgent();
+	await host.preStepListener({ agent, turn: 1, step: 1 }, async () => ({ kind: "reject" }));
+	assert.deepEqual(agent.events, []);
+});
+
+test("a classification failure is swallowed so the turn still proceeds", async () => {
+	const host = stubHostCtx({ webServer: false });
+	apply(host.ctx);
+	const originalWarn = console.warn;
+	const warnings = [];
+	console.warn = (...args) => warnings.push(args.join(" "));
+	try {
+		const brokenAgent = {
+			session: {
+				append: () => {
+					throw new Error("session log unavailable");
+				},
+			},
+		};
+		const messages = [{ role: "user", content: [{ type: "text", text: "calculate the pressure drop" }] }];
+		const decision = await host.preStepListener({ agent: brokenAgent, turn: 1, step: 1 }, async () => ({ kind: "enter", messages }));
+		assert.equal(decision.kind, "enter");
+	} finally {
+		console.warn = originalWarn;
+	}
+	assert.equal(warnings.length, 1);
+	assert.match(warnings[0], /not classified/);
 });

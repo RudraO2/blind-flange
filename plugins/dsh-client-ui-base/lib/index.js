@@ -18,6 +18,10 @@
  * `ModelProvider` contract (`model-plane/model-provider.js`) onto the
  * harness's model seam, defaulting to `replay`. See `model-plane/llm-adapter.js`
  * for why that bridge is duck-typed rather than importing `@deepseek-ai/dsh-llm`.
+ *
+ * Story 3.5 adds the router's classifier: an `agent/pre-step` listener runs
+ * `router/classify.js` over each fresh request and appends the structured task
+ * type to the session log.
  */
 
 import { readFileSync } from "node:fs";
@@ -25,6 +29,7 @@ import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { createLlmAdapter } from "./model-plane/llm-adapter.js";
 import { createModelProvider } from "./model-plane/model-provider.js";
+import { classifyRequest, lastUserText } from "./router/classify.js";
 
 const FAVICON_PATH = "/blind-flange/favicon.svg";
 const FAVICON_SVG = readFileSync(join(dirname(fileURLToPath(import.meta.url)), "favicon.svg"));
@@ -78,6 +83,41 @@ function replaceOrWarn(html, search, replacement, label) {
 const NETWORK_TOOL_NAMES = new Set(["web_search", "web_fetch"]);
 
 /**
+ * The session-log event the router's classifier writes (Story 3.5). It is a
+ * plugin-owned event type: the harness's live log accepts it, and it carries
+ * the classification as structured data a panel renders (the routing chip,
+ * Story 3.7) rather than as prose. The harness's persistence *read* path does
+ * not yet know downstream event types — reloading a stored log that contains
+ * this event needs the registration surface its `known-event-types` note says
+ * is "deferred until such a consumer exists" — which does not bite Phase 0,
+ * where the demo runs on `replay` and sessions are created fresh, not resumed
+ * from disk.
+ */
+const CLASSIFIED_EVENT = "router/classified";
+
+/**
+ * Classify the request entering a fresh turn and record the result on the
+ * session log. Runs only on the first step of a turn — a tool-loop
+ * continuation step is the same request, not a new one — and never throws into
+ * the loop: a classification failure is logged and swallowed so the turn
+ * proceeds.
+ * @param {{ session: { append: (type: string, data: unknown) => unknown } }} agent
+ * @param {number} turn
+ * @param {number} step
+ * @param {Array<{ role?: string, content?: unknown }>} messages - the messages entering this step.
+ */
+function classifyAndRecord(agent, turn, step, messages) {
+	if (step !== 1) return;
+	try {
+		const text = lastUserText(messages);
+		const classification = classifyRequest(text);
+		agent.session.append(CLASSIFIED_EVENT, { turn, step, ...classification });
+	} catch (error) {
+		console.warn(`@blind-flange/dsh-client-ui-base: request not classified — ${error instanceof Error ? error.message : String(error)}`);
+	}
+}
+
+/**
  * Best-effort human-readable target from a tool call's raw argument JSON, for
  * the denial reason that lands in the session log alongside the tool name.
  * Never throws: malformed or unrecognised arguments fall back to the raw
@@ -112,6 +152,10 @@ function describeTarget(rawArguments) {
  * change. Deferred until `llm` exists, the same way presentation below
  * defers until `webServer` exists, so a profile with no model seam still
  * gets the egress denial waterfall.
+ *
+ * The router's classifier (Story 3.5) is registered here too, on
+ * `agent/pre-step` and unconditionally — every profile's session log carries
+ * the task type it classified each request as.
  * @param ctx - host plugin context.
  * @param config - this row's resolved config; `modelPlane.provider` defaults to `"replay"`.
  */
@@ -124,6 +168,19 @@ export function apply(ctx, config) {
 			};
 		}
 		return next();
+	});
+
+	// The router's classifier (Story 3.5). Registered unconditionally, like the
+	// egress waterfall above — the classification belongs in every profile's
+	// session log, not only the one with a UI. It scores the incoming request
+	// into a task type and appends the structured result; it never rejects a
+	// step or rewrites its messages.
+	ctx.on("agent/pre-step", async ({ agent, turn, step }, next) => {
+		const decision = await next();
+		if (decision.kind === "enter") {
+			classifyAndRecord(agent, turn, step, decision.messages);
+		}
+		return decision;
 	});
 
 	const providerName = config?.modelPlane?.provider ?? "replay";
