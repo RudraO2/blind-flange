@@ -679,6 +679,73 @@ composer stays disabled on any session whose history failed to load this way. No
 this change — it predates Story 5.2 by at least an hour of session timestamps — and out of
 scope to fix here; recorded in `_bmad-output/implementation-artifacts/deferred-work.md`.
 
+## Story 5.3: a coding task runs and is verified in the sandbox
+
+Surveyed from the installed harness source, per the epic's own table: `sandbox` (local),
+`sandbox-policy` and `pwsh-sandbox` are already active — the Windows executor, since
+`dsh-bash-sandbox`'s `disabled` expression is true on win32 and never loads on this build
+machine. Only the model-facing tool, `tool-pwsh`, carried `disabled: true` from
+`@deepseek-ai/dsh-base`. Enabling it is what gives a real agent something to run through
+`ctx.sandbox` — the shipped terminal card already renders the run and its result, success or
+failure, so no new panel was built.
+
+Append to `~/.dsh/profiles/web/cordis.patch.yml`:
+
+```yaml
+- id: tool-pwsh
+  disabled: false
+```
+
+The same row is appended to `~/.dsh/profiles/headless/cordis.patch.yml`, so a headless run
+exercises the identical real sandboxed execution the web profile's UI renders.
+
+**The network seal extends to the sandbox's shell.** `pwsh` cannot be denied by name the way
+`web_search`/`web_fetch` are — a coding task needs it to run for ordinary, non-network
+commands. `plugins/dsh-client-ui-base/lib/index.js`'s `tools/pre-execute` waterfall now also
+inspects a `pwsh` call's `command` argument text against `NETWORK_PWSH_PATTERN` — matching
+`Invoke-WebRequest`/`iwr`, `Invoke-RestMethod`/`irm`, `curl`, `wget`, `Start-BitsTransfer`,
+`Test-NetConnection`, and the raw-socket/HTTP-client .NET types (`Net.Sockets.TcpClient` and
+its siblings, `Net.WebClient`, `Net.Http.HttpClient`, `Net.Dns`) a script could reach for
+instead of a cmdlet — and denies+records only those calls, on the same `egress/denied` event
+the monitor already counts (Story 2.2) and through the same waterfall the canary is denied by
+(Story 2.3). This is the same deliberately simple deny-by-pattern policy Phase 0 already
+accepts for the network-named tools, applied to command text because `pwsh` carries both
+network and non-network commands under one name; a determined script can still evade a text
+match, which is a known Phase 0 limitation, not an oversight.
+
+`plugins/dsh-client-ui-base/lib/model-plane/replay-cache.json` carries three new authored
+entries demonstrating each criterion — the replay provider only supplies the model's half; the
+harness dispatches the real `pwsh` tool call against the real sandbox for all three:
+
+- `match: "run a coding task in the sandbox"` — a real, successful command (`(1..10 |
+  Measure-Object -Sum).Sum`).
+- `match: "run a task that will fail"` — a real, deliberately failing command (`exit 7`).
+- `match: "reach the internet from the sandbox"` — a real `Invoke-WebRequest` call, denied by
+  the extended waterfall above.
+
+**Checking it worked**, verified 28 August 2026 via `dsh --profile headless` and confirmed
+against the web UI:
+
+```sh
+dsh --profile headless "run a coding task in the sandbox"
+# -> The sandbox ran that and returned 55 — a real coding task executed and verified inside
+#    ctx.sandbox, not simulated.
+```
+
+The session log's `tool/result` for that run carries the sandbox's own real stdout (`"55\r\n"`,
+`isError: false`) — not an authored value. The failing-task entry's session log carries the
+harness's own `[exit code: 7]` marker, and the network-attempt entry's session log carries a
+real `egress/denied` event (`{"tool":"pwsh","target":"Invoke-WebRequest -Uri
+https://example.com/blind-flange-canary"}`) between the `tool/call` and `tool/result` lines —
+none of this is authored text; only the model's turn is.
+
+In the running web app: sending "reach the internet from the sandbox" renders a red "Pwsh ·
+Error: Blind Flange denies outbound network access…" card marked "Failed" in the shipped
+terminal-call presentation, and the header's "Egress 0" pill becomes "Egress 1" — opening it
+lists the denial with the `pwsh` tool name and the full command as the refused target, in the
+same audit list Story 2.4 built. Screenshots in both themes at
+`docs/screenshots/5-3-sandbox-egress-{light,dark}.png`.
+
 ## The headless profile
 
 `dsh` is a launcher, not an app: it boots a *profile*, and a profile is a stack of plugin
@@ -727,6 +794,9 @@ Then write `~/.dsh/profiles/headless/cordis.patch.yml`:
   disabled: false
 
 - id: tool-subagent-control
+  disabled: false
+
+- id: tool-pwsh
   disabled: false
 ```
 

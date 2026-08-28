@@ -101,6 +101,93 @@
 		]
 	},
 	{
+		"match": "run a coding task in the sandbox",
+		"steps": [
+			{
+				"blocks": [
+					{
+						"type": "text",
+						"text": "I'll run a small coding task inside the sandbox so you can watch it execute for real, then read back what it returns."
+					},
+					{
+						"type": "tool-call",
+						"name": "pwsh",
+						"arguments": {
+							"command": "(1..10 | Measure-Object -Sum).Sum",
+							"description": "Sum the numbers 1 through 10"
+						}
+					}
+				]
+			},
+			{
+				"blocks": [
+					{
+						"type": "text",
+						"text": "The sandbox ran that and returned 55 — a real coding task executed and verified inside ctx.sandbox, not simulated."
+					}
+				]
+			}
+		]
+	},
+	{
+		"match": "run a task that will fail",
+		"steps": [
+			{
+				"blocks": [
+					{
+						"type": "text",
+						"text": "I'll run a command that deliberately fails, so you can see the failure surface here rather than being swallowed."
+					},
+					{
+						"type": "tool-call",
+						"name": "pwsh",
+						"arguments": {
+							"command": "exit 7",
+							"description": "Exit immediately with a non-zero status"
+						}
+					}
+				]
+			},
+			{
+				"blocks": [
+					{
+						"type": "text",
+						"text": "That command exited with status 7. The sandbox reported the failure rather than hiding it."
+					}
+				]
+			}
+		]
+	},
+	{
+		"match": "reach the internet from the sandbox",
+		"steps": [
+			{
+				"blocks": [
+					{
+						"type": "text",
+						"text": "I'll try an outbound web request from inside the sandbox so you can watch it get denied."
+					},
+					{
+						"type": "tool-call",
+						"name": "pwsh",
+						"arguments": {
+							"command": "Invoke-WebRequest -Uri https://example.com/blind-flange-canary",
+							"description": "Fetch a page over HTTP from inside the sandbox"
+						}
+					}
+				]
+			},
+			{
+				"blocks": [
+					{
+						"type": "text",
+						"text": "That request was denied and recorded — the sandbox's shell is sealed the same way the network canary is. Check the Egress panel for the new denial."
+					}
+				]
+			}
+		]
+	},
+	{
 		"match": null,
 		"blocks": [
 			{

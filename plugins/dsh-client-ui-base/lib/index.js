@@ -27,6 +27,13 @@
  * type to the session log. Story 3.6 extends that same listener to score the
  * licence-checked fleet against the classified task type and append the routing
  * decision (`router/routed`) alongside it.
+ *
+ * Story 5.3 extends the same `tools/pre-execute` waterfall to the `pwsh` tool
+ * (`tool-pwsh`, enabled by `cordis.patch.yml`): unlike the network-capable
+ * tools above, `pwsh` must run for ordinary coding tasks, so it is not denied
+ * by name — only a call whose command text itself reaches for the network is
+ * refused, recorded on the same `egress/denied` event the monitor already
+ * counts.
  */
 
 import { readFileSync } from "node:fs";
@@ -101,6 +108,36 @@ function replaceOrWarn(html, search, replacement, label) {
  * connection out of this machine — which is the point of firing it.
  */
 const NETWORK_TOOL_NAMES = new Set(["web_search", "web_fetch", CANARY_TOOL_NAME]);
+
+/**
+ * The tool name Story 5.3 enables (`tool-pwsh`; the Windows executor per
+ * `docs/deepseek-harness-notes.md` — `dsh-bash-sandbox` never loads on
+ * win32). It is deliberately not in {@link NETWORK_TOOL_NAMES}: a coding task
+ * needs `pwsh` to run, so the whole tool cannot be denied by name the way
+ * `web_search`/`web_fetch` are. Only a call whose `command` argument itself
+ * reaches for the network is denied — see {@link NETWORK_PWSH_PATTERN}.
+ */
+const PWSH_TOOL_NAME = "pwsh";
+
+/**
+ * Matches command text that reaches the network from inside a `pwsh` call:
+ * the two clients Story 5.3's acceptance criteria name explicitly
+ * (`Invoke-WebRequest`/`iwr`, `curl`), their less-common cousins
+ * (`Invoke-RestMethod`/`irm`, `wget`, `Start-BitsTransfer`,
+ * `Test-NetConnection`), and the raw-socket/HTTP-client .NET types a script
+ * could reach for instead of a cmdlet. Case-insensitive, matched against the
+ * call's `command` argument text.
+ *
+ * This is the same deliberately simple deny-by-pattern policy
+ * {@link NETWORK_TOOL_NAMES} already accepts for Phase 0 (`tools/pre-execute`
+ * must decide before the body runs, from the call's static shape, not by
+ * watching it actually try to connect) — applied to command text instead of a
+ * tool name because `pwsh` carries both network and non-network commands
+ * under one name. A determined script can still evade a text match; that is a
+ * known Phase 0 limitation of this policy, not an oversight.
+ */
+const NETWORK_PWSH_PATTERN =
+	/\b(Invoke-WebRequest|iwr|Invoke-RestMethod|irm|curl(\.exe)?|wget|Start-BitsTransfer|Test-NetConnection)\b|Net\.Sockets\.(TcpClient|TcpListener|UdpClient|Socket)|Net\.(WebClient|Http\.HttpClient)|Net\.Dns/i;
 
 /**
  * The session-log event the egress denial waterfall writes when it refuses a
@@ -210,6 +247,25 @@ function describeTarget(toolArguments) {
 }
 
 /**
+ * The `command` argument of a `pwsh` tool call, or `undefined` when the
+ * arguments do not carry one — mirrors {@link describeTarget}'s tolerance of
+ * both the materialised object the harness hands the waterfall in production
+ * and a raw JSON string.
+ * @param toolArguments - parsed arguments, or the raw JSON string.
+ */
+function pwshCommandText(toolArguments) {
+	let args = toolArguments;
+	if (typeof args === "string") {
+		try {
+			args = JSON.parse(args);
+		} catch {
+			return undefined;
+		}
+	}
+	return typeof args?.command === "string" ? args.command : undefined;
+}
+
+/**
  * Register the egress denial waterfall, and — wherever a web server exists —
  * serve our favicon at its own route and swap the shipped title and favicon
  * link for ours on every rendered index.html.
@@ -257,6 +313,22 @@ export function apply(ctx, config) {
 				kind: "deny",
 				reason: `Blind Flange denies outbound network access: "${exec.name}" attempted to reach ${target}`,
 			};
+		}
+		if (exec.name === PWSH_TOOL_NAME) {
+			const command = pwshCommandText(exec.arguments);
+			if (command !== undefined && NETWORK_PWSH_PATTERN.test(command)) {
+				// Same distinct denial marker as above (Story 2.2) — the sandbox's
+				// shell is sealed the same way the network canary is (Story 5.3).
+				try {
+					exec.agent?.session?.append?.(EGRESS_DENIED_EVENT, { tool: exec.name, target: command });
+				} catch (error) {
+					console.warn(`@blind-flange/dsh-client-ui-base: egress denial not recorded — ${error instanceof Error ? error.message : String(error)}`);
+				}
+				return {
+					kind: "deny",
+					reason: `Blind Flange denies outbound network access: "${exec.name}" attempted to reach the network via: ${command}`,
+				};
+			}
 		}
 		return next();
 	});

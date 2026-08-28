@@ -654,6 +654,77 @@ test("names the queries out of parsed web_search arguments", async () => {
 	assert.equal(agent.events[0].data.target, "MRPL, flange");
 });
 
+/* -------------------------------------------------------------------------
+ * Story 5.3: a coding task runs and is verified in the sandbox.
+ *
+ * `pwsh` cannot be denied by name — a coding task needs it to run — so only a
+ * call whose command text reaches for the network is refused, on the same
+ * waterfall and recorded on the same egress/denied event.
+ * ---------------------------------------------------------------------- */
+
+test("allows a pwsh call with no network-reaching command", async () => {
+	const host = stubHostCtx();
+	apply(host.ctx);
+	const allow = { kind: "allow" };
+	const decision = await host.preExecuteListener({ name: "pwsh", arguments: { command: "(1..10 | Measure-Object -Sum).Sum" } }, () => allow);
+	assert.equal(decision, allow);
+});
+
+test("denies a pwsh call that shells out to Invoke-WebRequest", async () => {
+	const host = stubHostCtx();
+	apply(host.ctx);
+	const decision = await host.preExecuteListener(
+		{ name: "pwsh", arguments: { command: "Invoke-WebRequest -Uri https://example.com" } },
+		() => {
+			throw new Error("next() must not be called for a denied tool");
+		},
+	);
+	assert.equal(decision.kind, "deny");
+	assert.match(decision.reason, /Invoke-WebRequest/);
+});
+
+test("denies a pwsh call that shells out to curl", async () => {
+	const host = stubHostCtx();
+	apply(host.ctx);
+	const decision = await host.preExecuteListener({ name: "pwsh", arguments: { command: "curl https://example.com" } }, () => {
+		throw new Error("next() must not be called for a denied tool");
+	});
+	assert.equal(decision.kind, "deny");
+});
+
+test("denies a pwsh call that opens a raw socket", async () => {
+	const host = stubHostCtx();
+	apply(host.ctx);
+	const decision = await host.preExecuteListener(
+		{ name: "pwsh", arguments: { command: "New-Object System.Net.Sockets.TcpClient('example.com', 80)" } },
+		() => {
+			throw new Error("next() must not be called for a denied tool");
+		},
+	);
+	assert.equal(decision.kind, "deny");
+});
+
+test("a denied pwsh call is recorded on the same egress/denied event the monitor counts", async () => {
+	const agent = stubAgent();
+	const host = stubHostCtx();
+	apply(host.ctx);
+	await host.preExecuteListener({ name: "pwsh", arguments: { command: "curl https://example.com" }, agent }, () => {
+		throw new Error("next() must not be called for a denied tool");
+	});
+	assert.equal(agent.events.length, 1);
+	assert.equal(agent.events[0].type, "egress/denied");
+	assert.equal(agent.events[0].data.tool, "pwsh");
+	assert.match(agent.events[0].data.target, /curl/);
+});
+
+test("a pwsh call with no command argument is allowed through to the tool body", async () => {
+	const host = stubHostCtx();
+	apply(host.ctx);
+	const allow = { kind: "allow" };
+	const decision = await host.preExecuteListener({ name: "pwsh", arguments: {} }, () => allow);
+	assert.equal(decision, allow);
+});
+
 test("records something auditable even for arguments in a shape it has never seen", async () => {
 	const agent = stubAgent();
 	const host = stubHostCtx();
