@@ -57,8 +57,9 @@ Rules while building:
   hand-rolled hex, radii, spacing, shadows or fonts. Declared slots only, never `root`.
 - **Do not invoke Matt Pocock's skills.** BMAD owns implementation here.
 
-**Timeboxed stories** — 3.1 (replay adapter) and 4.2 (Tesseract proof) — honour the timebox. When
-it expires take the recorded fallback or escalate. Do not grind.
+**Timeboxed stories** — 3.1, the replay adapter seam — honour the timebox. When it expires take
+the recorded fallback or escalate. Do not grind. (4.2, the Tesseract proof, is already done and
+passed: `services/ingestion/proof/PROOF.md` carries the measurements.)
 
 **If the story needs a decision nothing in the repo records, stop and ask.** Do not invent one.
 
@@ -73,6 +74,7 @@ Do not call the story done until all of these hold. State each one.
 4. No harness source file edited.
 5. Any new dependency licence-checked and recorded.
 6. No unresolved review finding, or one is recorded as accepted with the reason.
+7. The work is on `origin/main` — not on a branch, not in a worktree.
 
 **Gate fails:** set the story to `review` in the tracker, write what is blocking it, stop. Do not
 mark it done.
@@ -96,25 +98,25 @@ Then stop. The next story goes in a new chat.
 
 ---
 
-## The two lanes
+## Where you work
 
-ADR-0003's Node/Python boundary is also a work boundary, so two chats can run without colliding.
-Two is the limit: one `cordis.patch.yml`, one port 3080, one tracker and one `main` are all
-single-copy.
+**Build on `main`, in the main checkout.** Do not create a git worktree and do not create a
+branch. Six worktrees already exist from earlier stories and three of them never reached
+`main`; the tracker said `backlog` for work that was finished and pushed. A worktree buys
+isolation this build does not need — one story runs at a time now — and costs a merge step
+that keeps getting skipped.
 
-| | Lane A — harness | Lane B — Python |
-|---|---|---|
-| Stories | Epics 1, 2, 3, 5, 6, 7 in order, plus 4.5 | 4.1 → 4.2 → 4.3 → 4.4 |
-| Touches | plugin packages, the profile, React | `services/ingestion/` only |
-| Runs `dsh web`, screenshots | yes | **never** |
-| Writes `sprint-status.yaml` | yes | **never** — reports instead |
+If a tool offers to move you into a worktree, decline it.
 
-Lane B needs nothing from Lane A and carries Story 4.2, the timeboxed proof that OCR returns
-bounding boxes on this hardware — the build's largest unknown. Story 4.5, the crop viewer, is
-React and belongs to Lane A.
+**Before you start:** `git pull --rebase`. **Before you finish:** `git pull --rebase`, then
+push to `main`. A story is done when it is on `origin/main`, not when it is committed
+somewhere.
 
-In a lane: **you are told which story to do — never auto-pick.** Stay inside your lane's files; if
-the story needs the other lane's files, stop and say so. `git pull --rebase` before every push.
+**You are told which story to do — never auto-pick.**
+
+The Python ingestion service (`services/ingestion/`) and the harness plugins
+(`plugins/`, the profile) are separate trees, so a story touches one or the other. If your
+story needs the other side's files, stop and say so.
 
 ## If the plan itself is wrong
 
