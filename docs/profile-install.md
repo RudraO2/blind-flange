@@ -350,6 +350,75 @@ In the running app: the browser tab reads "Blind Flange" and shows our favicon; 
 appears both in the collapsed sidebar rail and in the hero at the top of the conversation; the
 whale appears nowhere.
 
+## The headless profile
+
+`dsh` is a launcher, not an app: it boots a *profile*, and a profile is a stack of plugin
+bundles. `web` stacks `@deepseek-ai/dsh-base` + `dsh-web-app`; `headless` stacks the same base
+plus `dsh-headless`, and answers one task on the command line then exits:
+
+```sh
+dsh --profile headless "summarise the inspection report"
+```
+
+**Mount the plugin there too.** The sovereignty layer is host-side and has nothing to do with
+rendering; a workbench whose egress denial only holds in the browser is not sealed. It is also
+the honest answer to "why is this in a browser" — the same enforcement runs with no browser
+involved.
+
+```sh
+dsh plugin --profile headless add "link:$(pwd)/plugins/dsh-client-ui-base"
+```
+
+Then write `~/.dsh/profiles/headless/cordis.patch.yml`:
+
+```yaml
+- insert:
+    - id: bf-base
+      name: '@blind-flange/dsh-client-ui-base'
+
+- id: tool-web
+  disabled: true
+
+- id: web-search-deepseek
+  disabled: true
+
+- id: web
+  disabled: true
+
+- id: llm-deepseek
+  disabled: true
+
+- id: llm-pi-ai
+  disabled: true
+```
+
+Two differences from the web profile, both learned the hard way:
+
+1. **`inject` must stay empty in `lib/index.js`.** Cordis treats `inject` as a hard gate — it
+   holds the fiber until every named service exists, and one that never appears means `apply`
+   never runs, silently. `headless` has no `webServer`. Naming it at the top level would mount
+   the egress denial waterfall in the browser and nowhere else. The favicon and title work asks
+   for `webServer` through a nested `ctx.inject` inside `apply` instead, and simply never runs
+   here.
+
+2. **`tool-web` must be disabled explicitly**, which the web profile does not need. There the
+   tool is mounted per agent preset and sealing it meant Blind Flange copies of the presets that
+   carried it. `headless` has no presets — `dsh-base` mounts `tool-web` directly — so disabling
+   only the `web` service it depends on hangs the boot with
+   `dsh-tool-web: pending (waiting for service: web)` instead of removing it.
+
+**Checking it worked:**
+
+```sh
+dsh --profile headless --dump-config | grep -A2 "id: bf-base"
+dsh --profile headless "say hello"
+```
+
+The second command is expected to fail today with
+`NO_ADAPTER: no adapter registered for provider "deepseek-official"`. That failure *is* the
+proof: the plugin tree loaded clean and every network-reaching adapter is gone, so there is
+nothing left to answer with. Headless starts answering once Story 3.1 lands the replay provider.
+
 ## Removing it
 
 ```sh

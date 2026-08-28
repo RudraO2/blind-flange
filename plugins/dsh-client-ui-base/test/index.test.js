@@ -21,33 +21,43 @@ const packageDir = dirname(dirname(fileURLToPath(import.meta.url)));
  * A stub host context that records what got registered on `webServer` and
  * captures the `tools/pre-execute` listener, mirroring the real host's
  * shape closely enough for these tests.
+ *
+ * `ctx.inject(names, run)` mirrors Cordis: it runs `run` with a context
+ * carrying the named services, and does not run it at all when one is
+ * missing. Pass `webServer: false` to stand in for the `headless` profile,
+ * where there is no web server to wait for.
  */
-function stubHostCtx() {
+function stubHostCtx({ webServer = true } = {}) {
 	const routes = [];
 	const taps = [];
 	let preExecuteListener;
+	const webServerService = {
+		register: (route) => {
+			routes.push(route);
+			return () => {};
+		},
+		tapIndex: (transform) => {
+			taps.push(transform);
+			return () => {};
+		},
+	};
+	const base = {
+		effect: (run) => run(),
+		on: (name, fn) => {
+			if (name === "tools/pre-execute") preExecuteListener = fn;
+		},
+		inject: (names, run) => {
+			if (names.some((name) => name === "webServer" && !webServer)) return;
+			run({ ...base, webServer: webServerService });
+		},
+	};
 	return {
 		routes,
 		taps,
 		get preExecuteListener() {
 			return preExecuteListener;
 		},
-		ctx: {
-			effect: (run) => run(),
-			on: (name, fn) => {
-				if (name === "tools/pre-execute") preExecuteListener = fn;
-			},
-			webServer: {
-				register: (route) => {
-					routes.push(route);
-					return () => {};
-				},
-				tapIndex: (transform) => {
-					taps.push(transform);
-					return () => {};
-				},
-			},
-		},
+		ctx: base,
 	};
 }
 
@@ -56,8 +66,21 @@ function renderThroughTaps(taps, html) {
 	return taps.reduce((out, transform) => transform(out), html);
 }
 
-test("declares the webServer service so the host supplies ctx.webServer to apply", () => {
-	assert.deepEqual(inject, ["webServer"]);
+test("gates nothing on a service, so every profile that mounts it is sealed", () => {
+	// `inject` is a hard gate in Cordis: a service that never appears means
+	// `apply` never runs. Naming `webServer` here would leave the headless
+	// profile — which has none — with no egress denial at all.
+	assert.deepEqual(inject, []);
+});
+
+test("registers the egress denial waterfall in a profile with no web server", () => {
+	const stub = stubHostCtx({ webServer: false });
+	apply(stub.ctx);
+	assert.equal(typeof stub.preExecuteListener, "function", "no tools/pre-execute listener registered");
+	const verdict = stub.preExecuteListener({ name: "web_fetch", arguments: '{"url":"https://example.com"}' }, () => ({ kind: "allow" }));
+	assert.equal(verdict.kind, "deny");
+	assert.deepEqual(stub.routes, [], "a profile with no web server must register no routes");
+	assert.deepEqual(stub.taps, [], "a profile with no web server must tap no index.html");
 });
 
 test("registers an exact favicon route serving our svg, not the harness's", () => {

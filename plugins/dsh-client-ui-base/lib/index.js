@@ -22,8 +22,21 @@ import { fileURLToPath } from "node:url";
 const FAVICON_PATH = "/blind-flange/favicon.svg";
 const FAVICON_SVG = readFileSync(join(dirname(fileURLToPath(import.meta.url)), "favicon.svg"));
 
-/** Cordis services this plugin needs from the host. */
-export const inject = ["webServer"];
+/**
+ * Cordis services this plugin needs before `apply` runs: none.
+ *
+ * `inject` is a hard gate — Cordis holds the fiber until every named service
+ * exists, and a service that never appears means `apply` never runs, silently.
+ * The `web` profile has `webServer`; the `headless` profile does not. Naming
+ * it here would therefore mount the egress denial waterfall in the browser
+ * and nowhere else, which is the opposite of a sovereignty guarantee: the
+ * profile with no UI would be the one with no enforcement.
+ *
+ * So the presentation half asks for `webServer` from inside `apply` instead,
+ * through a nested `ctx.inject`, and the denial waterfall registers
+ * unconditionally.
+ */
+export const inject = [];
 
 /**
  * Replace the first occurrence of `search` in `html` with `replacement`.
@@ -75,41 +88,18 @@ function describeTarget(rawArguments) {
 }
 
 /**
- * Serve our favicon at its own route, swap the shipped title and favicon
- * link for ours on every rendered index.html, and register the egress
- * denial waterfall: any call to a tool named in {@link NETWORK_TOOL_NAMES}
- * is refused before its body runs. That check is synchronous, so the call
- * fails fast rather than hanging (NFR2) — a hang on stage reads as a crash.
- * @param ctx - host plugin context carrying the `webServer` service.
+ * Register the egress denial waterfall, and — wherever a web server exists —
+ * serve our favicon at its own route and swap the shipped title and favicon
+ * link for ours on every rendered index.html.
+ *
+ * The waterfall refuses any call to a tool named in {@link NETWORK_TOOL_NAMES}
+ * before its body runs. The check is synchronous, so the call fails fast
+ * rather than hanging (NFR2) — a hang on stage reads as a crash. It is
+ * registered first and unconditionally: every profile that boots this package
+ * is sealed, whether or not it renders anything.
+ * @param ctx - host plugin context.
  */
 export function apply(ctx) {
-	ctx.effect(
-		() =>
-			ctx.webServer.register({
-				kind: "exact",
-				path: FAVICON_PATH,
-				handler: (req, res) => {
-					if (req.method !== "GET" && req.method !== "HEAD") {
-						res.writeHead(405);
-						res.end();
-						return;
-					}
-					res.writeHead(200, { "content-type": "image/svg+xml" });
-					res.end(req.method === "HEAD" ? undefined : FAVICON_SVG);
-				},
-			}),
-		"blind-flange: favicon route",
-	);
-
-	ctx.effect(
-		() =>
-			ctx.webServer.tapIndex((html) => {
-				const withTitle = replaceOrWarn(html, "<title>DeepSeek Harness</title>", "<title>Blind Flange</title>", "tab title");
-				return replaceOrWarn(withTitle, 'href="/favicon.svg"', `href="${FAVICON_PATH}"`, "favicon link");
-			}),
-		"blind-flange: index title and favicon",
-	);
-
 	ctx.on("tools/pre-execute", (exec, next) => {
 		if (NETWORK_TOOL_NAMES.has(exec.name)) {
 			return {
@@ -118,5 +108,37 @@ export function apply(ctx) {
 			};
 		}
 		return next();
+	});
+
+	// Presentation. Deferred until `webServer` exists, and simply never runs in
+	// a profile that has none — `headless` prints to a terminal and has no
+	// index.html to tap.
+	ctx.inject(["webServer"], (web) => {
+		web.effect(
+			() =>
+				web.webServer.register({
+					kind: "exact",
+					path: FAVICON_PATH,
+					handler: (req, res) => {
+						if (req.method !== "GET" && req.method !== "HEAD") {
+							res.writeHead(405);
+							res.end();
+							return;
+						}
+						res.writeHead(200, { "content-type": "image/svg+xml" });
+						res.end(req.method === "HEAD" ? undefined : FAVICON_SVG);
+					},
+				}),
+			"blind-flange: favicon route",
+		);
+
+		web.effect(
+			() =>
+				web.webServer.tapIndex((html) => {
+					const withTitle = replaceOrWarn(html, "<title>DeepSeek Harness</title>", "<title>Blind Flange</title>", "tab title");
+					return replaceOrWarn(withTitle, 'href="/favicon.svg"', `href="${FAVICON_PATH}"`, "favicon link");
+				}),
+			"blind-flange: index title and favicon",
+		);
 	});
 }
