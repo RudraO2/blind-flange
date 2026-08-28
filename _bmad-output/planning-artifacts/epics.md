@@ -179,7 +179,18 @@ is not demo order" below.
 
 Epics are not built in numerical order. The remaining sequence is:
 
-**3 → 2 → 5 → 4.5 → 6**
+**3.9 → 3.10 → 4.5 → 6**
+
+Updated 28 Aug 2026. Epics 2, 3 and 5 are otherwise complete. Stories 3.9 and 3.10 come first
+because they are correctness defects on work already accepted: without 3.9 a reloaded session is
+dead and Story 6.5's recorded run cannot be reopened; without 3.10 the first prompt of the demo
+routes wrong. Both were found during Epic 5 verification and wrongly filed as deferred work.
+
+Outstanding but not a story: **Story 5.4 is held at `review`**, not `done`, until the generated
+`.docx` is confirmed to open in LibreOffice. Word is verified twice over. See
+`deferred-work.md`.
+
+The original ordering reasoning, still valid for what remains:
 
 Epic 3 first because it is eight stories and carries the demonstrable the problem statement names
 twice — "automatically pick the right one for a given task" and "shows model auto selection across
@@ -756,6 +767,104 @@ So that I can see the router working rather than being told about it.
 **Then** a different fleet member is selected without any user action
 **And** the routing chip visibly updates to the new member
 **And** the new scores are available in the expanded chip
+
+### Story 3.9: A stored session still opens
+
+Added 28 Aug 2026 by `sprint-change-proposal-2026-08-28-router-defects.md`, promoted from
+deferred work. This is a correctness defect on stories already accepted, not new scope.
+
+As an evaluator who reloaded the page mid-demo,
+I want the session to still be there and still usable,
+So that a refresh is an inconvenience rather than the end of the demonstration.
+
+**Acceptance Criteria:**
+
+**Given** a session log containing all three of our plugin-owned event types — `egress/denied`,
+`router/classified` and `router/routed`
+**When** that session is reopened in the web client
+**Then** its history loads without a `SessionFormatUnsupportedError`
+**And** the composer is usable, so a new message can be sent in that session
+
+**Given** the reopened session
+**When** the egress monitor and the routing chip are read
+**Then** both still show what the stored events recorded — the fix must not work by dropping the
+events or the data they carry
+
+**Given** whichever path this story takes
+**When** the change is reviewed
+**Then** the path and the reason for it are recorded in the source, and the mechanism fails
+**loudly** — a thrown error or a `console.error` naming this package — if a harness upgrade
+removes what it depends on
+**And** a silent regression to the current behaviour is not possible
+
+**Given** the three doc comments in `plugins/dsh-client-ui-base/lib/index.js` that currently
+claim this caveat "does not bite Phase 0, where the demo runs on `replay` and sessions are
+created fresh, not resumed from disk"
+**When** this story is done
+**Then** those claims are gone, because Story 5.2's verification disproved them
+
+> **Two paths, in this order. Timebox the first to 30 minutes.**
+>
+> **Path 1 — add our types to the harness's vocabulary at mount.** The persistence reader skips
+> any event whose type is in `KNOWN_SESSION_EVENT_TYPES`, and that set is reachable and mutable
+> from the profile — verified 28 Aug 2026:
+> `require('@deepseek-ai/dsh-session').KNOWN_SESSION_EVENT_TYPES` returns a mutable `Set` of 48
+> types. Add the three before any session is read.
+>
+> This is coupling to a harness internal rather than a published contract, which NFR6 tells us to
+> avoid. It is *not* forbidden — NFR5 forbids editing harness source, and adding to a set we
+> import at runtime is not that — but it is exactly why the "fail loudly" criterion above is not
+> optional.
+>
+> **Path 2 — stop persisting plugin-owned types at all.** Keep the routing and denial records in
+> a store we own, and have the panels read from there. Upgrade-proof and properly ours, but it
+> touches every reader in `client.js`.
+>
+> Take Path 1 first because it is minutes and unblocks Epic 2, Epic 3 and Story 6.5 at once. If
+> it does not hold, take Path 2 and say why in the report.
+>
+> **Do not "fix" this by removing the events.** They are how the routing chip and the egress
+> monitor are fed; the counted zero is the number of `egress/denied` events (FR15).
+
+### Story 3.10: The first turn classifies on what was actually asked
+
+Added 28 Aug 2026 by the same proposal, promoted from deferred work.
+
+As an evaluator typing the first prompt of the demo,
+I want it routed on what I asked,
+So that the first thing I see is the router working rather than a default.
+
+**Acceptance Criteria:**
+
+**Given** a freshly created session
+**When** the first request is a clear drawing-review prompt — the P&ID prompt recorded in
+`deferred-work.md` as currently failing
+**Then** it classifies as `drawing`, not the `document` fallback
+**And** `matchedRuleCount` is greater than zero
+
+**Given** the first, second and third turns of one session
+**When** each is a different task type
+**Then** each classifies on its own request text, with no turn reading another turn's text and no
+turn reading empty text
+
+**Given** the classifier
+**When** it cannot find request text to classify
+**Then** it says so in the session record rather than silently returning the fallback, so a
+future occurrence is visible instead of looking like a routing decision
+
+**Given** the fix
+**When** the test suite runs
+**Then** a regression test covers first-turn classification and would fail against the ordering
+this story replaces
+
+> **Cause, from the Story 3.7 build.** `router/classified` is appended from `agent/pre-step`,
+> whose `seq` lands before the turn's `user/message` event, so on turn one `decision.messages`
+> does not yet carry the request and the classifier reads empty text. Turns two and three see the
+> previous turns' messages and classify correctly, which is why this looked like it worked.
+>
+> Story 3.8's reclassification rides the same path, so this is not only a first-impression
+> problem.
+
 
 ---
 
