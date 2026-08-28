@@ -29,7 +29,7 @@
 # - Dev moves story to 'review', then runs code-review (fresh context, different LLM recommended)
 # - Retrospective appends its action items to action_items; the status view surfaces open ones
 generated: 08-28-2026 14:30
-last_updated: 08-28-2026 01:30
+last_updated: 08-28-2026 18:45
 project: Blind Flange
 project_key: NOKEY
 tracking_system: file-system
@@ -61,11 +61,11 @@ development_status:
   3-8-the-model-changes-by-itself-when-the-task-type-changes: backlog
   epic-3-retrospective: optional
 
-  epic-4: backlog
-  4-1-the-sample-inspection-report-exists: backlog
-  4-2-tesseract-returns-word-boxes-on-this-hardware: backlog
-  4-3-the-ingestion-service-returns-text-with-regions-for-a-scanne: backlog
-  4-4-the-ingestion-service-accepts-a-scanned-pdf: backlog
+  epic-4: in-progress
+  4-1-the-sample-inspection-report-exists: done
+  4-2-tesseract-returns-word-boxes-on-this-hardware: done
+  4-3-the-ingestion-service-returns-text-with-regions-for-a-scanne: done
+  4-4-the-ingestion-service-accepts-a-scanned-pdf: done
   4-5-clicking-a-finding-shows-the-crop-it-was-read-from: backlog
   epic-4-retrospective: optional
 
