@@ -43,8 +43,8 @@ development_status:
   1-5-our-mark-our-tab-title-our-favicon: done
   epic-1-retrospective: optional
 
-  epic-2: backlog
-  2-1-outbound-attempts-are-denied-and-recorded: backlog
+  epic-2: in-progress
+  2-1-outbound-attempts-are-denied-and-recorded: done
   2-2-the-egress-monitor-shows-a-counted-zero: backlog
   2-3-the-canary-proves-the-zero-is-enforced: backlog
   2-4-the-audit-log-can-be-read-on-screen: backlog
