@@ -33,3 +33,8 @@ _bmad-output/implementation-artifacts/*
 
 # Claude Code worktrees — Lane B works in one; never commit a worktree tree.
 .claude/worktrees/
+
+# Story 5.4's approval-note tool writes real .docx files here at runtime
+# (session cwd defaults to the repo root under `dsh --profile headless`).
+# Generated output, never source.
+/deliverables/

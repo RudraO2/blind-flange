@@ -746,6 +746,66 @@ lists the denial with the `pwsh` tool name and the full command as the refused t
 same audit list Story 2.4 built. Screenshots in both themes at
 `docs/screenshots/5-3-sandbox-egress-{light,dark}.png`.
 
+## Story 5.4: the approval note comes out as a signed .docx
+
+Per the epic's own table, this story has no tool to enable and no profile change — `ui-deliverables`
+already renders a produced-files row from render intent (a `generic` card whose `kind` is
+`edit`, reading `locations[].path` — `packages/client/ui-deliverables/src/client/turn-deliverables.ts`,
+verified from source). The whole story is a new tool, `bf_approval_note`
+(`plugins/dsh-client-ui-base/lib/deliverables/`), registered unconditionally like the canary
+and the report-findings tool.
+
+**Licence decision: zero new dependencies, not an ADR.** The obvious approach — the `docx` npm
+package — was tried first and rejected before being added: its transitive tree pulls in ISC
+(`inherits`, `minimalistic-assert`), Zlib (`pako`, via `jszip`) and BlueOak-1.0.0 (`sax`), none
+of which are on `docs/licence-policy.md`'s allow-list, each verified by reading the actual
+package tarball's `LICENSE` file (or, where none is bundled — `hash.js` — the `package.json`
+`license` field, the same fallback the policy already accepts for `Qwen2.5-VL-7B-Instruct`).
+Widening the allow-list for one dependency is exactly the point-of-use judgement call the policy
+forbids, so `plugins/dsh-client-ui-base/lib/deliverables/zip.js` and `docx.js` instead write the
+`.docx` (a ZIP of OOXML XML) directly, using only `node:zlib` (`deflateRawSync`, and `crc32` —
+built into Node since 20.12) and `node:crypto`. "Find a permissive equivalent" taken to its
+limit: the equivalent is zero dependencies. No row was ever added to `licence-policy.md`
+because nothing new ships.
+
+The hand-written OOXML avoids named styles (`w:pStyle` referencing a `styles.xml` entry that
+does not exist is a common cause of "found unreadable content, do you want to recover" in
+Word) — every paragraph carries direct run formatting instead.
+
+**Checking it worked**, verified 28 August 2026 via `dsh --profile headless`:
+
+```sh
+dsh --profile headless "generate the approval note"
+# -> The approval note is ready — NRC/RVF/APPR-0417, citing both Major findings with the page
+#    and region each was read from, signed and provenance-hashed.
+```
+
+The real file lands at `deliverables/approval-note-NRC-RVF-APPR-0417.docx` under the session's
+cwd — not authored, not a fixture:
+
+- `unzip -t` reports no errors in the compressed data.
+- `python-docx` (already present on this machine, used only as an independent OOXML reader —
+  never a runtime dependency) opens it and reads back the titleblock, both cited clauses with
+  their page-and-region provenance, the signature block, and the footer's content hash.
+- Opened in real Microsoft Word via COM automation (`Documents.Open`, `DisplayAlerts` off): no
+  repair prompt, 12 paragraphs, footer text intact.
+- **LibreOffice: not verified.** `winget install TheDocumentFoundation.LibreOffice` downloaded
+  the 358 MB MSI, then hung for 40+ minutes at near-zero CPU with no installer window ever
+  appearing — consistent with a UAC elevation prompt this non-interactive session has no desktop
+  to show, not a slow install. Killed rather than left running. The OOXML this story writes is
+  the same public, unextended structure `python-docx`'s own `lxml`-backed parser accepted
+  (no proprietary Word-only markup), which is some evidence LibreOffice's import filter would
+  too — but that is an inference, not a check. Recorded here as an open gap rather than
+  asserted; re-attempt on a machine where an interactive install can complete, or ask a human
+  to open the file once and confirm.
+
+In the running web app: the turn's closing message carries the deliverables row (Open,
+Show-in-folder) for `deliverables/approval-note-NRC-RVF-APPR-0417.docx`, and the response text
+itself also names the path and the content hash — the second is the tool's own `output.render`,
+so the path is reachable even if a future harness version changes how the row itself is
+rendered (FR12's own degrade-not-lose requirement). Screenshots in both themes at
+`docs/screenshots/5-4-approval-note-{light,dark}.png`.
+
 ## The headless profile
 
 `dsh` is a launcher, not an app: it boots a *profile*, and a profile is a stack of plugin

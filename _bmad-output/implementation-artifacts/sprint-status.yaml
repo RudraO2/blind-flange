@@ -74,7 +74,7 @@ development_status:
   5-1-the-agent-turns-a-scanned-report-into-key-findings: done
   5-2-helper-agents-are-visible-while-they-work: done
   5-3-a-coding-task-runs-and-is-verified-in-the-sandbox: done
-  5-4-the-approval-note-comes-out-as-a-signed-docx: backlog
+  5-4-the-approval-note-comes-out-as-a-signed-docx: review
   5-5-the-fan-out-gauge-feels-alive-while-agents-work: deferred
   epic-5-retrospective: optional
 

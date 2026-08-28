@@ -545,6 +545,15 @@ test("registers the report-findings tool (Story 5.1), unconditionally like the c
 	assert.equal(typeof findingsTool.execute, "function");
 });
 
+test("registers the approval-note tool (Story 5.4), unconditionally like the canary", () => {
+	const host = stubHostCtx();
+	apply(host.ctx);
+	const approvalNoteTool = host.registeredTools.find((tool) => tool.name === "bf_approval_note");
+	assert.ok(approvalNoteTool, "no approval-note tool registered");
+	assert.equal(typeof approvalNoteTool.execute, "function");
+	assert.equal(typeof approvalNoteTool.presentCall, "function");
+});
+
 test("registers the canary channel loopback-only", () => {
 	const host = stubHostCtx();
 	apply(host.ctx);

@@ -188,6 +188,63 @@
 		]
 	},
 	{
+		"match": "generate the approval note",
+		"steps": [
+			{
+				"blocks": [
+					{
+						"type": "text",
+						"text": "I'll pull the report's findings and their provenance before drafting the approval note."
+					},
+					{
+						"type": "tool-call",
+						"name": "bf_report_findings",
+						"arguments": {}
+					}
+				]
+			},
+			{
+				"blocks": [
+					{
+						"type": "text",
+						"text": "Drafting the approval note from the two Major findings, each citing the page and region it was read from."
+					},
+					{
+						"type": "tool-call",
+						"name": "bf_approval_note",
+						"arguments": {
+							"title": "Approval Note",
+							"referenceNumber": "NRC/RVF/APPR-0417",
+							"sourceReport": "sample-inspection-report.pdf",
+							"clauses": [
+								{
+									"text": "E-1104A — insulation cladding open at the channel end, corrosion under insulation suspected over a 1.2 m run. Major. Recommended action: strip cladding and UT scan before restart.",
+									"page": 1,
+									"region": { "left": 560, "top": 2048, "width": 814, "height": 58 },
+									"tag": "E-1104A"
+								},
+								{
+									"text": "PSV-2207A — relief-valve test tag expired 04-2026, no current bench certificate held against this tag in the register. Major. Recommended action: withdraw and bench test; fit spare.",
+									"page": 1,
+									"region": { "left": 560, "top": 2171, "width": 876, "height": 60 },
+									"tag": "PSV-2207A"
+								}
+							]
+						}
+					}
+				]
+			},
+			{
+				"blocks": [
+					{
+						"type": "text",
+						"text": "The approval note is ready — NRC/RVF/APPR-0417, citing both Major findings with the page and region each was read from, signed and provenance-hashed."
+					}
+				]
+			}
+		]
+	},
+	{
 		"match": null,
 		"blocks": [
 			{

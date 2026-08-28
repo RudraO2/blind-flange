@@ -34,6 +34,10 @@
  * by name — only a call whose command text itself reaches for the network is
  * refused, recorded on the same `egress/denied` event the monitor already
  * counts.
+ *
+ * Story 5.4 adds the approval-note tool (`deliverables/tool.js`): a real
+ * `.docx` written to disk from a completed set of findings, registered
+ * unconditionally like the canary and the report-findings tool.
  */
 
 import { readFileSync } from "node:fs";
@@ -46,6 +50,7 @@ import {
 	createCanaryTool,
 	DEFAULT_CANARY_TARGET,
 } from "./egress/canary.js";
+import { createApprovalNoteTool } from "./deliverables/tool.js";
 import { createReportFindingsTool } from "./findings/tool.js";
 import { createLlmAdapter } from "./model-plane/llm-adapter.js";
 import { createModelProvider } from "./model-plane/model-provider.js";
@@ -367,6 +372,12 @@ export function apply(ctx, config) {
 	// findings without a per-preset cordis.patch.yml row.
 	ctx.inject(["tools"], (toolCtx) => {
 		toolCtx.effect(() => toolCtx.tools.register(createReportFindingsTool()), "blind-flange: report findings tool");
+	});
+	// Story 5.4: the approval-note tool. Registered unconditionally, like the
+	// two tools above, so every preset's agent can turn a completed set of
+	// findings into a real, signed .docx without a per-preset row.
+	ctx.inject(["tools"], (toolCtx) => {
+		toolCtx.effect(() => toolCtx.tools.register(createApprovalNoteTool()), "blind-flange: approval note tool");
 	});
 	ctx.inject(["connection", "agents", "tools"], (canaryCtx) => {
 		canaryCtx.effect(() => {
