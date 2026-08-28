@@ -789,15 +789,18 @@ cwd — not authored, not a fixture:
   their page-and-region provenance, the signature block, and the footer's content hash.
 - Opened in real Microsoft Word via COM automation (`Documents.Open`, `DisplayAlerts` off): no
   repair prompt, 12 paragraphs, footer text intact.
-- **LibreOffice: not verified.** `winget install TheDocumentFoundation.LibreOffice` downloaded
-  the 358 MB MSI, then hung for 40+ minutes at near-zero CPU with no installer window ever
-  appearing — consistent with a UAC elevation prompt this non-interactive session has no desktop
-  to show, not a slow install. Killed rather than left running. The OOXML this story writes is
-  the same public, unextended structure `python-docx`'s own `lxml`-backed parser accepted
-  (no proprietary Word-only markup), which is some evidence LibreOffice's import filter would
-  too — but that is an inference, not a check. Recorded here as an open gap rather than
-  asserted; re-attempt on a machine where an interactive install can complete, or ask a human
-  to open the file once and confirm.
+- **LibreOffice: not verified, accepted as a known limitation.** Two install attempts failed on
+  this machine: `winget install TheDocumentFoundation.LibreOffice` downloaded the 358 MB MSI,
+  then hung for 40+ minutes at near-zero CPU with no installer window ever appearing —
+  consistent with a UAC elevation prompt this non-interactive session has no desktop to show,
+  not a slow install; a direct `curl` download of the same MSI crawled at roughly 20 KB/s
+  (hours to complete) and was abandoned. Killed rather than left running either way. The OOXML
+  this story writes is the same public, unextended structure `python-docx`'s own `lxml`-backed
+  parser accepted (no proprietary Word-only markup, no named-style references), which is why
+  this was accepted for the Phase 0 prototype rather than blocked on further environment
+  troubleshooting. Recorded in `_bmad-output/implementation-artifacts/deferred-work.md`;
+  re-verify on a machine where an interactive install can complete, or ask a human to open the
+  file once and confirm, if a real LibreOffice-side problem is ever observed.
 
 In the running web app: the turn's closing message carries the deliverables row (Open,
 Show-in-folder) for `deliverables/approval-note-NRC-RVF-APPR-0417.docx`, and the response text
