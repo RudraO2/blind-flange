@@ -188,8 +188,15 @@ function hostModulesWithSeatedState(seated) {
  * (Story 1.5's brand marks) or a plain factory that returns a dispose
  * (Story 1.4's task-type picker). Both shapes are in `apply`, so the stub
  * drains a generator and passes a plain return through.
+ *
+ * `ctx.inject(names, run)` mirrors Cordis, as the host-half stub does: it runs
+ * `run` with a context carrying the named services, and does not run it at all
+ * when one is missing. Pass `connection: false` to stand in for a client with
+ * no host transport — the canary button's seat disappears and every other seat
+ * survives (Story 2.3).
  */
-function stubSlots({ sessions } = {}) {
+function stubSlots({ sessions, connection } = {}) {
+	const canaryCalls = [];
 	const injectedNames = [];
 	const registered = [];
 	const conversationViews = [];
@@ -225,7 +232,21 @@ function stubSlots({ sessions } = {}) {
 		},
 		sessions: sessions ?? { binding: () => undefined },
 	};
-	return { ctx, injectedNames, registered, conversationViews, conversationEvents };
+	const connectionService = connection === undefined
+		? {
+			rpc: {
+				call: (channel, endpoint, payload) => {
+					canaryCalls.push({ channel, endpoint, payload });
+					return Promise.resolve({ ok: true, value: { denied: true, target: "https://example.com", reason: "denied" } });
+				},
+			},
+		}
+		: connection;
+	ctx.inject = (names, run) => {
+		if (names.some((name) => name === "connection" && connectionService === false)) return;
+		run({ ...ctx, connection: connectionService });
+	};
+	return { ctx, injectedNames, registered, conversationViews, conversationEvents, canaryCalls };
 }
 
 test("registers under the package name so the served bundle and the manifest agree", () => {
@@ -276,6 +297,7 @@ test("occupies both places the DeepSeek whale used to render, and the hero's tas
 		"conversation.hero.agentPreset",
 		"conversation.hero.brand.mark",
 		"conversation.input.model",
+		"conversation.input.right",
 		"conversation.session.header.utilities",
 		"conversation.session.header.utilities",
 		"shell.overlay",
@@ -696,4 +718,98 @@ test("the harness version recorded here matches the harness actually installed",
 		manifest.blindFlange.harnessVersion,
 		"the installed harness has drifted from the pinned version this plugin was written against",
 	);
+});
+
+/* -------------------------------------------------------------------------
+ * The canary button (Story 2.3)
+ * ---------------------------------------------------------------------- */
+
+/** The shipped primitives the canary renders through, by identity. */
+const PRIMITIVES = healthyHostModules["@deepseek-ai/dsh-client-ui-primitives"];
+
+/** Find the registered canary seat, or undefined. */
+function findCanary(registered) {
+	return registered.find((call) => call.options.name === "conversation.input.right");
+}
+
+test("takes conversation.input.right, the composer tool row before the send button", () => {
+	const { exports } = loadClientHalf((specifier) => healthyHostModules[specifier]);
+	const { ctx, injectedNames, registered } = stubSlots();
+	exports.apply(ctx);
+	assert.ok(injectedNames.includes("conversation.input.right"));
+	const canary = findCanary(registered);
+	assert.equal(canary.options.id, "bf-canary");
+	assert.equal(typeof canary.options.inject, "function");
+	// Compared field-wise, not with deepEqual: the browser half runs in a `vm`
+	// realm, so an object it builds has a different prototype than one here.
+	assert.equal(canary.options.inject("s1").sessionId, "s1");
+});
+
+test("a client with no host transport loses the canary and keeps every other seat", () => {
+	const { exports } = loadClientHalf((specifier) => healthyHostModules[specifier]);
+	const { ctx, registered } = stubSlots({ connection: false });
+	exports.apply(ctx);
+	assert.equal(findCanary(registered), undefined);
+	assert.equal(registered.length, 7, "the other seats must survive a missing transport");
+});
+
+test("pressing it posts to the host's loopback canary channel for this session", async () => {
+	const { exports } = loadClientHalf((specifier) => healthyHostModules[specifier]);
+	const { ctx, registered, canaryCalls } = stubSlots();
+	exports.apply(ctx);
+	const element = findCanary(registered).component({ sessionId: "s1" });
+	await element.props.onClick();
+	assert.equal(canaryCalls.length, 1);
+	assert.equal(canaryCalls[0].channel, "/bf-canary");
+	assert.equal(canaryCalls[0].endpoint, "fire");
+	assert.equal(canaryCalls[0].payload.sessionId, "s1");
+});
+
+test("it is a shipped Pill, like the chips beside it, reading 'Canary'", () => {
+	const { exports } = loadClientHalf((specifier) => healthyHostModules[specifier]);
+	const { ctx, registered } = stubSlots();
+	exports.apply(ctx);
+	const element = findCanary(registered).component({ sessionId: "s1" });
+	assert.equal(element.type, PRIMITIVES.Pill, "the canary must be a shipped primitive, not a hand-rolled control");
+	assert.equal(element.props.active, false, "idle is the resting pill, not the emphasised one");
+	assert.ok(element.props.children.props.children.includes("Canary"));
+	assert.equal(element.props.children.props.children[0], null, "idle shows no state dot");
+	assert.match(element.props.title, /watch egress denial refuse it/);
+});
+
+test("a denied canary reads as denied and shows the same red the monitor shows", () => {
+	const { exports } = loadClientHalf(hostModulesWithSeatedState("denied"));
+	const { ctx, registered } = stubSlots();
+	exports.apply(ctx);
+	const element = findCanary(registered).component({ sessionId: "s1" });
+	const dot = element.props.children.props.children[0];
+	assert.equal(dot.type, PRIMITIVES.StateDot);
+	assert.equal(dot.props.state, "error");
+	assert.match(element.props.title, /refused by egress denial and written to the audit log/);
+});
+
+test("a canary that was NOT denied says the seal is not holding", () => {
+	const { exports } = loadClientHalf(hostModulesWithSeatedState("allowed"));
+	const { ctx, registered } = stubSlots();
+	exports.apply(ctx);
+	const element = findCanary(registered).component({ sessionId: "s1" });
+	assert.equal(element.props.children.props.children[0].props.state, "warning");
+	assert.match(element.props.title, /Egress denial is not holding/);
+});
+
+test("it refuses a second press while one is in flight", async () => {
+	const { exports } = loadClientHalf(hostModulesWithSeatedState("firing"));
+	const { ctx, registered, canaryCalls } = stubSlots();
+	exports.apply(ctx);
+	const element = findCanary(registered).component({ sessionId: "s1" });
+	assert.equal(element.props.disabled, true);
+	await element.props.onClick();
+	assert.equal(canaryCalls.length, 0, "a press while firing must not post again");
+});
+
+test("it sets no colour of its own — the state dot carries it through theme tokens", () => {
+	const source = readFileSync(join(packageDir, "lib", "client.js"), "utf8");
+	const canarySection = source.slice(source.indexOf("function buildCanaryButton"), source.indexOf("function holdTabTitle"));
+	assert.doesNotMatch(canarySection, /#[0-9a-fA-F]{3,8}\b/, "the canary must not hand-roll a hex colour");
+	assert.doesNotMatch(canarySection, /rgba?\(/, "the canary must not hand-roll a colour");
 });

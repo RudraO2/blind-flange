@@ -47,7 +47,7 @@ development_status:
   epic-2: in-progress
   2-1-outbound-attempts-are-denied-and-recorded: done
   2-2-the-egress-monitor-shows-a-counted-zero: done
-  2-3-the-canary-proves-the-zero-is-enforced: backlog
+  2-3-the-canary-proves-the-zero-is-enforced: done
   2-4-the-audit-log-can-be-read-on-screen: backlog
   epic-2-retrospective: optional
 

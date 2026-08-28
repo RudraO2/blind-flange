@@ -385,6 +385,68 @@ fresh session; clicking it opens the bottom-right panel reading a counted zero. 
 canary (Story 2.3) is what first makes it non-zero and red. Screenshots in both themes at
 `docs/screenshots/2-2-egress-monitor-{light,dark}.png`.
 
+## Story 2.3: the canary proves the zero is enforced
+
+No profile change. The canary rides the `bf-base` insert row from step 3 — the tool, the RPC
+channel and the button are all registered by `plugins/dsh-client-ui-base`.
+
+- **Host half** (`lib/egress/canary.js`, wired in `lib/index.js`): a real tool, `bf_canary`,
+  whose body calls `fetch` against `https://example.com/blind-flange-canary` (IANA's reserved
+  documentation domain — a name that exists and belongs to nobody). Its name is in the same
+  `NETWORK_TOOL_NAMES` deny-list as `web_search` and `web_fetch`, so the Story 2.1 waterfall
+  refuses it before the body runs and appends the same `egress/denied` event Story 2.2 counts.
+  Beside it, a loopback-only RPC channel `/bf-canary` with one endpoint, `fire`: it resolves
+  the session's live agent through `ctx.agents.get` and dispatches the tool through
+  `ctx.tools.execute` — the ordinary pipeline, so the denial is the ordinary denial. Nothing on
+  this path appends an event or moves a panel itself.
+- **Client half** (`lib/client.js`): a `Pill` in `conversation.input.right` (list, session) —
+  the composer tool row, left of the send button — reading "Canary". It posts to `/bf-canary`
+  and reports what came back in its own tooltip; the count it makes move is read by the egress
+  monitor from the session log, not handed to it. Registered behind a nested
+  `ctx.inject(["connection"])` so a client with no host transport loses the button and keeps
+  the other seven seats.
+
+  The first cut used `Button` with `variant: "toolbar"`. It looked right in dark and resolved to
+  a translucent dark fill under near-black text in light — the "pasted on" failure UX-DR2 exists
+  to prevent, and nothing in the shipped app uses that variant. `Pill` is what the routing chip
+  and the egress chip already use, and it is correct in both themes.
+
+**The canary is model-visible, and that is a deviation from Story 1.2.** Verified on
+28 August 2026 by logging the assembled `GenerateOptions.tools` for a real turn: the list is
+`ask_user_question, bf_canary, create_goal, edit, …`. `ToolRuntime.register` has no
+"hidden tool" flag — every registered tool is visible in its scope, and a plain-context
+registration lands in the global layer — so a canary that is a real tool is a tool in the list.
+Recorded rather than smoothed over:
+
+- Story 1.2's criterion is "no other tool in the list is capable of an outbound network call".
+  `bf_canary` is capable, by design; that capability is the whole of Story 2.3's first
+  criterion, and a canary the seal could never have let through would prove nothing.
+- The alternatives were worse. Dispatching an *unregistered* name still runs the waterfall
+  (policy listeners see every name that reaches the registry) and would keep the list clean —
+  but then nothing real sits behind the button, which is the failure NFR8 names.
+  `ctx.tools.restrict({ deny: ['bf_canary'] })` removes it from a scope's view, but a
+  restricted-away name is absent from that scope's dispatch too, so it would disarm the canary
+  along with hiding it.
+- The exposure is bounded: the waterfall denies `bf_canary` for **any** caller, model included
+  (`test/index.test.js`), and under the `replay` provider the model emits no tool calls at all,
+  so a demo's opening zero cannot be spent by the model reaching for it.
+
+Whether Story 1.2's wording should be amended to name the canary as its one deliberate
+exception is a plan decision, not a point-of-use one. It is flagged here rather than decided.
+
+**Checking it worked:**
+
+In the running app, on a session that has had at least one turn: the composer row carries a
+"Canary" chip beside the routing chip. Press it — the chip takes a red state dot and reads
+"Canary denied. The attempt was refused by egress denial and written to the audit log.", the
+header pill goes from "Egress 0" (green) to "Egress 1" (red), and opening it shows
+`Last: bf_canary → https://example.com/blind-flange-canary`. Press it again and the count is 2.
+Screenshots in both themes at `docs/screenshots/2-3-canary-{light,dark}.png`.
+
+The button is present on the hero composer too, before the first turn, but firing it there
+fails with "The canary could not be fired": a session with no live agent has nowhere to record
+the denial, and a denial nobody can see is the silence this button exists to replace.
+
 ## Story 3.1: the replay provider answers a turn
 
 `ctx.llm.registerAdapter` (dsh-llm's model seam) was the riskiest unknown in the project

@@ -8,8 +8,10 @@
  * editing the harness's built `dist/index.html` or `dist/favicon.svg`, which
  * NFR5 forbids touching. Story 2.1 adds the egress denial waterfall
  * alongside it, and Story 2.2 has that waterfall append an `egress/denied`
- * marker event the on-screen egress monitor counts. The canary tool and the
- * model plane still hang here in later stories.
+ * marker event the on-screen egress monitor counts. Story 2.3 hangs the canary
+ * here: a real tool (`egress/canary.js`) whose body genuinely calls out, named
+ * in the same deny-list so the same waterfall refuses it, plus the loopback RPC
+ * channel the composer button fires it through.
  *
  * `conversation.hero.brand.mark` — the third piece of AC1 — is a client-side
  * slot and is registered in client.js instead; this file only reaches what a
@@ -30,6 +32,13 @@
 import { readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
+import {
+	CANARY_CHANNEL,
+	CANARY_TOOL_NAME,
+	createCanaryRpcHandler,
+	createCanaryTool,
+	DEFAULT_CANARY_TARGET,
+} from "./egress/canary.js";
 import { createLlmAdapter } from "./model-plane/llm-adapter.js";
 import { createModelProvider } from "./model-plane/model-provider.js";
 import { loadFleet } from "./registry/loader.js";
@@ -81,11 +90,16 @@ function replaceOrWarn(html, search, replacement, label) {
  * deliberately simple policy for Phase 0: `tools/pre-execute` must decide
  * before the tool body runs, so the decision has to come from the call's
  * static name rather than from watching it actually try to connect. Any
- * future tool that can reach the network — including the canary in Story
- * 2.3, which exists specifically to prove this waterfall denies a real
- * attempt — must be added here.
+ * future tool that can reach the network must be added here.
+ *
+ * The canary (Story 2.3, `egress/canary.js`) is in this set for exactly that
+ * reason, and it is the only entry whose body genuinely tries: `web_search`
+ * and `web_fetch` are names the harness's own `tool-web` would have used, kept
+ * here as defence in depth after Story 1.2 removed the package that provides
+ * them. Removing `bf_canary` from this set is what would let a real outbound
+ * connection out of this machine — which is the point of firing it.
  */
-const NETWORK_TOOL_NAMES = new Set(["web_search", "web_fetch"]);
+const NETWORK_TOOL_NAMES = new Set(["web_search", "web_fetch", CANARY_TOOL_NAME]);
 
 /**
  * The session-log event the egress denial waterfall writes when it refuses a
@@ -160,20 +174,38 @@ function classifyAndRoute(agent, turn, step, messages) {
 }
 
 /**
- * Best-effort human-readable target from a tool call's raw argument JSON, for
- * the denial reason that lands in the session log alongside the tool name.
- * Never throws: malformed or unrecognised arguments fall back to the raw
- * string so the log still carries something to audit.
+ * Best-effort human-readable target from a tool call's arguments, for the
+ * denial reason that lands in the session log alongside the tool name.
+ *
+ * The harness hands `tools/pre-execute` **parsed, frozen** arguments — the
+ * registry materialises them as lossless JSON before policy starts — so the
+ * object branch is the one that runs in production. The string branch is kept
+ * because a caller further out may still hold the raw model-emitted JSON, and
+ * because a name-only denial is worth recording even when the arguments are
+ * something this function has never seen.
+ *
+ * Never throws: anything unrecognised falls back to a printable form, so the
+ * log carries something to audit rather than nothing.
+ * @param toolArguments - parsed arguments, or the raw JSON string.
+ * @returns a string naming what was refused.
  */
-function describeTarget(rawArguments) {
-	try {
-		const args = JSON.parse(rawArguments);
-		if (typeof args?.url === "string") return args.url;
-		if (Array.isArray(args?.queries)) return args.queries.join(", ");
-	} catch {
-		// fall through to the raw string below
+function describeTarget(toolArguments) {
+	let args = toolArguments;
+	if (typeof args === "string") {
+		try {
+			args = JSON.parse(args);
+		} catch {
+			return toolArguments;
+		}
 	}
-	return rawArguments;
+	if (typeof args?.url === "string") return args.url;
+	if (typeof args?.target === "string") return args.target;
+	if (Array.isArray(args?.queries)) return args.queries.join(", ");
+	try {
+		return JSON.stringify(toolArguments) ?? String(toolArguments);
+	} catch {
+		return String(toolArguments);
+	}
 }
 
 /**
@@ -199,6 +231,12 @@ function describeTarget(rawArguments) {
  * here too, on `agent/pre-step` and unconditionally — every profile's session
  * log carries the task type each request classified as and the fleet-scoring
  * decision that followed.
+ *
+ * `config.canary.target` is the address the canary tool (Story 2.3) attempts,
+ * defaulting to {@link DEFAULT_CANARY_TARGET}. The tool and the loopback RPC
+ * channel that fires it are registered below, each behind the services it
+ * needs, so a profile with no tool registry or no browser transport still
+ * boots sealed.
  * @param ctx - host plugin context.
  * @param config - this row's resolved config; `modelPlane.provider` defaults to `"replay"`.
  */
@@ -234,6 +272,33 @@ export function apply(ctx, config) {
 			classifyAndRoute(agent, turn, step, decision.messages);
 		}
 		return decision;
+	});
+
+	// The canary (Story 2.3). Two registrations, both deferred until the
+	// services they need exist, so a profile without them still gets the seal:
+	//
+	//   1. the tool itself, on `tools` — a genuine outbound `fetch`, denied by
+	//      the waterfall above because its name is in NETWORK_TOOL_NAMES;
+	//   2. the loopback RPC channel the composer's canary button posts to, which
+	//      resolves that session's agent and dispatches the tool through
+	//      `ctx.tools.execute`, i.e. through `tools/pre-execute` like any other
+	//      call. Nothing here appends an event or moves a panel: the denial
+	//      recorded by the waterfall is the only thing the monitor reads.
+	const canaryTarget = config?.canary?.target ?? DEFAULT_CANARY_TARGET;
+	ctx.inject(["tools"], (toolCtx) => {
+		toolCtx.effect(() => toolCtx.tools.register(createCanaryTool(canaryTarget)), "blind-flange: canary tool");
+	});
+	ctx.inject(["connection", "agents", "tools"], (canaryCtx) => {
+		canaryCtx.effect(() => {
+			const dispose = canaryCtx.connection.rpc.handle(
+				CANARY_CHANNEL,
+				createCanaryRpcHandler({ tools: canaryCtx.tools, agents: canaryCtx.agents, target: canaryTarget }),
+				{ authority: "loopback" },
+			);
+			return () => {
+				void dispose();
+			};
+		}, "blind-flange: canary rpc channel");
 	});
 
 	const providerName = config?.modelPlane?.provider ?? "replay";

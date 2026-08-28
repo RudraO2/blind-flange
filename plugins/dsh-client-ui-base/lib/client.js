@@ -78,6 +78,12 @@
  * and it is the rebuild of the 27 August spike's hand-rolled monitor against
  * the shipped primitives and theme tokens (UX-DR7).
  *
+ * Story 2.3 adds the canary: a button in `conversation.input.right` that posts
+ * to the host's loopback `/bf-canary` channel. The host dispatches a real tool
+ * whose body calls `fetch`, the egress denial waterfall refuses it before that
+ * body runs, and the monitor above turns red off the recorded denial rather
+ * than off anything the button says.
+ *
  * Story 3.8 adds no seat. Because the `bf-routing` view keeps the highest-seq
  * `router/routed` node and the chip subscribes through `useSyncExternalStore`,
  * a turn that classifies as a different task type moves the chip to the newly
@@ -938,6 +944,108 @@ window.__ModuleLoader__.load({
 			return EgressPanel;
 		}
 
+		/* ---------------------------------------------------------------------
+		 * Canary (Story 2.3)
+		 *
+		 * CONTEXT.md: the button that fires a deliberate outbound network call so
+		 * the user can watch egress denial block it, the monitor turn red, and the
+		 * audit log record it. Silence proves nothing; the canary is what turns an
+		 * absence into evidence.
+		 *
+		 * It takes `conversation.input.right` (list, session) — the composer tool
+		 * row, before the send button — and posts to the host's loopback
+		 * `/bf-canary` channel. The host dispatches the real canary tool through
+		 * `ctx.tools.execute`, the egress denial waterfall refuses it and appends
+		 * the `egress/denied` event, and the monitor above re-reads that event
+		 * through the same `bf-egress` view it always reads. Nothing here touches
+		 * the count: this button has no path to the number it makes move, which is
+		 * what keeps the panel driven by a real event (NFR8).
+		 * ------------------------------------------------------------------- */
+
+		const CANARY_CHANNEL = "/bf-canary";
+		const CANARY_ENDPOINT = "fire";
+
+		/**
+		 * Build the canary button for `conversation.input.right`.
+		 * @param connection - the host transport (`ctx.connection`), carrying `rpc.call`.
+		 * @returns the component.
+		 */
+		function buildCanaryButton(connection) {
+			const { useState } = require("react");
+			const { jsx, jsxs } = require("react/jsx-runtime");
+			const { Pill, StateDot } = require("@deepseek-ai/dsh-client-ui-primitives");
+
+			/**
+			 * Four outcomes, and the button says which one it is rather than
+			 * looking the same after every press. `denied` is the expected one —
+			 * red, matching the monitor. `allowed` is amber, because a canary that
+			 * got out means the seal is not holding and that is the one result
+			 * nobody should be able to miss.
+			 */
+			const COPY = {
+				idle: "Fire the canary: attempt a real outbound connection and watch egress denial refuse it.",
+				firing: "Firing the canary — attempting an outbound connection.",
+				denied: "Canary denied. The attempt was refused by egress denial and written to the audit log.",
+				allowed: "Canary was NOT denied — the outbound connection completed. Egress denial is not holding.",
+				failed: "The canary could not be fired. The host did not answer.",
+			};
+
+			/**
+			 * The composer-row control. A `Pill`, like the routing chip beside it
+			 * and the egress chip in the session header: `Button`'s `toolbar`
+			 * variant looked right in dark and resolved to a translucent dark fill
+			 * under near-black text in light, which is the "pasted on" failure the
+			 * UI rules exist to prevent (UX-DR2). Nothing here sets a colour —
+			 * `Pill` and `StateDot` carry the whole look through `--dsw-*` tokens.
+			 */
+			function CanaryButton(props) {
+				const [phase, setPhase] = useState("idle");
+
+				async function fire() {
+					if (phase === "firing") return;
+					setPhase("firing");
+					try {
+						const result = await connection.rpc.call(CANARY_CHANNEL, CANARY_ENDPOINT, {
+							sessionId: props.sessionId,
+						});
+						if (result?.ok !== true) {
+							setPhase("failed");
+							return;
+						}
+						setPhase(result.value?.denied === true ? "denied" : "allowed");
+					} catch (error) {
+						console.warn(
+							`@blind-flange/dsh-client-ui-base: the canary could not be fired — ${error instanceof Error ? error.message : String(error)}`,
+						);
+						setPhase("failed");
+					}
+				}
+
+				const dot =
+					phase === "firing"
+						? "ongoing"
+						: phase === "denied"
+							? "error"
+							: phase === "allowed" || phase === "failed"
+								? "warning"
+								: null;
+
+				return jsx(Pill, {
+					active: dot !== null,
+					disabled: phase === "firing",
+					onClick: fire,
+					title: COPY[phase],
+					"aria-label": COPY[phase],
+					children: jsxs("span", {
+						style: { display: "inline-flex", alignItems: "center", gap: "6px" },
+						children: [dot === null ? null : jsx(StateDot, { state: dot, size: 8 }), "Canary"],
+					}),
+				});
+			}
+
+			return CanaryButton;
+		}
+
 		/**
 		 * Hold the tab title against the harness, which rewrites it after hydration.
 		 *
@@ -987,7 +1095,7 @@ window.__ModuleLoader__.load({
 		}
 
 		/**
-		 * Client plugin body. Checks the React seam, then takes seven seats.
+		 * Client plugin body. Checks the React seam, then takes eight seats.
 		 *
 		 * Story 1.5's mark goes into `conversation.hero.brand.mark` — `single`,
 		 * so occupying it replaces whatever the host registered there (the
@@ -1030,7 +1138,14 @@ window.__ModuleLoader__.load({
 		 * through a registered `bf-egress` conversation view; the chip toggles
 		 * the panel through a module-scoped open store.
 		 *
-		 * A broken React seam aborts all seven: every one of them renders
+		 * Story 2.3's canary takes `conversation.input.right` (list, session):
+		 * the button that fires a real outbound attempt through the host's
+		 * loopback `/bf-canary` channel so the denial can be watched happening.
+		 * It is registered behind a nested `ctx.inject(["connection"])` so that a
+		 * client with no host transport loses the button and keeps everything
+		 * else.
+		 *
+		 * A broken React seam aborts all eight: every one of them renders
 		 * through the host's `react/jsx-runtime`, so registering into a slot
 		 * without it would trade one loud console error for obscure render
 		 * failures. (The conversation Definitions carry no React and are
@@ -1113,6 +1228,28 @@ window.__ModuleLoader__.load({
 				);
 				return () => { dispose(); };
 			});
+			// The canary takes `conversation.input.right` (list, session) — the
+			// composer tool row, before the send button. Deferred behind
+			// `ctx.inject(["connection"])` rather than named in this plugin's own
+			// `inject` list: a hard gate on a service the headless client has no
+			// reason to provide would take the other seven seats down with it, and
+			// the monitor is worth more than the button that calibrates it.
+			let disposeCanary;
+			ctx.inject(["connection"], (canaryCtx) => {
+				const CanaryButton = buildCanaryButton(canaryCtx.connection);
+				disposeCanary = canaryCtx.slots.inject("conversation.input.right", () => {
+					const dispose = canaryCtx.slots.register(
+						{
+							name: "conversation.input.right",
+							id: "bf-canary",
+							label: "Canary",
+							inject: (sessionId) => ({ sessionId }),
+						},
+						CanaryButton,
+					);
+					return () => { dispose(); };
+				});
+			});
 			// `conversation.input.model` is a session-scoped `single` slot
 			// ui-conversation declares. The stock picker is disabled in the
 			// profile, so this occupies it outright. The `inject` factory hands
@@ -1137,6 +1274,7 @@ window.__ModuleLoader__.load({
 				disposeProviderDisclosure?.();
 				disposeEgressChip?.();
 				disposeEgressPanel?.();
+				disposeCanary?.();
 				disposeRoutingChip?.();
 				disposeRoutingView?.();
 				disposeRoutingEvents?.();
