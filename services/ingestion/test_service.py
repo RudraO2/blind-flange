@@ -68,7 +68,7 @@ class IngestionServiceTest(unittest.TestCase):
 
         self.assertIn("findings", body)
         findings = body["findings"]
-        self.assertGreater(len(findings), 0, "expected at least one word finding")
+        self.assertGreater(len(findings), 0, "expected at least one line finding")
 
         sample = findings[0]
         self.assertIn("text", sample)
@@ -79,9 +79,42 @@ class IngestionServiceTest(unittest.TestCase):
         self.assertIn("confidence", sample)
         self.assertIsInstance(sample["confidence"], float)
 
-        # The banner text from the fixture should be legible, per Story 4.2's own proof.
+        # The banner text from the fixture should be legible, per the OCR proof.
         all_text = " ".join(f["text"] for f in findings)
         self.assertIn("SYNTHETIC", all_text)
+
+        # The report's own reference number, read exactly. This is the assertion that
+        # would have caught the engine regressing: slashes, digits and a hyphen in one
+        # token is precisely what Tesseract mangled and what RapidOCR reads at 1.000.
+        # An inspection finding the agent cites is worthless if its reference is wrong.
+        self.assertIn("NRC/RVF/INSP/2026-0417", all_text)
+
+    def test_geos_is_never_loaded(self) -> None:
+        """The LGPL-2.1 line must not be crossed by accident.
+
+        RapidOCR's detector imports `shapely.geometry.Polygon`, and the shapely wheel
+        bundles the GEOS shared libraries under LGPL-2.1 — outside the four permissive
+        licences docs/licence-policy.md allows. ocr.py supplies the two polygon properties
+        the detector actually uses and registers them under `shapely` before RapidOCR can
+        import the real one. This asserts that seal held through a real OCR pass, so a
+        future dependency bump that pulls shapely back in fails here rather than quietly
+        putting a copyleft row on Story 6.4's attestation report.
+        """
+        import sys
+
+        import ocr
+
+        # Build the engine here rather than relying on another test having run first:
+        # unittest orders alphabetically, and the seal is installed at engine construction.
+        ocr._get_engine()
+
+        geos_modules = [name for name in sys.modules if name.startswith("shapely.") and name != "shapely.geometry"]
+        self.assertEqual(geos_modules, [], f"the real shapely was loaded: {geos_modules}")
+        self.assertIs(
+            sys.modules["shapely"].geometry.Polygon,
+            ocr._Polygon,
+            "shapely.geometry.Polygon is not our GEOS-free stub",
+        )
 
     def test_ingest_rejects_non_image_content_type(self) -> None:
         conn = self._client()
@@ -124,7 +157,7 @@ class IngestionServiceTest(unittest.TestCase):
         body = json.loads(resp.read())
 
         findings = body["findings"]
-        self.assertGreater(len(findings), 0, "expected at least one word finding")
+        self.assertGreater(len(findings), 0, "expected at least one line finding")
 
         sample = findings[0]
         for key in ("text", "bbox", "confidence", "page"):

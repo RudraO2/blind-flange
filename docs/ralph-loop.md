@@ -58,8 +58,9 @@ Rules while building:
 - **Do not invoke Matt Pocock's skills.** BMAD owns implementation here.
 
 **Timeboxed stories** — 3.1, the replay adapter seam — honour the timebox. When it expires take
-the recorded fallback or escalate. Do not grind. (4.2, the Tesseract proof, is already done and
-passed: `services/ingestion/proof/PROOF.md` carries the measurements.)
+the recorded fallback or escalate. Do not grind. (4.2, the OCR proof, is already done and
+passed twice: `services/ingestion/proof/PROOF.md` for Tesseract and `PROOF-RAPIDOCR.md` for
+the engine that replaced it.)
 
 **If the story needs a decision nothing in the repo records, stop and ask.** Do not invent one.
 

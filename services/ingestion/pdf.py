@@ -1,4 +1,4 @@
-"""Story 4.4 — render a scanned PDF's pages and run each through Story 4.3's OCR path.
+"""Render a scanned PDF's pages and run each through the OCR path in ocr.py.
 
 `pypdfium2` does the rendering (Apache-2.0 or BSD-3-Clause, at our choice — LICENCES.md).
 Never `PyMuPDF`: it is AGPL-3.0 (ADR-0005, CLAUDE.md).
@@ -12,8 +12,8 @@ from ocr import Finding, findings_from_image
 
 # The fixture PDF (fixtures/README.md) is rasterised at 300 dpi and its MediaBox is sized
 # in points (1/72 in) accordingly. Rendering at the same dpi keeps pixel coordinates in the
-# returned bbox consistent with what Story 4.2 already proved Tesseract reads well on this
-# hardware, and matches the resolution a real flatbed scan of an A4/Letter page arrives at.
+# returned bbox consistent with what the engine proofs measured on this hardware, and
+# matches the resolution a real flatbed scan of an A4/Letter page arrives at.
 RENDER_DPI = 300
 _SCALE = RENDER_DPI / 72.0
 

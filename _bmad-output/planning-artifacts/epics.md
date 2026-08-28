@@ -153,7 +153,7 @@ Every functional requirement maps to exactly one epic. 23 of 23 covered, none du
 | FR6 | Epic 3 | Loader refuses a non-allow-listed licence |
 | FR7 | Epic 3 | `ModelProvider` with replay / local / remote |
 | FR8 | Epic 3 | Active provider always visible |
-| FR9 | Epic 4 | Tesseract ingestion, text with page and bounding box |
+| FR9 | Epic 4 | RapidOCR ingestion, text with page and bounding box |
 | FR10 | Epic 4 | Provenance crop viewer |
 | FR11 | Epic 5 | Agent loop, real tool calls, report to approval note |
 | FR12 | Epic 5 | `.docx` deliverable factory with provenance footer |
@@ -238,10 +238,14 @@ region — provenance meaning page *and region*, never just a filename.
 requirement numbers, and it is the top schedule risk.** Underneath two FRs sit a Python
 service, OCR, a cross-language contract for passing bounding boxes over local HTTP (NFR7), and
 a crop viewer that maps a box on a page image back to a rendered region. Ingestion is
-Tesseract, not Docling (ADR-0005) — `pytesseract.image_to_data()` returns word-level boxes
-with confidences, which is FR9's criterion almost verbatim. Page rendering is `pypdfium2`;
+RapidOCR, not Docling and no longer Tesseract — PP-OCRv6 on ONNX Runtime returns line-level
+boxes with confidences, which is FR9's criterion almost verbatim. **Changed 28 Aug 2026 by the
+amendment to ADR-0005**: Tesseract was proved out first (Story 4.2) and worked, but mangled the
+reference numbers and equipment tags an inspection report is made of, and a cited finding with a
+wrong reference is worse than none. That amendment also records the one open licence question
+the swap introduced, which Story 6.4 must close. Page rendering is `pypdfium2`;
 **PyMuPDF is AGPL-3.0 and must not be used**. Story 4.1 commits the synthetic sample page every
-later story runs against; Story 4.2 is a timeboxed proof that Tesseract returns boxes on this
+later story runs against; Story 4.2 is a timeboxed proof that OCR returns boxes on this
 laptop, before any other work in this epic. If it slips, the crop slips —
 **no pre-baked fixture**, because a panel that animates without a real event behind it is a
 bug, not a shortcut (ADR-0002, NFR8).

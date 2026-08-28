@@ -107,3 +107,64 @@ being pinned**, per the policy. Recorded in `docs/licence-policy.md`.
 **`ds4sd/docling-models` is recorded as rejected, not merely unused.** A rejected row is
 evidence that the gate ran. An absence proves nothing, in exactly the way the egress
 monitor's zero proves nothing without the canary.
+
+---
+
+## Amendment, 28 August 2026 — RapidOCR replaces Tesseract, and the allow-list question is reopened
+
+This decision chose Tesseract on fit and cost, and it was right about the cost. It was wrong
+about the fit.
+
+Tesseract worked and its proof stands (`services/ingestion/proof/PROOF.md`): word boxes with
+confidence, on CPU, 94 MB, 2.49 s. What it could not do reliably is read the strings an
+inspection report is actually made of — `NRC/RVF/INSP/2026-0417`, `NRC-INS-STD-014 Rev 3`,
+`V-2201-A`. Tokens mixing slashes, digits and case are where its LSTM is weakest, and a
+finding the agent cites with a mangled reference number is worse than no finding at all: it
+carries authority it has not earned. That is a product failure, not a benchmark quibble.
+
+RapidOCR — PP-OCRv6 models on ONNX Runtime — reads the same degraded fixture page at 0.9968
+mean confidence against Tesseract's 0.89–0.96, and reads that reference number exactly. It
+costs 2.3× the memory (213 MB) and 1.5× the time (3.6 s) on a machine with 15.7 GB of RAM,
+which is not a real cost. It uses no VRAM either. Its models ship inside the wheel, and the
+air-gap claim is proved rather than assumed: `proof/rapidocr_proof.py` seals every
+non-loopback socket and `getaddrinfo` before importing anything, then runs a full pass.
+
+Findings are now one per detected **line** rather than one per word. This is an improvement
+for FR10: a crop of a single word is not evidence a human can check; a crop of the line it
+sat in is.
+
+### What this does to the licence position
+
+Two licences outside the allow-list came with the swap. They were handled differently, and
+the difference is the point.
+
+**GEOS, LGPL-2.1 — removed.** `shapely`, pulled in transitively, bundles the GEOS shared
+libraries under weak copyleft, and they were confirmed loading during a real OCR pass.
+RapidOCR's detector uses `shapely.geometry.Polygon` for two properties only, `.area` and
+`.length`. `ocr.py` supplies both itself and registers them under `shapely` before RapidOCR
+can import the real package; `shapely` is uninstalled. Output is identical, and both a test
+and the proof script fail if it ever returns. **No LGPL code is linked, loaded or shipped.**
+
+**Clipper, BSL-1.0 — open.** `pyclipper` embeds the Clipper C++ library, which is Boost
+Software License. Unlike GEOS it does real polygon offsetting and cannot be replaced in ten
+lines. BSL-1.0 is permissive — more so than MIT — and is not a legal hazard, but the
+allow-list is four licences and this is a fifth.
+
+**This amendment does not widen the allow-list.** ADR-0005 widened it from two to four with
+its reasoning written down, and `CLAUDE.md` is explicit that doing so again is an ADR-level
+decision, never a judgement call made at the point of use. The swap was made on the project
+owner's call with the question knowingly deferred, and it must close before the licence claim
+is made in public.
+
+**Story 6.4 owns closing it**, two ways only:
+
+1. **ADR-0006 admits BSL-1.0** as a fifth licence, with reasoning, and the attestation report
+   carries five rows.
+2. **Revert to Tesseract.** `ocr.py` is the only file that changes — `pdf.py` and `server.py`
+   call `findings_from_image` and never touch the engine. `proof/PROOF.md` and the Tesseract
+   rows in `services/ingestion/LICENCES.md` are kept precisely so this stays a one-file
+   decision rather than an archaeology exercise.
+
+Everything else in this decision stands. `PyMuPDF` remains banned by name; `pypdfium2` remains
+the substitute. Docling remains rejected, and for the reason recorded above — fit and cost,
+not legal hazard.

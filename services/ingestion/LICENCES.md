@@ -169,3 +169,61 @@ met**, because of Pillow. Every other acceptance criterion in the story is met.
 
 The work is committed rather than held back so that it survives and so Stories 4.2 to 4.5
 have their fixture, but the story is not `done` until the decision above is taken.
+
+## The engine swap — RapidOCR replaces Tesseract
+
+Verified 28 August 2026. `ocr.py` changed engine; `pdf.py` and `server.py` did not change,
+because both call `findings_from_image` and never touch the engine. Measurements and the
+reasoning are in `proof/PROOF-RAPIDOCR.md`.
+
+| Component | Version | Licence | How it was verified |
+|---|---|---|---|
+| `rapidocr` | 3.9.2 | Apache-2.0 | `LICENSE` in `RapidAI/RapidOCR`, read at this version: "Copyright (c) 2021 RapidOCR Authors", Apache License 2.0 text verbatim. |
+| `onnxruntime` | 1.24.4 | MIT | `METADATA` declares `MIT License`; upstream `microsoft/onnxruntime` `LICENSE` is the MIT text. |
+| `omegaconf` | 2.3.1 | BSD-3-Clause | `omegaconf-2.3.1.dist-info/licenses/LICENSE`, three-clause text verbatim (Omry Yadan). |
+| `antlr4-python3-runtime` | 4.9.3 | BSD-3-Clause | `METADATA` declares `BSD`; upstream `antlr/antlr4` ships the three-clause text. |
+| `colorlog` | 6.12.0 | MIT | `colorlog-6.12.0.dist-info/licenses/LICENSE`, MIT text verbatim (Sam Clements). |
+| `pyclipper` | 1.4.0 | MIT wrapper, **BSL-1.0 core — OPEN** | `pyclipper-1.4.0.dist-info/licenses/LICENSE` is MIT. But the package embeds the Clipper C++ library, and pyclipper's own README states the core library is Boost Software License. **Not on the allow-list.** See below. |
+
+Models are bundled inside the `rapidocr` wheel — `PP-OCRv6_det_small.onnx`,
+`PP-OCRv6_rec_small.onnx`, `ch_ppocr_mobile_v2.0_cls_mobile.onnx` — and originate from
+PaddleOCR, which is Apache-2.0. Nothing is downloaded at first run:
+`proof/rapidocr_proof.py` seals every non-loopback socket *and* `getaddrinfo` before
+importing anything, then runs a full pass. Result: no connection attempted, no name resolved.
+
+### GEOS — found, removed, not accepted
+
+`pip install rapidocr` also pulls `shapely`, whose wheel bundles `geos-*.dll` and
+`geos_c-*.dll` under **LGPL-2.1**. That is weak copyleft and categorically different from
+everything else in this tree, and it was confirmed *live*: `shapely._geos` and `shapely.lib`
+loaded during a real OCR pass.
+
+RapidOCR's detector uses `shapely.geometry.Polygon` for exactly two properties, `.area` and
+`.length`, to size the unclip offset around a detected text box. `ocr.py` now supplies both
+itself — the shoelace formula and the sum of the edge lengths — and registers them under
+`shapely` in `sys.modules` before RapidOCR can import the real package. Output is identical:
+97 regions, mean confidence 0.9968, same texts, same scores.
+
+`shapely` is uninstalled and deliberately not pinned in `requirements.txt`, which records
+why. Two things fail if it returns: `test_service.py::test_geos_is_never_loaded`, and the
+proof script's own `geos_modules_loaded` check.
+
+**No LGPL code is linked, loaded, or shipped.**
+
+### The open decision — the Boost Software License
+
+`pyclipper` does the real polygon offsetting, which is genuine computational geometry rather
+than ten lines of numpy, so unlike GEOS it cannot simply be replaced. Its embedded Clipper
+core is **BSL-1.0**, which is not one of the four licences `docs/licence-policy.md` allows.
+
+BSL-1.0 is permissive — more so than MIT, since it waives attribution for binary
+distribution — and is not a legal hazard. But `CLAUDE.md` states that widening the allow-list
+is an ADR-level decision and never a judgement call made at the point of use. The swap was
+made with this known and deliberately deferred, on the project owner's call, 28 Aug 2026.
+
+**Story 6.4 cannot pass without closing it**, either by writing ADR-0006 to admit BSL-1.0 as
+a fifth licence, or by reverting `ocr.py` to Tesseract — which is why `proof/PROOF.md` and
+the Tesseract rows above are kept rather than deleted.
+
+This is now the **second** open licence question in this service, alongside Pillow's MIT-CMU.
+Both are recorded, neither is resolved, and neither may be waved through at the point of use.

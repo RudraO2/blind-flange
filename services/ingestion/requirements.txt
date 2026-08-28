@@ -1,23 +1,47 @@
 # Runtime dependencies of the ingestion service itself (services/ingestion/server.py,
 # ocr.py) — distinct from ../requirements-fixtures.txt (the sample-report generator,
-# build-time only) and proof/requirements-proof.txt (the Story 4.2 timeboxed proof script).
+# build-time only) and proof/requirements-proof.txt (the timeboxed engine proofs).
 #
-# The HTTP boundary is stdlib `http.server` deliberately — no web framework, so this list
-# stays exactly what Story 4.2 already pinned and licence-checked, and does not reopen the
-# licence gate for a new component.
+# The HTTP boundary is stdlib `http.server` deliberately — no web framework.
 #
 # Licences verified from the LICENSE file at these exact versions and recorded in
-# LICENCES.md, per docs/licence-policy.md. Tesseract itself is not a pip package — see
-# proof/requirements-proof.txt for how the binary is installed.
+# LICENCES.md, per docs/licence-policy.md.
 
-pytesseract==0.3.13
+# The OCR engine, replacing Tesseract on 28 Aug 2026 — see proof/PROOF-RAPIDOCR.md for the
+# measurements and for the one open licence question this introduces (pyclipper embeds the
+# Clipper C++ library under the Boost Software License, which is not on the allow-list).
+# Ships its three PP-OCRv6 ONNX models inside the wheel; proof/rapidocr_proof.py verifies a
+# full pass makes no outbound connection and no DNS lookup.
+#
+# Install with --no-deps if you would rather not have pip fetch shapely at all; the six
+# packages below are the complete set rapidocr actually needs.
+rapidocr==3.9.2
 
-# Pulled in transitively by pytesseract. Its licence (MIT-CMU) is the open question recorded
-# in LICENCES.md since Story 4.1 — not resolved by this story, not reopened by it either.
+# The inference engine rapidocr runs those models on. CPU build — no CUDA, no VRAM.
+onnxruntime==1.24.4
+
+# Pulled in by rapidocr. Recorded here rather than left transitive, because docs/licence-policy.md
+# applies to the whole dependency tree and an unpinned transitive is an unverified licence.
+#
+# `shapely` is deliberately NOT pinned here and must be uninstalled if pip pulls it in:
+#
+#     pip install -r requirements.txt && pip uninstall -y shapely
+#
+# The shapely wheel bundles the GEOS shared libraries, and GEOS is LGPL-2.1 — weak copyleft,
+# outside the allow-list. RapidOCR's detector uses shapely for exactly one thing, the area
+# and perimeter of a detected text box, so ocr.py supplies those two properties itself and
+# registers them under `shapely` before RapidOCR can import the real one. Verified to give
+# identical output; test_service.py::test_geos_is_never_loaded holds the line.
+pyclipper==1.4.0
+omegaconf==2.3.1
+antlr4-python3-runtime==4.9.3
+colorlog==6.12.0
+
+# Image decoding. Its licence (MIT-CMU) is the open question recorded in LICENCES.md since
+# Story 4.1 — not resolved by this change, not reopened by it either.
 pillow==11.3.0
 
-# Story 4.4 — renders each PDF page to an image ocr.py can read. Never PyMuPDF: it is
-# AGPL-3.0 (ADR-0005, CLAUDE.md). Same version already licence-checked for the fixture
-# generator in ../requirements-fixtures.txt; recorded again here because it is now also a
-# runtime dependency of the service itself, not only a build-time tool.
+# Renders each PDF page to an image ocr.py can read. Never PyMuPDF: it is AGPL-3.0
+# (ADR-0005, CLAUDE.md). Same version already licence-checked for the fixture generator in
+# ../requirements-fixtures.txt.
 pypdfium2==4.30.0

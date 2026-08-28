@@ -18,7 +18,7 @@ Liveness probe.
 
 ## `POST /v1/ingest/image`
 
-Runs OCR against one scanned page image and returns word-level findings.
+Runs OCR against one scanned page image and returns line-level findings.
 
 **Request**
 - Header `Content-Type: image/png` or `image/jpeg` (or another `image/*` Pillow can decode)
@@ -30,21 +30,27 @@ Runs OCR against one scanned page image and returns word-level findings.
 {
   "findings": [
     {
-      "text": "VESSEL",
-      "bbox": {"left": 412, "top": 88, "width": 210, "height": 34},
-      "confidence": 94.5
+      "text": "Report no. NRC/RVF/INSP/2026-0417",
+      "bbox": {"left": 199, "top": 505, "width": 792, "height": 58},
+      "confidence": 99.97
     }
   ]
 }
 ```
-- `findings` is a flat array, one entry per non-blank OCR word. No grouping into lines or
+- `findings` is a flat array, one entry per detected text **line**. No grouping into
   paragraphs — that is left to whichever caller needs it, so the contract stays the
   smallest thing that satisfies FR9's first half (bounding box and confidence per finding).
-- `bbox` is in source-image pixel coordinates, top-left origin, matching what
-  `pytesseract.image_to_data()` returns — `left`/`top`/`width`/`height`, not `x1,y1,x2,y2`.
-- `confidence` is Tesseract's own 0–100 word confidence, as a float. Tesseract's `-1` rows
-  (structural boxes with no text) are filtered out before this response is built — every
-  entry in `findings` is a real word.
+
+  Lines, not words: FR10 shows the crop a finding was read from, and a crop of one word is
+  not evidence a human can check. This changed on 28 Aug 2026 with the engine swap from
+  Tesseract, which returned words, to RapidOCR, which returns lines.
+- `bbox` is in source-image pixel coordinates, top-left origin —
+  `left`/`top`/`width`/`height`, not `x1,y1,x2,y2`. RapidOCR detects a four-point polygon,
+  because scanned text can be skewed and the fixture deliberately is; the rectangle here is
+  that polygon's extent, which is the crop FR10 needs to draw.
+- `confidence` is a float on a **0–100** scale. RapidOCR scores 0–1 natively and `ocr.py`
+  scales it, deliberately: the scale is the contract's, not the engine's, so the harness
+  side reads one number whichever engine is behind it.
 - **Page number is not in this contract.** Story 4.3 is single-image only; Story 4.4 adds
   the PDF path and is where `page` joins each finding.
 
@@ -74,9 +80,9 @@ page through the same OCR path as `/v1/ingest/image`.
 {
   "findings": [
     {
-      "text": "VESSEL",
-      "bbox": {"left": 412, "top": 88, "width": 210, "height": 34},
-      "confidence": 94.5,
+      "text": "Report no. NRC/RVF/INSP/2026-0417",
+      "bbox": {"left": 199, "top": 505, "width": 792, "height": 58},
+      "confidence": 99.97,
       "page": 1
     }
   ]
@@ -87,7 +93,7 @@ page through the same OCR path as `/v1/ingest/image`.
 - `findings` is a flat array across the whole document, in page order; grouping by page is
   left to the caller.
 - Pages are rendered at 300 dpi, matching the fixture PDF (`fixtures/README.md`) and the
-  resolution Story 4.2 measured Tesseract against, so `bbox` pixel coordinates carry the
+  resolution the engine proofs measured against, so `bbox` pixel coordinates carry the
   same meaning as the image endpoint's.
 
 **Error responses**
@@ -108,7 +114,7 @@ page through the same OCR path as `/v1/ingest/image`.
 - **No batching on `/v1/ingest/image`.** One image per request. `/v1/ingest/pdf` (Story
   4.4) is the multi-page path — it renders every page itself and returns one combined
   findings array rather than asking the caller to call the image endpoint per page.
-- **No streaming / partial results.** Tesseract runs to completion (proved fast enough on
+- **No streaming / partial results.** The engine runs to completion (proved fast enough on
   this hardware in Story 4.2 — 2.49 s for a full page) before the response is sent.
 
 ## Running it
@@ -117,6 +123,7 @@ page through the same OCR path as `/v1/ingest/image`.
 python services/ingestion/server.py
 ```
 
-Reads `INGESTION_PORT` (defaults to `8642`). Requires the Tesseract binary already
-installed on the host (Story 4.2: `winget install tesseract-ocr.tesseract` on Windows) —
+Reads `INGESTION_PORT` (defaults to `8642`). Requires only `pip install -r requirements.txt`:
+RapidOCR ships its ONNX models inside the wheel, so there is no separate binary to install and
+nothing is fetched at first run (`proof/PROOF-RAPIDOCR.md`) —
 this service never downloads a model at runtime (NFR2).
