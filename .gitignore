@@ -22,13 +22,14 @@ models/
 _bmad-output/*
 !_bmad-output/planning-artifacts/
 
-# The sprint tracker and the story files are KEPT — they are the issue tracker and
-# the Ralph loop's memory of where the build got to, not throwaway. Everything else
-# under implementation-artifacts is build scratch and stays ignored.
+# The sprint tracker is KEPT — it is the issue tracker and the build loop's memory
+# of where it got to, not throwaway. Everything else under implementation-artifacts
+# is build scratch and stays ignored: the loop takes the one-shot route and writes
+# no spec or epic-context files, so an un-ignored `*.md` here only ever surfaced
+# leftovers from the earlier full route as permanently untracked noise.
 !_bmad-output/implementation-artifacts/
 _bmad-output/implementation-artifacts/*
 !_bmad-output/implementation-artifacts/sprint-status.yaml
-!_bmad-output/implementation-artifacts/*.md
 
 # Claude Code worktrees — Lane B works in one; never commit a worktree tree.
 .claude/worktrees/
