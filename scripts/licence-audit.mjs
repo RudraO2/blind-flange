@@ -72,6 +72,7 @@ const DECISIONS_PATH = join(PROJECT_ROOT, "docs", "licence-decisions.json");
 const REPORT_PATH = join(PROJECT_ROOT, "docs", "licence-audit.md");
 const POLICY_PATH = join(PROJECT_ROOT, "docs", "licence-policy.md");
 const CLAUDE_MD_PATH = join(PROJECT_ROOT, "CLAUDE.md");
+const README_PATH = join(PROJECT_ROOT, "README.md");
 
 /** The harness home, honouring `DSH_HOME` exactly as `scripts/start.mjs` does. */
 const DSH_HOME = (process.env.DSH_HOME || "").trim() || join(homedir(), ".dsh");
@@ -586,12 +587,20 @@ function checkEvidence(decisions) {
  * superseded four names as the hard constraint. A drift check that only looked
  * at the policy could not see it, so the file most likely to be believed was the
  * one file nothing verified.
+ *
+ * `README.md` joined them on 28 August 2026, for the same reason and with the
+ * same history: it had been stating the superseded four names since ADR-0006,
+ * and it is the first file anyone reads — the only one of the three a person
+ * evaluating this project is guaranteed to see. A public repository whose front
+ * page overstates its own licence claim is a worse failure than a stale note in
+ * an internal file.
  */
 function checkPolicyDrift() {
 	const problems = [];
 	for (const [label, path] of [
 		["docs/licence-policy.md", POLICY_PATH],
 		["CLAUDE.md", CLAUDE_MD_PATH],
+		["README.md", README_PATH],
 	]) {
 		if (!existsSync(path)) {
 			problems.push(`${label} is missing`);

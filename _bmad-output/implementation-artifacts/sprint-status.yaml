@@ -72,7 +72,7 @@ development_status:
   4-5-clicking-a-finding-shows-the-crop-it-was-read-from: done
   epic-4-retrospective: optional
 
-  epic-5: in-progress
+  epic-5: done
   5-1-the-agent-turns-a-scanned-report-into-key-findings: done
   5-2-helper-agents-are-visible-while-they-work: done
   5-3-a-coding-task-runs-and-is-verified-in-the-sandbox: done
@@ -80,10 +80,10 @@ development_status:
   5-5-the-fan-out-gauge-feels-alive-while-agents-work: deferred
   epic-5-retrospective: optional
 
-  epic-6: done
+  epic-6: in-progress
   6-1-one-command-starts-the-workbench-from-a-clean-directory: done
   6-2-the-built-bundle-contains-no-external-url: deferred
-  6-3-it-runs-on-the-second-machine: deferred
+  6-3-it-runs-on-the-second-machine: backlog
   6-4-the-licence-claim-is-safe-to-make: done
   6-5-a-recorded-offline-run-exists: done
   epic-6-retrospective: optional

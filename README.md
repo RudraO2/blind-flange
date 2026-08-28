@@ -160,7 +160,20 @@ installer removes it and `npm run doctor` fails if it ever comes back.
 
 ## Licence and credit
 
-Built on **DeepSeek Harness** (MIT). Blind Flange ships only Apache-2.0, MIT, BSD-2-Clause and
-BSD-3-Clause components, across model weights, dependencies and the harness itself — a hard
-constraint recorded in `docs/licence-policy.md` and enforced by a loader that refuses anything
-else, not merely asserted. Third-party notices are in `THIRD_PARTY_NOTICES.md`.
+Built on **DeepSeek Harness** (MIT). Blind Flange's licence rule is **OSI-approved, no copyleft,
+no user cap, no field-of-use restriction, no disclosure obligation** — eleven enumerated names
+across model weights, dependencies and the harness:
+
+> Apache-2.0 · MIT · BSD-2-Clause · BSD-3-Clause · ISC · 0BSD · Python-2.0 · MIT-CMU ·
+> BSL-1.0 · Zlib · CC0-1.0
+
+It is a hard constraint recorded in `docs/licence-policy.md`, enforced by a loader that refuses
+any model outside it and by `npm run licence-audit`, which enumerates every transitive licence
+across all four trees and exits non-zero on anything undecided. Not merely asserted — run it.
+
+**And the honest part.** "Every component is permissively licensed" would be a stronger sentence
+and it would be false. Eight of the audit's rows are copyleft; **two are linked at runtime** —
+libvips inside `sharp`, reached through a harness plugin we are forbidden to edit, and Eigen
+inside `onnxruntime`. Both are inherited rather than chosen, both are disclosed, and neither
+places any obligation on this project's own code. Each is decided one at a time, with evidence,
+in `docs/licence-decisions.json`. Third-party notices are in `THIRD_PARTY_NOTICES.md`.

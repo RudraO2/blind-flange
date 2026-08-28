@@ -1255,12 +1255,32 @@ So that the demo cannot be undone by a font CDN.
 **When** their origin is checked
 **Then** all are self-hosted (UX-DR10)
 
-### Story 6.3: It runs on the second machine — DEFERRED 28 Aug 2026
+### Story 6.3: It runs on the second machine — UN-DEFERRED 28 Aug 2026
 
-> **Deferred, not cancelled.** The problem statement asks for a deployment "demonstrable on a
-> single workstation or server"; a second machine is not required. Setup risk on borrowed
-> hardware inside three days outweighs the evidence gained, and Story 6.1's cold-start criterion
-> carries most of the value. Revisit if the schedule recovers.
+> **Back in scope, same day it was cut.** The deferral below assumed a second machine was
+> optional. It is not any more: the repository is being handed to a teammate with a GPU laptop,
+> so a second machine is now the machine this has to run on, and "revisit if the schedule
+> recovers" has been overtaken by the schedule changing shape rather than recovering.
+>
+> **Partly served already, and honestly only partly.** The installer work committed on
+> 28 Aug 2026 — `run.bat`, `npm run doctor`, `npm run setup-ingestion`, and the licence audit
+> learning to resolve `{site-packages}` and `{harness}` instead of one laptop's absolute paths —
+> was driven by exactly this story's question and fixed two defects that would have failed
+> `npm test` on any machine but the build one. A cold start against a fresh `DSH_HOME` passed
+> 15/15 checks, booted, served and mounted every panel.
+>
+> **That is not this story's acceptance criterion.** A fresh harness home on the build machine
+> is not a second machine: it shares the Node install, the global npm root, the Python
+> interpreter and the OS. The criteria below are met when they are met *there*, on the
+> teammate's hardware, and the difference recorded. Until then this stays open.
+>
+> The original deferral, kept because its reasoning is still what would justify cutting it
+> again if the hand-off falls through:
+>
+> > The problem statement asks for a deployment "demonstrable on a single workstation or
+> > server"; a second machine is not required. Setup risk on borrowed hardware inside three days
+> > outweighs the evidence gained, and Story 6.1's cold-start criterion carries most of the
+> > value. Revisit if the schedule recovers.
 
 
 As the person whose laptop might fail on the day,
