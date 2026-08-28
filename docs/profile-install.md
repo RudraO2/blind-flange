@@ -612,6 +612,73 @@ the fleet member the router picked; clicking it expands to the classified task t
 score per fleet member, and any member filtered out before scoring with its reason.
 Screenshots in both themes at `docs/screenshots/3-7-routing-chip-{light,dark}.png`.
 
+## Story 5.2: helper agents are visible while they work
+
+Surveyed from the installed harness source on 28 Aug 2026: `ui-jobs` (background-job badge
+at `conversation.session.header.actions`) and `ui-subagent` (descendant-count breadcrumb at
+`conversation.session.header.lineage`) are already mounted and read real session state — a
+`jobsBySession` mirror folded from `session/jobs` frames, and `subagentsByParent` through the
+standard `useSessions` hook. What was off is the model-facing tools that give a real agent
+something to drive them: `tool-jobs`, `tool-subagent`, and `tool-subagent-control` all carry
+`disabled: true` from `@deepseek-ai/dsh-base, patched by @deepseek-ai/dsh-web-app` — the
+harness's own patching, not Epic 1's sealing (subagent delegation and background-job control
+make no outbound network call). No new component was built, per the epic's own instruction.
+
+Append to `~/.dsh/profiles/web/cordis.patch.yml`:
+
+```yaml
+- id: tool-jobs
+  disabled: false
+
+- id: tool-subagent
+  disabled: false
+
+- id: tool-subagent-control
+  disabled: false
+```
+
+The same three rows are appended to `~/.dsh/profiles/headless/cordis.patch.yml`, so a headless
+run exercises the identical real dispatch the web profile's UI renders.
+
+`plugins/dsh-client-ui-base/lib/model-plane/replay-cache.json` carries a new two-turn authored
+entry (`match: "use a helper agent"`) demonstrating the wiring: the parent turn calls the real
+`subagent` tool (provider `spawn`, `backgroundMode: continuable`) with an authored `prompt`,
+omitting `run_in_background` so the tool's own continuable-mode default backgrounds the call
+rather than blocking — the parent's closing text names it as running rather than waiting on
+it. A second entry (`match: "corrosion-under-insulation finding"`) answers the child session's
+own turn, matched on the exact `prompt` argument text the parent's tool call sends it (the
+child's initial message carries `source: { kind: "user" }`, which the replay provider's
+genuine-human-message check accepts — see `dsh-subagent-in-process-driver`).
+
+**Checking it worked**, verified 28 August 2026 via `dsh --profile headless` (the fastest way
+to exercise real dispatch without a browser) and confirmed against the web UI:
+
+```sh
+dsh --profile headless "Use a helper agent to double-check the corrosion finding on E-1104A while you draft the recommendation."
+# -> Helper agent is running in the background on the corrosion check. I'll let you know what
+#    it finds; meanwhile the relief-valve certification gap (PSV-2207A) still needs a bench
+#    test scheduled.
+```
+
+The run wrote a second session directory under the caller's session store with
+`"origin":"subagent"`, `"parentSession"`, `"delegationDepth":1` — a real `ctx.subagents`
+child, not a fabricated one. Opening that same session afterwards in the web UI's session
+list shows the shipped `ui-subagent` breadcrumb reading "1 subagent"; expanding it lists
+"Double-check E-1104A corrosion finding — continuable · not running", pulling the
+`description` straight from the authored tool-call arguments. The "not running" status *is*
+the gauge's resting state for a settled continuable child — the descendant count itself is a
+lineage total, not a live tally, matching `ui-subagent`'s own documented design (see its
+README: "shows ongoing activity when any counted descendant is running", not a count that
+zeroes). Screenshots in both themes at
+`docs/screenshots/5-2-fanout-gauge-{light,dark}.png`.
+
+A pre-existing, unrelated defect surfaced during verification: every session in this profile's
+store predating this story fails to load its chat history with `SessionFormatUnsupportedError:
+... contains event type "router/classified" (seq 6) unknown to this harness`, and the
+composer stays disabled on any session whose history failed to load this way. Not caused by
+this change — it predates Story 5.2 by at least an hour of session timestamps — and out of
+scope to fix here; recorded in `_bmad-output/implementation-artifacts/deferred-work.md`.
+
 ## The headless profile
 
 `dsh` is a launcher, not an app: it boots a *profile*, and a profile is a stack of plugin
@@ -652,6 +719,15 @@ Then write `~/.dsh/profiles/headless/cordis.patch.yml`:
 
 - id: llm-pi-ai
   disabled: true
+
+- id: tool-jobs
+  disabled: false
+
+- id: tool-subagent
+  disabled: false
+
+- id: tool-subagent-control
+  disabled: false
 ```
 
 Two differences from the web profile, both learned the hard way:

@@ -72,7 +72,7 @@ development_status:
 
   epic-5: in-progress
   5-1-the-agent-turns-a-scanned-report-into-key-findings: done
-  5-2-helper-agents-are-visible-while-they-work: backlog
+  5-2-helper-agents-are-visible-while-they-work: done
   5-3-a-coding-task-runs-and-is-verified-in-the-sandbox: backlog
   5-4-the-approval-note-comes-out-as-a-signed-docx: backlog
   epic-5-retrospective: optional

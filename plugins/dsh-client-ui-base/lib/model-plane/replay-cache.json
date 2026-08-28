@@ -63,6 +63,44 @@
 		]
 	},
 	{
+		"match": "use a helper agent",
+		"steps": [
+			{
+				"blocks": [
+					{
+						"type": "text",
+						"text": "I'll spin up a helper agent to double-check the corrosion finding on E-1104A while I draft the recommendation."
+					},
+					{
+						"type": "tool-call",
+						"name": "subagent",
+						"arguments": {
+							"description": "Double-check E-1104A corrosion finding",
+							"prompt": "Double-check the corrosion-under-insulation finding recorded against E-1104A in the ingested inspection report: confirm the severity is Major and that the recommended action (strip cladding and UT scan before restart) is consistent with that severity. Reply in two sentences with your assessment."
+						}
+					}
+				]
+			},
+			{
+				"blocks": [
+					{
+						"type": "text",
+						"text": "Helper agent is running in the background on the corrosion check. I'll let you know what it finds; meanwhile the relief-valve certification gap (PSV-2207A) still needs a bench test scheduled."
+					}
+				]
+			}
+		]
+	},
+	{
+		"match": "corrosion-under-insulation finding",
+		"blocks": [
+			{
+				"type": "text",
+				"text": "Confirmed: the corrosion-under-insulation finding on E-1104A is correctly rated Major, matching the report's own Conclusion cross-reference. Stripping the cladding and running a UT scan before restart is the right call — I'd add a photo record of the exposed run before re-cladding."
+			}
+		]
+	},
+	{
 		"match": null,
 		"blocks": [
 			{

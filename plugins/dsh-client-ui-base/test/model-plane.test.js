@@ -301,6 +301,45 @@ test("the shipped 'key findings' replay entry walks create_goal -> bf_report_fin
 	assert.ok(chunks3.some((c) => c.type === "text-delta"));
 });
 
+test("the shipped 'helper agent' replay entry delegates through a real subagent tool call, then reports it as running rather than blocking (Story 5.2)", async () => {
+	const provider = createModelProvider("replay");
+	const trigger = userText("Use a helper agent to double-check the corrosion finding on E-1104A while you draft the recommendation.");
+
+	const first = await collect(provider.answer({ messages: [trigger] }));
+	const delegateCall = first.find((c) => c.type === "tool-call");
+	assert.ok(delegateCall, "step zero must delegate through the real subagent tool, not answer inline");
+	assert.equal(delegateCall.name, "subagent");
+	const delegateArgs = JSON.parse(delegateCall.arguments);
+	assert.match(delegateArgs.description, /corrosion/i);
+	assert.match(delegateArgs.prompt, /corrosion-under-insulation finding recorded against E-1104A/);
+	assert.equal(delegateArgs.run_in_background, undefined, "omitted, not forced false — the continuable config's own default is what backgrounds this call (docs/deepseek-harness-notes.md)");
+
+	// One tool round trip completed: the harness's own continuable-mode result lands as the tool result.
+	const messages = [
+		trigger,
+		{ role: "assistant", content: [], source: { kind: "model", provider: "replay", model: "replay-authored-v1" } },
+		toolResult(delegateCall.id, { kind: "continuable", subagentId: "child-1" }),
+	];
+	const second = await collect(provider.answer({ messages }));
+	const textBlock = second.find((c) => c.type === "text");
+	assert.ok(textBlock, "the turn must close with a plain reply, not another tool call, once delegation is under way");
+	assert.match(textBlock.text, /running in the background/);
+});
+
+test("the shipped child replay entry answers the exact prompt the helper-agent tool call sends it (Story 5.2)", async () => {
+	// The child session's genuine trigger is the tool call's own `prompt` argument
+	// (dsh-subagent-in-process-driver hands it to the child as `source: { kind: "user" }`,
+	// which `isGenuineHumanMessage` accepts) — so this must match on that exact text,
+	// not a paraphrase that could silently drift from the parent's authored arguments.
+	const childPrompt =
+		"Double-check the corrosion-under-insulation finding recorded against E-1104A in the ingested inspection report: confirm the severity is Major and that the recommended action (strip cladding and UT scan before restart) is consistent with that severity. Reply in two sentences with your assessment.";
+	const chunks = await collect(createModelProvider("replay").answer({ messages: [userText(childPrompt)] }));
+	assert.equal(chunks.length, 1);
+	assert.equal(chunks[0].type, "text");
+	assert.match(chunks[0].text, /Major/);
+	assert.doesNotMatch(chunks[0].text, /authored replay response/, "must resolve to the authored child entry, not the match:null fallback");
+});
+
 test("createLlmAdapter satisfies the duck-typed registerAdapter contract without importing dsh-llm", async () => {
 	const stubProvider = {
 		async *answer() {
