@@ -70,8 +70,8 @@ development_status:
   4-5-clicking-a-finding-shows-the-crop-it-was-read-from: backlog
   epic-4-retrospective: optional
 
-  epic-5: backlog
-  5-1-the-agent-turns-a-scanned-report-into-key-findings: backlog
+  epic-5: in-progress
+  5-1-the-agent-turns-a-scanned-report-into-key-findings: done
   5-2-helper-agents-are-visible-while-they-work: backlog
   5-3-a-coding-task-runs-and-is-verified-in-the-sandbox: backlog
   5-4-the-approval-note-comes-out-as-a-signed-docx: backlog

@@ -9,6 +9,60 @@
 		]
 	},
 	{
+		"match": "key findings",
+		"steps": [
+			{
+				"blocks": [
+					{
+						"type": "text",
+						"text": "I'll turn the ingested inspection report into key findings. Setting up a goal to track this, then reading the report's OCR output before I say anything about its content."
+					},
+					{
+						"type": "tool-call",
+						"name": "create_goal",
+						"arguments": {
+							"objective": "Extract key findings, each with page-and-region provenance, from the ingested inspection report (sample-inspection-report.pdf)"
+						}
+					}
+				]
+			},
+			{
+				"blocks": [
+					{
+						"type": "tool-call",
+						"name": "bf_report_findings",
+						"arguments": {}
+					}
+				]
+			},
+			{
+				"blocks": [
+					{
+						"type": "text",
+						"text": "156 OCR lines came back across 2 pages. Two carry Major severity in Section 3 and are both named again in the Conclusion — those are the key findings:\n\n1. E-1104A — insulation cladding open at the channel end, corrosion under insulation suspected over a 1.2 m run. Major. Source: page 1, region left 560 top 2048 width 814 height 58. Recommended action: strip cladding and UT scan before restart.\n\n2. PSV-2207A — relief-valve test tag expired 04-2026, no current bench certificate held against this tag in the register. Major. Source: page 1, region left 560 top 2171 width 876 height 60. Recommended action: withdraw and bench test; fit spare.\n\nBoth are cross-referenced in the report's own Conclusion (page 2, region left 178 top 1342 width 2030 height 65): a non-conformance report is to be raised against PSV-2207A, which is operating outside its certification interval."
+					},
+					{
+						"type": "tool-call",
+						"name": "update_goal",
+						"arguments": {
+							"goal_id": "$GOAL_ID",
+							"revision": "$GOAL_REVISION",
+							"action": "complete"
+						}
+					}
+				]
+			},
+			{
+				"blocks": [
+					{
+						"type": "text",
+						"text": "Findings recorded against the ingested report; the goal is marked complete."
+					}
+				]
+			}
+		]
+	},
+	{
 		"match": null,
 		"blocks": [
 			{

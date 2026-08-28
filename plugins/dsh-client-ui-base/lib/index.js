@@ -39,6 +39,7 @@ import {
 	createCanaryTool,
 	DEFAULT_CANARY_TARGET,
 } from "./egress/canary.js";
+import { createReportFindingsTool } from "./findings/tool.js";
 import { createLlmAdapter } from "./model-plane/llm-adapter.js";
 import { createModelProvider } from "./model-plane/model-provider.js";
 import { loadFleet } from "./registry/loader.js";
@@ -287,6 +288,13 @@ export function apply(ctx, config) {
 	const canaryTarget = config?.canary?.target ?? DEFAULT_CANARY_TARGET;
 	ctx.inject(["tools"], (toolCtx) => {
 		toolCtx.effect(() => toolCtx.tools.register(createCanaryTool(canaryTarget)), "blind-flange: canary tool");
+	});
+
+	// Story 5.1: the report-findings tool. Registered unconditionally, like the
+	// canary above, so every preset's agent can read the ingested report's OCR
+	// findings without a per-preset cordis.patch.yml row.
+	ctx.inject(["tools"], (toolCtx) => {
+		toolCtx.effect(() => toolCtx.tools.register(createReportFindingsTool()), "blind-flange: report findings tool");
 	});
 	ctx.inject(["connection", "agents", "tools"], (canaryCtx) => {
 		canaryCtx.effect(() => {

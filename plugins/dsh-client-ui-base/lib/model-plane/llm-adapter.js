@@ -64,27 +64,57 @@ function fleetModels(provider) {
 
 /**
  * Streams one turn from `modelProvider`, translated into the harness's chunk
- * vocabulary. Block-start and block-end always come in a matching pair, even
- * on failure — `modelProvider.answer()` throwing after some text was already
- * emitted must not leave the block open when the terminal `error` finish
- * chunk lands.
+ * vocabulary. Consecutive `text` pieces accumulate into one streamed text
+ * block, closed by the next tool-call piece or end of stream; each
+ * `tool-call` piece (Story 5.1) is its own block, opened and closed
+ * immediately since a replayed call is never fragmentary. At most one block
+ * is ever open at a time, so block-start/block-end stay paired even when
+ * `modelProvider.answer()` throws mid-stream — the open text block, if any,
+ * is closed in the `catch` before the terminal `error` finish chunk. Finish
+ * reason is `tool-calls` whenever any tool-call block was emitted, `stop`
+ * otherwise (StreamChunk contract, `packages/llm/llm/src/types.ts`).
  * @param {import("./model-provider.js").ModelProvider} modelProvider
  * @param {{ messages: unknown[] }} options
  */
 async function* streamImpl(modelProvider, options) {
-	const index = 0;
-	let text = "";
-	yield { type: "block-start", index, blockType: "text" };
+	let index = -1;
+	let openTextIndex = -1;
+	let openText = "";
+	let sawToolCall = false;
 	try {
 		for await (const piece of modelProvider.answer({ messages: options.messages })) {
-			if (piece.type !== "text" || piece.text.length === 0) continue;
-			text += piece.text;
-			yield { type: "text-delta", index, text: piece.text };
+			if (piece.type === "text") {
+				if (piece.text.length === 0) continue;
+				if (openTextIndex === -1) {
+					index += 1;
+					openTextIndex = index;
+					yield { type: "block-start", index: openTextIndex, blockType: "text" };
+				}
+				openText += piece.text;
+				yield { type: "text-delta", index: openTextIndex, text: piece.text };
+				continue;
+			}
+			if (piece.type !== "tool-call") continue;
+			if (openTextIndex !== -1) {
+				yield { type: "block-end", index: openTextIndex, block: { type: "text", text: openText } };
+				openTextIndex = -1;
+				openText = "";
+			}
+			sawToolCall = true;
+			index += 1;
+			const toolIndex = index;
+			yield { type: "block-start", index: toolIndex, blockType: "tool-call" };
+			yield { type: "tool-call-delta", index: toolIndex, id: piece.id, name: piece.name, argumentsDelta: piece.arguments };
+			yield { type: "block-end", index: toolIndex, block: { type: "tool-call", id: piece.id, name: piece.name, arguments: piece.arguments } };
 		}
-		yield { type: "block-end", index, block: { type: "text", text } };
-		yield { type: "finish", reason: { kind: "stop" } };
+		if (openTextIndex !== -1) {
+			yield { type: "block-end", index: openTextIndex, block: { type: "text", text: openText } };
+		}
+		yield { type: "finish", reason: sawToolCall ? { kind: "tool-calls" } : { kind: "stop" } };
 	} catch (error) {
-		yield { type: "block-end", index, block: { type: "text", text } };
+		if (openTextIndex !== -1) {
+			yield { type: "block-end", index: openTextIndex, block: { type: "text", text: openText } };
+		}
 		yield {
 			type: "finish",
 			reason: { kind: "error", failure: { message: error instanceof Error ? error.message : String(error), code: "MODEL_PROVIDER_ERROR" } },

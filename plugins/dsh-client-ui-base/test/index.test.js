@@ -537,6 +537,14 @@ test("registers the canary as a real tool, not a private code path", () => {
 	assert.equal(typeof canary.execute, "function");
 });
 
+test("registers the report-findings tool (Story 5.1), unconditionally like the canary", () => {
+	const host = stubHostCtx();
+	apply(host.ctx);
+	const findingsTool = host.registeredTools.find((tool) => tool.name === "bf_report_findings");
+	assert.ok(findingsTool, "no report-findings tool registered");
+	assert.equal(typeof findingsTool.execute, "function");
+});
+
 test("registers the canary channel loopback-only", () => {
 	const host = stubHostCtx();
 	apply(host.ctx);
@@ -615,10 +623,11 @@ test("a profile with no tool registry still gets the egress denial waterfall", a
 	assert.equal(decision.kind, "deny");
 });
 
-test("a profile with no browser transport registers the tool but no canary channel", () => {
+test("a profile with no browser transport registers the tools but no canary channel", () => {
 	const host = stubHostCtx({ connection: false });
 	apply(host.ctx);
-	assert.equal(host.registeredTools.length, 1);
+	assert.ok(host.registeredTools.some((tool) => tool.name === "bf_canary"));
+	assert.ok(host.registeredTools.some((tool) => tool.name === "bf_report_findings"));
 	assert.deepEqual(host.rpcChannels, []);
 });
 
