@@ -893,6 +893,30 @@ So that provenance means page and region rather than a filename.
 
 The agent runs, helpers spawn visibly, code runs in the sandbox, and a real `.docx` comes out.
 
+### Most of this epic's UI already ships — read this before starting any story here
+
+Surveyed from the installed harness source on 28 Aug 2026, not from documentation. The panels
+these stories describe are **already mounted and active** in the web profile. What is switched
+off is the model-facing tools that drive them, and the harness itself switches them off
+(`patched by @deepseek-ai/dsh-web-app`) — **not** our Epic 1 sealing, which only ever disabled
+network-capable rows. Re-enabling a non-network tool undoes no Epic 1 acceptance criterion.
+
+| Story | Already active | Disabled — enable with a `cordis.patch.yml` row |
+|---|---|---|
+| 5.1 | `goal` (event-sourced goal state), `ui-goal` — GoalBar at `conversation.input.dock` and `conversation.chat.node` | `tool-goal` gives `create_goal`, `get_goal`, `update_goal` |
+| 5.2 | `jobs` (`ctx.jobs`), `ui-jobs` at `conversation.session.header.actions`, `ui-subagent` at `conversation.session.header.lineage` and `conversation.composer`, `subagent-spawn-in-process`, `subagent-fork-in-process` | `tool-jobs` gives `job_list`, `job_output`, `job_kill`; also `tool-subagent`, `tool-subagent-control` |
+| 5.3 | `sandbox` (local), `sandbox-policy`, `pwsh-sandbox` | `tool-pwsh`, and `tool-fs` if the task needs file access |
+| 5.4 | `ui-deliverables` at `conversation.chat.turnTail` | none |
+
+**The point of this table is that you should not build these panels.** Enable the tool row,
+drive it, and check the surface that already exists. Build only what the acceptance criteria ask
+for that nothing above provides.
+
+**Constraint that still binds (NFR6).** The harness is pinned at `0.1.1-rc.2` and we build
+against our own contracts. Enabling a shipped tool row is safe. Reaching into these packages'
+internals is not. Where a story depends on one of their behaviours, it must **degrade** rather
+than vanish if that behaviour changes — each story below says how.
+
 ### Story 5.1: The agent turns a scanned report into key findings
 
 As an operator,
@@ -909,6 +933,16 @@ So that I get findings rather than a conversation about findings.
 **Given** the completed run
 **When** the session log is read
 **Then** the turn flow is reconstructable from it — every tool call and result is recorded
+
+**Given** the multi-step plan the run works through
+**When** it is displayed
+**Then** it uses the shipped GoalBar, driven by `create_goal` and `update_goal`, rather than a
+plan surface we built
+**And** the plan advances because the agent called the tool, not on a timer (NFR8)
+
+> **Do not build a plan panel.** `goal` and `ui-goal` are already active; only `tool-goal` is
+> disabled. If the GoalBar cannot carry this, say so and fall back to naming the steps in the
+> response text — do not reimplement it.
 
 ### Story 5.2: Helper agents are visible while they work
 
@@ -927,6 +961,16 @@ So that I can see the harness doing something a chat box cannot show.
 **When** the gauge is observed
 **Then** it returns to its resting state
 
+**Given** the shipped `ui-jobs` and `ui-subagent` surfaces
+**When** this story starts
+**Then** they are checked against the criteria above **before** any gauge is written
+**And** if they already satisfy them, this story is enabling `tool-jobs`, `tool-subagent` and
+`tool-subagent-control` plus whatever framing is missing — not a new component
+
+> Both panels are mounted and active, reading live registry state from `session/jobs` frames and
+> the session lineage. A hand-built fan-out gauge beside them is two things showing the same
+> events, which is the mistake Story 1.4 already made once with the task-type picker.
+
 ### Story 5.3: A coding task runs and is verified in the sandbox
 
 As MRPL's evaluator reading their own checklist,
@@ -937,12 +981,37 @@ So that item three of the expected solution is demonstrably met.
 
 **Given** a coding task given to the workbench
 **When** it is executed
-**Then** it runs inside the harness sandbox via `ctx.sandbox` / `dsh-bash-sandbox`
+**Then** it runs inside the harness sandbox via `ctx.sandbox`
 **And** the run and its result are visible in the UI
+
+> On Windows the executor is **`pwsh-sandbox`**, not `dsh-bash-sandbox` — the bash row carries a
+> `disabled` expression that is true on win32, so it never loads on the build machine. Corrected
+> 28 Aug 2026 from the installed source.
 
 **Given** a task that fails
 **When** it is executed
 **Then** the failure is surfaced in the UI rather than swallowed
+
+**Given** the shell tool this story enables
+**When** it is used to attempt an outbound network call — `Invoke-WebRequest`, `curl`, a raw
+socket — from inside the sandbox
+**Then** the attempt is denied and recorded, exactly as the canary in Story 2.3 is
+**And** the egress monitor counts it
+
+> **This story opens a hole in Epic 2's claim and must close it.** The egress waterfall in
+> `plugins/dsh-client-ui-base/lib/index.js` denies by tool **name**, and that set holds only the
+> two shipped web tools. A shell call is named `pwsh`, so it passes straight through. The sandbox
+> does not save us either: `dsh-sandbox-local`'s Windows backend is an ACL restricted-token runner
+> using `workspaceWriteSid` and `tempWriteSid` — it confines **filesystem writes** and applies
+> **no network confinement at all**. Read from source on 28 Aug 2026, not inferred.
+>
+> Story 2.3's canary shipped before any shell existed, so it proved the seal against the two
+> declared network tools and nothing else. Enabling `tool-pwsh` without extending that proof
+> leaves a counted zero that is true and meaningless — the first thing an evaluator will try
+> after watching the canary is a download in the shell.
+>
+> A second canary that attempts egress *through the shell* and is denied is the stronger demo:
+> it proves the seal holds against the obvious bypass, not only against the declared one.
 
 ### Story 5.4: The approval note comes out as a signed .docx
 
@@ -966,6 +1035,20 @@ signature block, and a provenance footer with a content hash
 **When** it is inspected
 **Then** the document is generated by a real tool registered through `defineTool`, not
 pre-authored
+
+**Given** the produced `.docx`
+**When** the turn finishes
+**Then** it appears in the shipped produced-files row with its Open and Show-in-folder actions
+**And** its path is also reachable from the response text, so a change in the harness's card
+handling degrades the row rather than losing the file
+
+> `ui-deliverables` recognises a produced file by **render intent, not tool name** — its own
+> source says "a new mutation tool joins by declaring what it does". It lists a `diff` card, or a
+> `generic` card whose `kind` is `edit`, reading `locations[].path`. Return that shape from the
+> `.docx` tool and the clickable deliverable is free; no UI work belongs in this story.
+>
+> Writing the document is still ours — titleblock, reference number, cited clauses, signature
+> block and the provenance hash are FR12, and nothing in the harness produces them.
 
 ---
 
