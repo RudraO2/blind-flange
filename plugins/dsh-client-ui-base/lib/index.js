@@ -21,7 +21,9 @@
  *
  * Story 3.5 adds the router's classifier: an `agent/pre-step` listener runs
  * `router/classify.js` over each fresh request and appends the structured task
- * type to the session log.
+ * type to the session log. Story 3.6 extends that same listener to score the
+ * licence-checked fleet against the classified task type and append the routing
+ * decision (`router/routed`) alongside it.
  */
 
 import { readFileSync } from "node:fs";
@@ -29,7 +31,9 @@ import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { createLlmAdapter } from "./model-plane/llm-adapter.js";
 import { createModelProvider } from "./model-plane/model-provider.js";
+import { loadFleet } from "./registry/loader.js";
 import { classifyRequest, lastUserText } from "./router/classify.js";
+import { scoreFleet } from "./router/score.js";
 
 const FAVICON_PATH = "/blind-flange/favicon.svg";
 const FAVICON_SVG = readFileSync(join(dirname(fileURLToPath(import.meta.url)), "favicon.svg"));
@@ -96,24 +100,43 @@ const NETWORK_TOOL_NAMES = new Set(["web_search", "web_fetch"]);
 const CLASSIFIED_EVENT = "router/classified";
 
 /**
- * Classify the request entering a fresh turn and record the result on the
- * session log. Runs only on the first step of a turn — a tool-loop
- * continuation step is the same request, not a new one — and never throws into
- * the loop: a classification failure is logged and swallowed so the turn
- * proceeds.
+ * The session-log event the router's scorer writes (Story 3.6). Like
+ * {@link CLASSIFIED_EVENT} it is a plugin-owned event type carrying structured
+ * data — the per-member scores, the members excluded before scoring with the
+ * reason for each, and the selected member — that the routing chip (Story 3.7)
+ * renders. The same persistence read-path caveat as the classified event
+ * applies and does not bite Phase 0's fresh-session `replay` demo.
+ */
+const ROUTED_EVENT = "router/routed";
+
+/**
+ * Classify the request entering a fresh turn, score the licence-checked fleet
+ * against that task type, and record both on the session log. Runs only on the
+ * first step of a turn — a tool-loop continuation step is the same request, not
+ * a new one — and never throws into the loop: a classification or scoring
+ * failure is logged and swallowed so the turn proceeds. Scoring failing does
+ * not suppress the classification event that already landed.
  * @param {{ session: { append: (type: string, data: unknown) => unknown } }} agent
  * @param {number} turn
  * @param {number} step
  * @param {Array<{ role?: string, content?: unknown }>} messages - the messages entering this step.
  */
-function classifyAndRecord(agent, turn, step, messages) {
+function classifyAndRoute(agent, turn, step, messages) {
 	if (step !== 1) return;
+	let classification;
 	try {
 		const text = lastUserText(messages);
-		const classification = classifyRequest(text);
+		classification = classifyRequest(text);
 		agent.session.append(CLASSIFIED_EVENT, { turn, step, ...classification });
 	} catch (error) {
 		console.warn(`@blind-flange/dsh-client-ui-base: request not classified — ${error instanceof Error ? error.message : String(error)}`);
+		return;
+	}
+	try {
+		const routing = scoreFleet(classification.taskType, loadFleet().loaded);
+		agent.session.append(ROUTED_EVENT, { turn, step, ...routing });
+	} catch (error) {
+		console.warn(`@blind-flange/dsh-client-ui-base: fleet not scored — ${error instanceof Error ? error.message : String(error)}`);
 	}
 }
 
@@ -153,9 +176,10 @@ function describeTarget(rawArguments) {
  * defers until `webServer` exists, so a profile with no model seam still
  * gets the egress denial waterfall.
  *
- * The router's classifier (Story 3.5) is registered here too, on
- * `agent/pre-step` and unconditionally — every profile's session log carries
- * the task type it classified each request as.
+ * The router's classifier (Story 3.5) and scorer (Story 3.6) are registered
+ * here too, on `agent/pre-step` and unconditionally — every profile's session
+ * log carries the task type each request classified as and the fleet-scoring
+ * decision that followed.
  * @param ctx - host plugin context.
  * @param config - this row's resolved config; `modelPlane.provider` defaults to `"replay"`.
  */
@@ -170,15 +194,16 @@ export function apply(ctx, config) {
 		return next();
 	});
 
-	// The router's classifier (Story 3.5). Registered unconditionally, like the
-	// egress waterfall above — the classification belongs in every profile's
-	// session log, not only the one with a UI. It scores the incoming request
-	// into a task type and appends the structured result; it never rejects a
-	// step or rewrites its messages.
+	// The router's classifier (Story 3.5) and scorer (Story 3.6). Registered
+	// unconditionally, like the egress waterfall above — the decision belongs in
+	// every profile's session log, not only the one with a UI. It classifies the
+	// incoming request into a task type, scores the licence-checked fleet against
+	// it, and appends both structured results; it never rejects a step or
+	// rewrites its messages.
 	ctx.on("agent/pre-step", async ({ agent, turn, step }, next) => {
 		const decision = await next();
 		if (decision.kind === "enter") {
-			classifyAndRecord(agent, turn, step, decision.messages);
+			classifyAndRoute(agent, turn, step, decision.messages);
 		}
 		return decision;
 	});

@@ -4,7 +4,8 @@
  * extension points (`register`, `tapIndex`) rather than any harness file
  * edit, plus the egress denial waterfall (Story 2.1) registered on
  * `tools/pre-execute`, plus the model plane adapter registration (Story 3.1)
- * on `ctx.llm`, plus the router's classifier (Story 3.5) on `agent/pre-step`.
+ * on `ctx.llm`, plus the router's classifier (Story 3.5) and fleet scorer
+ * (Story 3.6) on `agent/pre-step`.
  *
  *     node --test plugins/dsh-client-ui-base/test/
  */
@@ -291,11 +292,61 @@ test("classifies the request entering a fresh turn and records it on the session
 	const decision = await host.preStepListener({ agent, turn: 1, step: 1 }, async () => ({ kind: "enter", messages }));
 
 	assert.deepEqual(decision, { kind: "enter", messages }, "the listener must pass the loop's decision through unchanged");
-	assert.equal(agent.events.length, 1);
+	assert.equal(agent.events.length, 2);
 	assert.equal(agent.events[0].type, "router/classified");
 	assert.equal(agent.events[0].data.taskType, "code");
 	assert.equal(agent.events[0].data.turn, 1);
 	assert.equal(typeof agent.events[0].data.scores.document, "number");
+});
+
+test("scores the licence-checked fleet against the classified task type and records the routing decision (Story 3.6)", async () => {
+	const host = stubHostCtx({ webServer: false });
+	apply(host.ctx);
+
+	const agent = stubAgent();
+	const messages = [{ role: "user", content: [{ type: "text", text: "Refactor this Python function and add unit tests" }] }];
+	await host.preStepListener({ agent, turn: 2, step: 1 }, async () => ({ kind: "enter", messages }));
+
+	const routed = agent.events.find((event) => event.type === "router/routed");
+	assert.ok(routed, "no router/routed event recorded");
+	assert.equal(routed.data.taskType, "code");
+	assert.equal(routed.data.turn, 2);
+	assert.equal(routed.data.selected, "Qwen/Qwen2.5-Coder-7B-Instruct");
+	assert.ok(Array.isArray(routed.data.scored) && routed.data.scored.length > 0);
+	assert.ok(routed.data.scored.every((entry) => typeof entry.score === "number"));
+	assert.ok(Array.isArray(routed.data.excluded));
+});
+
+test("a scoring failure is swallowed and does not suppress the classification already recorded", async () => {
+	const host = stubHostCtx({ webServer: false });
+	apply(host.ctx);
+	const originalWarn = console.warn;
+	const warnings = [];
+	console.warn = (...args) => warnings.push(args.join(" "));
+	try {
+		let call = 0;
+		const agent = {
+			events: [],
+			session: {
+				// first append (router/classified) succeeds, second (router/routed) throws
+				append: (type, data) => {
+					call += 1;
+					if (call === 2) throw new Error("session log unavailable");
+					agent.events.push({ type, data });
+					return { type, data };
+				},
+			},
+		};
+		const messages = [{ role: "user", content: [{ type: "text", text: "calculate the pressure drop" }] }];
+		const decision = await host.preStepListener({ agent, turn: 1, step: 1 }, async () => ({ kind: "enter", messages }));
+		assert.equal(decision.kind, "enter");
+		assert.equal(agent.events.length, 1);
+		assert.equal(agent.events[0].type, "router/classified");
+	} finally {
+		console.warn = originalWarn;
+	}
+	assert.equal(warnings.length, 1);
+	assert.match(warnings[0], /fleet not scored/);
 });
 
 test("does not re-classify a tool-loop continuation step", async () => {
