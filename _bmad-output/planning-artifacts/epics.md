@@ -1050,6 +1050,45 @@ handling degrades the row rather than losing the file
 > Writing the document is still ours — titleblock, reference number, cited clauses, signature
 > block and the provenance hash are FR12, and nothing in the harness produces them.
 
+### Story 5.5: The fan-out gauge feels alive while agents work — DEFERRED 28 Aug 2026
+
+> **Deferred, not cancelled.** Raised during Story 5.2's build: the shipped `ui-subagent`
+> lineage control satisfies that story's acceptance criteria (a real, event-driven count that
+> reaches a resting state), but it does so plainly — a settled child reads "not running" with
+> no motion, and nothing marks the moment a helper agent starts. The internal round scores
+> first impressions; a demo moment that is real but easy to miss is worth sharpening. Out of
+> Phase 0's four-day scope on its own merits, not because it is unimportant — revisit as a
+> polish pass once Epic 5's remaining stories are demonstrably working end to end.
+
+As an evaluator watching the demo,
+I want the moment a helper agent spawns to read as something happening, not just a number
+changing,
+So that the fan-out capability lands as a first impression, not a detail someone has to point
+out.
+
+**Acceptance Criteria:**
+
+**Given** the shipped `ui-subagent` lineage control from Story 5.2
+**When** this story starts
+**Then** it is treated as the surface to enhance, not replaced — the count and its data stay
+driven by real `ctx.subagents` events (NFR8); this story only changes how a state transition is
+presented
+
+**Given** a helper agent transitions from spawned to running, or from running to settled
+**When** that transition is shown
+**Then** it is carried by a real, tokenised motion (`ui-theme` transition/easing tokens, not a
+hand-authored keyframe or timing value) — restraint over decoration still applies (UX-DR2); this
+is a state transition getting weight, not a mascot or a spinner grafted on
+
+**Given** no helper agent is running
+**When** the control is observed
+**Then** it is visibly at rest — no looping or idle animation plays against a zero count (NFR8's
+"never an animation without a real event behind it" applies to the resting state too)
+
+> Do not build a second component beside `ui-subagent`. If the shipped control cannot carry a
+> transition without forking it, say so and stop — a hand-rolled duplicate showing the same
+> events is the Story 1.4 mistake this project has already made once.
+
 ---
 
 ## Epic 6: It runs on someone else's machine
