@@ -17,11 +17,14 @@
  *
  * Three trees, because the workbench is three trees:
  *
- *   - **The harness.** `~/.dsh/profiles/node_modules` and the profile's own
- *     `node_modules`. This is `@deepseek-ai/dsh` and everything it resolves,
- *     and it is the largest of the three by two orders of magnitude. NFR5
- *     forbids editing anything in it, which makes an unacceptable licence in
- *     here a fact to be disclosed, not a file to be patched.
+ *   - **The harness.** `@deepseek-ai/dsh` and everything it resolves, plus the
+ *     profile's own `node_modules`. The largest of the three by two orders of
+ *     magnitude. NFR5 forbids editing anything in it, which makes an
+ *     unacceptable licence in here a fact to be disclosed, not a file to be
+ *     patched. Its location is resolved rather than assumed — see
+ *     {@link harnessRoot}: a machine part-way through setup has it only under
+ *     the global npm root, and hard-coding one machine's layout is what made
+ *     this audit pass on the build laptop and fail on a collaborator's.
  *   - **Ours.** The root manifest and `plugins/dsh-client-ui-base`, both MIT
  *     and both dependency-free by design.
  *   - **The ingestion service.** Python, enumerated by
@@ -70,25 +73,63 @@ const REPORT_PATH = join(PROJECT_ROOT, "docs", "licence-audit.md");
 const POLICY_PATH = join(PROJECT_ROOT, "docs", "licence-policy.md");
 const CLAUDE_MD_PATH = join(PROJECT_ROOT, "CLAUDE.md");
 
+/** The harness home, honouring `DSH_HOME` exactly as `scripts/start.mjs` does. */
+const DSH_HOME = (process.env.DSH_HOME || "").trim() || join(homedir(), ".dsh");
+
+/**
+ * Where `@deepseek-ai/dsh` and the dependencies it carries actually live.
+ *
+ * Two places, and which one a machine has depends on how far through setup it
+ * is. The profile tree is populated once pnpm has resolved a profile; before
+ * that — on a clean machine that has only run `npm install -g` — the sole copy
+ * is under the global npm root. Both are checked because an audit that looked
+ * in one place and found nothing would report a clean tree it never read.
+ *
+ * Falls back to the profile path so a missing root is still *reported* rather
+ * than silently skipped when neither exists.
+ */
+function harnessRoot() {
+	const profileTree = join(DSH_HOME, "profiles", "node_modules");
+	if (existsSync(join(profileTree, "@deepseek-ai", "dsh"))) {
+		return { enumerate: profileTree, lib: join(profileTree, "@deepseek-ai", "dsh", "node_modules") };
+	}
+	// The global install, which is all a machine has until pnpm has resolved a
+	// profile. Scoped to the harness's own nested `node_modules` rather than
+	// the whole global root — that also holds pnpm and whatever else is
+	// installed globally, none of which this project ships or answers for.
+	// The `@deepseek-ai/dsh` package itself is then not enumerated in this
+	// shape; it is MIT, on the allow-list, and tabled in docs/licence-policy.md.
+	const globalRoot = spawnSync("npm", ["root", "-g"], { shell: true, encoding: "utf8" });
+	if (globalRoot.status === 0) {
+		const nested = join((globalRoot.stdout || "").trim(), "@deepseek-ai", "dsh", "node_modules");
+		if (existsSync(nested)) return { enumerate: nested, lib: nested };
+	}
+	// Neither exists. Return the profile path so the missing root is reported.
+	return { enumerate: profileTree, lib: join(profileTree, "@deepseek-ai", "dsh", "node_modules") };
+}
+
+const HARNESS = harnessRoot();
+
 /**
  * The npm trees, in the order the report lists them.
  *
- * `~/.dsh` is where the harness installs, so these paths are machine-local by
- * nature. A missing root is reported, not skipped silently: an audit that
- * quietly enumerated two of three trees would pass while proving nothing.
+ * The harness's own tree is machine-local by nature — it is wherever that
+ * machine installed it. A missing root is reported, not skipped silently: an
+ * audit that quietly enumerated two of three trees would pass while proving
+ * nothing.
  * @type {{ id: string, label: string, path: string, role: string }[]}
  */
 const NPM_ROOTS = [
 	{
 		id: "harness",
 		label: "DeepSeek Harness (the pinned runtime)",
-		path: join(homedir(), ".dsh", "profiles", "node_modules"),
+		path: HARNESS.enumerate,
 		role: "runtime",
 	},
 	{
 		id: "profile",
 		label: "The web profile's own dependencies",
-		path: join(homedir(), ".dsh", "profiles", "web", "node_modules"),
+		path: join(DSH_HOME, "profiles", "web", "node_modules"),
 		role: "runtime",
 	},
 	{
@@ -345,10 +386,48 @@ function collectNpm() {
 // The Python tree
 // ---------------------------------------------------------------------------
 
+/**
+ * The interpreters to try, best first.
+ *
+ * The ingestion service's own virtual environment wins when it exists, because
+ * that is the tree `npm run setup-ingestion` installs into and therefore the
+ * one whose licences are the ones that ship. A global interpreter is the
+ * fallback, which is what this project ran on before the venv existed.
+ */
+function pythonCandidates() {
+	const venv = join(PROJECT_ROOT, "services", "ingestion", ".venv");
+	const inVenv = [join(venv, "Scripts", "python.exe"), join(venv, "bin", "python")].filter((exe) => existsSync(exe));
+	return [...inVenv, "python", "python3", "py"];
+}
+
+/**
+ * Where the active interpreter keeps its packages.
+ *
+ * Evidence paths in `docs/licence-decisions.json` are written against
+ * `{site-packages}` rather than one machine's absolute path. The claim being
+ * checked is "this licence file exists in the tree that is actually
+ * installed" — which is only true if the audit looks at the tree that is
+ * actually installed, rather than at the one the person who wrote the
+ * decision happened to have. Hard-coding `.../Python313/Lib/site-packages`
+ * made the audit pass on one laptop and fail on every other.
+ * @returns {string | null}
+ */
+function sitePackages() {
+	for (const exe of pythonCandidates()) {
+		const run = spawnSync(exe, ["-c", "import sysconfig;print(sysconfig.get_paths()['purelib'])"], {
+			encoding: "utf8",
+		});
+		if (run.error || run.status !== 0) continue;
+		const path = (run.stdout || "").trim();
+		if (path) return path;
+	}
+	return null;
+}
+
 /** Run `scripts/licence_audit.py --json`. Returns null (with a stated reason) if Python is unreachable. */
 function collectPython() {
 	const script = join(PROJECT_ROOT, "scripts", "licence_audit.py");
-	for (const exe of ["python", "python3", "py"]) {
+	for (const exe of pythonCandidates()) {
 		const run = spawnSync(exe, [script, "--json"], { encoding: "utf8", maxBuffer: 32 * 1024 * 1024 });
 		if (run.error || run.status !== 0) continue;
 		try {
@@ -429,29 +508,63 @@ function readDecisions() {
  * two trees that live outside the repo — the harness under `~/.dsh` and Python's
  * site-packages.
  *
- * Those `~` paths are machine-local, and an earlier version of this function
- * treated a missing one as merely unverifiable rather than as a failure. That
- * carve-out was exactly backwards: five of the seven evidence-bearing decisions
- * have only `~` paths, and they are the copyleft disclosures the whole claim
- * rests on. An audit that cannot check the evidence for libvips and FFmpeg
- * should not print that the evidence checks out. If a path is wrong for the
- * machine the audit is running on, that is worth failing over — the evidence has
- * to be checkable where the claim is made.
+ * Those off-repo paths are machine-local, and an earlier version of this
+ * function treated a missing one as merely unverifiable rather than as a
+ * failure. That carve-out was exactly backwards: most of the evidence-bearing
+ * decisions have only off-repo paths, and they are the copyleft disclosures the
+ * whole claim rests on. An audit that cannot check the evidence for libvips and
+ * FFmpeg should not print that the evidence checks out.
+ *
+ * Two prefixes are expanded rather than taken literally, so that "machine-local"
+ * does not mean "one particular machine":
+ *
+ *   - `{site-packages}` — wherever the active interpreter actually keeps its
+ *     packages, the ingestion service's own `.venv` first. Before this, these
+ *     were written as `~/AppData/Local/Programs/Python/Python313/Lib/...`,
+ *     which is not a fact about this project — it is a fact about one laptop,
+ *     and it failed the audit on every other one, including a collaborator's.
+ *   - `{harness}` — wherever `@deepseek-ai/dsh` is actually installed on this
+ *     machine: the profile tree once pnpm has resolved a profile, the global
+ *     npm root before that. A clean machine has only the second, which is why
+ *     this is resolved rather than written down.
+ *   - `{dsh-home}` — the harness home, honouring `DSH_HOME` exactly as
+ *     `scripts/start.mjs` does.
+ *
+ * A missing path still fails. The point is not to be lenient; it is to check
+ * the tree that is genuinely installed here.
  * @param {Decision[]} decisions
  */
 function checkEvidence(decisions) {
 	const problems = [];
+	const packages = sitePackages();
+	const dshHome = (process.env.DSH_HOME || "").trim() || join(homedir(), ".dsh");
 	for (const decision of decisions) {
 		for (const path of decision.evidence ?? []) {
-			const absolute = path.startsWith("~")
-				? join(homedir(), path.slice(1).replace(/^[/\\]/, ""))
-				: resolve(PROJECT_ROOT, path);
-			if (!existsSync(absolute)) {
+			let absolute;
+			let unresolvable = null;
+			if (path.startsWith("{site-packages}")) {
+				if (packages === null) {
+					unresolvable = "no working `python` on PATH, so site-packages could not be located";
+					absolute = path;
+				} else {
+					absolute = join(packages, path.slice("{site-packages}".length).replace(/^[/\\]/, ""));
+				}
+			} else if (path.startsWith("{harness}")) {
+				absolute = join(HARNESS.lib, path.slice("{harness}".length).replace(/^[/\\]/, ""));
+			} else if (path.startsWith("{dsh-home}")) {
+				absolute = join(dshHome, path.slice("{dsh-home}".length).replace(/^[/\\]/, ""));
+			} else if (path.startsWith("~")) {
+				absolute = join(homedir(), path.slice(1).replace(/^[/\\]/, ""));
+			} else {
+				absolute = resolve(PROJECT_ROOT, path);
+			}
+			if (unresolvable !== null || !existsSync(absolute)) {
 				problems.push({
 					component: decision.component ?? decision.licence,
 					path,
 					absolute,
-					offRepo: path.startsWith("~"),
+					offRepo: !path.startsWith(".") && !existsSync(resolve(PROJECT_ROOT, path)),
+					why: unresolvable,
 				});
 			}
 		}

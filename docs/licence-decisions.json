@@ -20,8 +20,12 @@
     "  rejected     Must not appear in the tree at all. The audit fails if it does.",
     "  open         No decision has been taken. The audit fails. This is not a status a story ships in.",
     "",
-    "`evidence` paths are project-relative, or `~`-prefixed for the two trees that live outside the",
-    "repo (the harness under ~/.dsh, and Python's site-packages). The audit checks every one exists.",
+    "`evidence` paths are project-relative, or carry a placeholder for one of the two trees that live",
+    "outside the repo: `{harness}` for wherever @deepseek-ai/dsh is installed (the profile tree, or the",
+    "global npm root on a machine that has only run `npm install -g`), and `{site-packages}` for the",
+    "active Python interpreter, the ingestion service's own .venv first. The audit expands both against",
+    "the machine it runs on and checks every path exists. These were absolute paths on one developer's",
+    "laptop until 28 Aug 2026, which made the audit pass there and fail on every other machine.",
     "",
     "`resolved_by_reading` is separate: those are not decisions, they are free-text licence strings",
     "resolved to an SPDX id by reading the licence text at the pinned version, which is the standard",
@@ -117,8 +121,8 @@
       "recorded": "2026-08-28",
       "reason": "Measured loaded on 28 August 2026: the running workbench process carried sharp-win32-x64-0.35.4.node, libvips-cpp-8.18.6.dll and libvips-42.dll. So it is genuinely linked, not merely present on disk. The obvious fix was tried and reverted: a `disabled: true` row for attachment-local makes the workbench fail to boot, because it is the sole provider of the `attachments` service and dsh-host-apiproxy — the API gateway carrying sessions, workspaces, presets and settings — requires it. No sharp-free attachment provider ships and NFR5 forbids editing harness source. LGPL-3.0 permits redistributing an unmodified library with notice and the ability to relink, which we satisfy: compliant, not permissive, and named on the attestation report.",
       "evidence": [
-        "~/.dsh/profiles/node_modules/@deepseek-ai/dsh/node_modules/@img/sharp-win32-x64/package.json",
-        "~/.dsh/profiles/node_modules/@deepseek-ai/dsh/node_modules/@img/sharp-wasm32/package.json"
+        "{harness}/@img/sharp-win32-x64/package.json",
+        "{harness}/@img/sharp-wasm32/package.json"
       ],
       "adr": "ADR-0006"
     },
@@ -130,8 +134,8 @@
       "recorded": "2026-08-28",
       "reason": "Measured not loaded. A full OCR pass over the Story 4.1 fixture returns 97 regions at 99.68 mean confidence with cv2.pyd loaded and opencv_videoio_ffmpeg4130_64.dll never entering the process — it is a lazily-loaded video-I/O plugin and this service never opens a video. Redistributed but not linked: weaker than the shapely fix, which removed the package outright, and stronger than disclosure alone.",
       "evidence": [
-        "~/AppData/Local/Programs/Python/Python313/Lib/site-packages/opencv_python-4.13.0.92.dist-info/LICENSE-3RD-PARTY.txt",
-        "~/AppData/Local/Programs/Python/Python313/Lib/site-packages/cv2/opencv_videoio_ffmpeg4130_64.dll"
+        "{site-packages}/opencv_python-4.13.0.92.dist-info/LICENSE-3RD-PARTY.txt",
+        "{site-packages}/cv2/opencv_videoio_ffmpeg4130_64.dll"
       ],
       "adr": "ADR-0006"
     },
@@ -143,7 +147,7 @@
       "recorded": "2026-08-28",
       "reason": "Header-only linear algebra compiled into onnxruntime.dll and named in its ThirdPartyNotices.txt. Genuinely linked, so no not-loaded argument is available. MPL-2.0's obligations are file-level and attach only to modified MPL files; we modify none, and Eigen chose MPL-2.0 precisely because that scope makes it behave permissively for a header library.",
       "evidence": [
-        "~/AppData/Local/Programs/Python/Python313/Lib/site-packages/onnxruntime/ThirdPartyNotices.txt"
+        "{site-packages}/onnxruntime/ThirdPartyNotices.txt"
       ],
       "adr": "ADR-0006"
     },
@@ -155,7 +159,7 @@
       "recorded": "2026-08-28",
       "reason": "reportlab is the fixture generator's dependency and the generator is build-time only: its output, a PNG and a PDF, is committed and the tool is not run on the box. It draws with the PDF base-14 font names, which are metric-only and substituted at raster time, so no font file is embedded in any output.",
       "evidence": [
-        "~/AppData/Local/Programs/Python/Python313/Lib/site-packages/reportlab/fonts/DarkGarden-copying-gpl.txt",
+        "{site-packages}/reportlab/fonts/DarkGarden-copying-gpl.txt",
         "services/ingestion/fixtures/generate_sample_report.py"
       ],
       "adr": "ADR-0006"
@@ -168,7 +172,7 @@
       "recorded": "2026-08-28",
       "reason": "libpng, LibTIFF, zlib and public-domain dedications inside pypdfium2's pdfium.dll. Admitted by ADR-0006's rule — permissive, no copyleft, no cap, no field-of-use restriction — but it cannot go on the enumerated set, because LicenseRef-* has no SPDX identity to enumerate. So it carries a per-component decision instead.",
       "evidence": [
-        "~/AppData/Local/Programs/Python/Python313/Lib/site-packages/pypdfium2-4.30.0.dist-info/LicenseRef-PdfiumThirdParty.txt"
+        "{site-packages}/pypdfium2-4.30.0.dist-info/LicenseRef-PdfiumThirdParty.txt"
       ],
       "adr": "ADR-0006"
     },
@@ -244,7 +248,7 @@
       "recorded": "2026-08-28",
       "reason": "Covers `pypdfium2` itself, whose declared expression is `(Apache-2.0 OR BSD-3-Clause) AND LicenseRef-PdfiumThirdParty` — the dual-licensed half is a choice we take, and this half is the vendored PDFium third-party set. Permissive with no disclosure obligation, admitted by ADR-0006's rule, and unable to go on the enumerated set because a LicenseRef-* has no SPDX identity to enumerate.",
       "evidence": [
-        "~/AppData/Local/Programs/Python/Python313/Lib/site-packages/pypdfium2-4.30.0.dist-info/LicenseRef-PdfiumThirdParty.txt"
+        "{site-packages}/pypdfium2-4.30.0.dist-info/LicenseRef-PdfiumThirdParty.txt"
       ]
     },
     {

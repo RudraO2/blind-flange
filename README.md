@@ -18,7 +18,10 @@ Two prerequisites, both checked for you before anything is installed:
 | Node.js | 22.15.0 or newer | <https://nodejs.org> — `npm` comes with it |
 | pnpm | 10.11.0 or newer | `npm install -g pnpm` |
 
-Then, from a clean clone, in the repository root:
+Then, from a clean clone — **on Windows, double-click `run.bat`**. It installs pnpm if it is
+missing, sets everything up, and starts the workbench. Nothing else to read.
+
+From a terminal, on any platform, in the repository root:
 
 ```sh
 npm start
@@ -28,6 +31,10 @@ That is the whole command. It installs the pinned harness if this machine does n
 it, points a harness profile at this checkout, writes the profile's configuration from the
 tracked copies under `profile/`, and opens Blind Flange at <http://127.0.0.1:3080>.
 
+**If anything looks wrong, run `npm run doctor`** (or `run.bat check`). It checks the toolchain,
+the profile wiring, the seal, the tests and the licence audit, and every failure it reports says
+what to run next.
+
 Stop it with Ctrl+C. Run `npm start` again any time — every step is idempotent, and it is also
 how you pick up a change after editing anything under `profile/` or `plugins/`.
 
@@ -36,8 +43,28 @@ npm run setup                 # do everything except start the app
 npm start -- --no-open        # start without opening a browser
 npm start -- --port 3081      # any other flag is passed through to the harness
 npm test                      # the plugin package's own tests
+npm run doctor                # check this install and say what, if anything, is wrong
 npm run record-demo           # record the three demo beats from a running workbench
+npm run setup-ingestion       # optional: install the Python OCR service (see below)
+npm run ingestion             # optional: run it
 ```
+
+## What actually runs, and what is replayed
+
+Worth being straight about before you judge what you are looking at.
+
+**Real.** The egress seal, the canary and the audit log. The router — it genuinely classifies
+each request and scores the fleet. The sandbox: a coding task really executes. The approval
+note is really written to disk as a `.docx`. The OCR is real PP-OCRv6 inference on the scanned
+report.
+
+**Replayed.** The agent's own prose. Phase 0 answers from the `replay` provider —
+stored responses, disclosed on screen as *Replay — authored responses* the entire time. There
+is no local inference yet: `model-plane/model-provider.js` declares `local` and `remote` and
+both throw, by design, so selecting one later is a config change rather than a rewrite. **No
+model weights are downloaded by anything here, and a GPU changes nothing yet.**
+
+That split is deliberate and it is on screen, never hidden. See ADR-0001.
 
 ## What you should see
 
@@ -82,7 +109,10 @@ the active provider is named on screen at all times.
 
 | Path | What it is |
 |---|---|
+| `run.bat` | The front door on Windows. Double-click it. `run.bat check` / `setup` / `ingestion` for the other paths |
 | `scripts/start.mjs` | The start command. Node builtins only — no dependencies |
+| `scripts/doctor.mjs` | `npm run doctor` — checks the toolchain, the wiring, the seal, the tests and the licence audit |
+| `scripts/setup-ingestion.mjs` | `npm run setup-ingestion` — the optional Python OCR service, in its own virtual environment |
 | `scripts/record-demo.mjs` | `npm run record-demo` — drives a running workbench through the three demo beats and records them. Needs `ffmpeg` on `PATH` |
 | `videos/recorded-offline-run/` | The recording itself, and what it shows second by second |
 | `profile/` | The harness profile's configuration, tracked. The source of truth for what `npm start` writes |
@@ -97,7 +127,29 @@ Nothing under the harness's own installation is ever edited. Every change Blind 
 a profile patch row or an out-of-tree plugin, which is why an operator's own IT department can
 audit it and why removing it is a config edit rather than a rebuild.
 
+## The ingestion service (optional)
+
+The Python OCR service that turns a scanned report into text with regions. **You do not need it
+to run the demo** — the workbench reads a committed capture of a real response the service
+produced (`plugins/dsh-client-ui-base/lib/findings/sample-report-findings.json`), because the
+two are separate trees and reaching across them at runtime would be a lie about the seam.
+
+Install it if you want to see that capture reproduced on your own machine:
+
+```sh
+npm run setup-ingestion       # needs Python 3.11+ on PATH
+```
+
+It builds a virtual environment under `services/ingestion/.venv`, installs the pinned
+dependencies, and runs the service's own tests. It also **uninstalls `shapely`**, which is not
+housekeeping: RapidOCR pulls it in, its wheel bundles the LGPL-2.1 GEOS libraries, and `ocr.py`
+supplies the two properties RapidOCR actually uses instead. A plain `pip install -r
+requirements.txt` leaves the real package on disk and quietly breaks the licence claim, so the
+installer removes it and `npm run doctor` fails if it ever comes back.
+
 ## If it does not start
+
+**Run `npm run doctor` first** — it names the problem and what to run. Otherwise:
 
 - **`pnpm was not found on PATH`** — `npm install -g pnpm`, then run `npm start` again.
 - **The app starts but panels are missing.** The profile's `link:` points at an absolute path.

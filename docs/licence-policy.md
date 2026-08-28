@@ -76,9 +76,13 @@ Saying "we only use permissive licences" proves nothing. Three mechanisms make i
    because it is what every session loads as authority, and ADR-0006 initially updated the
    code and this file while leaving it stating the superseded four names.
 
-   The evidence check has no carve-out. Paths under `~/.dsh` and site-packages are
-   machine-local, and a missing one still fails — five of the seven evidence-bearing
-   decisions have only such paths, and they are the copyleft disclosures the claim rests on.
+   The evidence check has no carve-out. Most evidence lives outside the repo — in the
+   harness home and in Python's site-packages — and a missing path still fails, because
+   those paths carry the copyleft disclosures the whole claim rests on. They are written
+   as `{dsh-home}` and `{site-packages}` and expanded against the machine the audit runs
+   on, the ingestion service's own `.venv` first. Until 28 August 2026 they were one
+   laptop's absolute paths, which made the audit pass there and fail on every other
+   machine — including a collaborator's, where the whole point is that they can check it.
 
 ## Verified so far
 
