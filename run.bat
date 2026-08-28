@@ -120,5 +120,21 @@ echo   Prefer an ordinary browser tab? Run:  run.bat windowed
 echo.
 
 call npm run kiosk
+set "EXITCODE=%errorlevel%"
+
+if not "%EXITCODE%"=="0" (
+  echo.
+  echo   ------------------------------------------------------------------
+  echo   The workbench stopped with an error. The reason is printed above.
+  echo.
+  echo   The usual one is that it is ALREADY RUNNING - open
+  echo   http://127.0.0.1:3080 and check before starting another copy.
+  echo.
+  echo   `run.bat check` re-checks the whole install and names what is wrong.
+  echo   ------------------------------------------------------------------
+  echo.
+  pause
+)
 
 endlocal
+exit /b %EXITCODE%
