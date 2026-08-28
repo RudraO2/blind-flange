@@ -5,17 +5,21 @@
  * edit, plus the egress denial waterfall (Story 2.1) registered on
  * `tools/pre-execute`, plus the model plane adapter registration (Story 3.1)
  * on `ctx.llm`, plus the router's classifier (Story 3.5) and fleet scorer
- * (Story 3.6) on `agent/pre-step`.
+ * (Story 3.6) on `agent/pre-step`, plus registering our session event types
+ * into the harness's persistence vocabulary at mount (Story 3.9).
  *
  *     node --test plugins/dsh-client-ui-base/test/
  */
 
 import assert from "node:assert/strict";
-import { readFileSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
+import { createRequire } from "node:module";
+import { homedir } from "node:os";
 import { dirname, join } from "node:path";
 import test from "node:test";
 import { fileURLToPath } from "node:url";
 import { apply, inject } from "../lib/index.js";
+import { OUR_SESSION_EVENT_TYPES } from "../lib/session-events/known-types.js";
 
 const packageDir = dirname(dirname(fileURLToPath(import.meta.url)));
 
@@ -142,6 +146,24 @@ test("gates nothing on a service, so every profile that mounts it is sealed", ()
 	// `apply` never runs. Naming `webServer` here would leave the headless
 	// profile — which has none — with no egress denial at all.
 	assert.deepEqual(inject, []);
+});
+
+test("apply() registers our session event types into the real installed harness's vocabulary (Story 3.9)", (t) => {
+	const packageJsonPath = join(homedir(), ".dsh", "profiles", "node_modules", "@deepseek-ai", "dsh-session", "package.json");
+	if (!existsSync(packageJsonPath)) {
+		t.skip("no @deepseek-ai/dsh-session installed under ~/.dsh/profiles on this machine");
+		return;
+	}
+	const requireFromProfile = createRequire(packageJsonPath);
+	const dshSession = requireFromProfile("@deepseek-ai/dsh-session");
+	const stub = stubHostCtx({ webServer: false });
+	apply(stub.ctx);
+	for (const type of OUR_SESSION_EVENT_TYPES) {
+		assert.ok(
+			dshSession.KNOWN_SESSION_EVENT_TYPES.has(type),
+			`expected apply() to have registered ${type} into the harness's KNOWN_SESSION_EVENT_TYPES`,
+		);
+	}
 });
 
 test("registers the egress denial waterfall in a profile with no web server", () => {

@@ -38,6 +38,11 @@
  * Story 5.4 adds the approval-note tool (`deliverables/tool.js`): a real
  * `.docx` written to disk from a completed set of findings, registered
  * unconditionally like the canary and the report-findings tool.
+ *
+ * Story 3.9 registers our three plugin-owned session event types into the
+ * harness's persistence read-path vocabulary at mount
+ * (`session-events/known-types.js`), so a stored session containing them
+ * still opens instead of failing with `SessionFormatUnsupportedError`.
  */
 
 import { readFileSync } from "node:fs";
@@ -57,6 +62,7 @@ import { createModelProvider } from "./model-plane/model-provider.js";
 import { loadFleet } from "./registry/loader.js";
 import { classifyRequest, lastUserText } from "./router/classify.js";
 import { scoreFleet } from "./router/score.js";
+import { registerKnownSessionEventTypes } from "./session-events/known-types.js";
 
 const FAVICON_PATH = "/blind-flange/favicon.svg";
 const FAVICON_SVG = readFileSync(join(dirname(fileURLToPath(import.meta.url)), "favicon.svg"));
@@ -153,12 +159,12 @@ const NETWORK_PWSH_PATTERN =
  * a literal (FR15), and the canary's increment (Story 2.3) is one more of them.
  *
  * A plugin-owned event type, like the router's {@link CLASSIFIED_EVENT} and
- * {@link ROUTED_EVENT}, and it carries the same persistence read-path caveat:
- * `Session.append` gives no way to mark an event `ignorable`, so a stored log
- * containing this event needs the downstream event-type registration the
- * harness's `known-event-types` note defers "until such a consumer exists".
- * That does not bite Phase 0, where the demo runs on `replay` and sessions
- * are created fresh, not resumed from disk.
+ * {@link ROUTED_EVENT}. `Session.append` gives no way to mark an event
+ * `ignorable`, so a stored log containing this event needs the downstream
+ * event-type registration the harness's `known-event-types` note defers
+ * "until such a consumer exists" — Story 3.9 (`session-events/known-types.js`)
+ * is that registration, added at mount so a reopened session still carries
+ * this event.
  */
 const EGRESS_DENIED_EVENT = "egress/denied";
 
@@ -166,12 +172,10 @@ const EGRESS_DENIED_EVENT = "egress/denied";
  * The session-log event the router's classifier writes (Story 3.5). It is a
  * plugin-owned event type: the harness's live log accepts it, and it carries
  * the classification as structured data a panel renders (the routing chip,
- * Story 3.7) rather than as prose. The harness's persistence *read* path does
- * not yet know downstream event types — reloading a stored log that contains
- * this event needs the registration surface its `known-event-types` note says
- * is "deferred until such a consumer exists" — which does not bite Phase 0,
- * where the demo runs on `replay` and sessions are created fresh, not resumed
- * from disk.
+ * Story 3.7) rather than as prose. The harness's persistence *read* path did
+ * not know this downstream event type until Story 3.9
+ * (`session-events/known-types.js`) registered it at mount — before that fix,
+ * reloading a stored log that contained this event failed outright.
  */
 const CLASSIFIED_EVENT = "router/classified";
 
@@ -180,8 +184,8 @@ const CLASSIFIED_EVENT = "router/classified";
  * {@link CLASSIFIED_EVENT} it is a plugin-owned event type carrying structured
  * data — the per-member scores, the members excluded before scoring with the
  * reason for each, and the selected member — that the routing chip (Story 3.7)
- * renders. The same persistence read-path caveat as the classified event
- * applies and does not bite Phase 0's fresh-session `replay` demo.
+ * renders. The same persistence read-path registration Story 3.9 gives
+ * {@link CLASSIFIED_EVENT} covers this event too.
  */
 const ROUTED_EVENT = "router/routed";
 
@@ -303,6 +307,12 @@ function pwshCommandText(toolArguments) {
  * @param config - this row's resolved config; `modelPlane.provider` defaults to `"replay"`.
  */
 export function apply(ctx, config) {
+	// Story 3.9: register our three plugin-owned event types into the harness's
+	// persistence read-path vocabulary before anything else — unconditional and
+	// first, like the egress waterfall below, so every profile's stored sessions
+	// stay reopenable regardless of what else this mount does.
+	registerKnownSessionEventTypes();
+
 	ctx.on("tools/pre-execute", (exec, next) => {
 		if (NETWORK_TOOL_NAMES.has(exec.name)) {
 			const target = describeTarget(exec.arguments);
