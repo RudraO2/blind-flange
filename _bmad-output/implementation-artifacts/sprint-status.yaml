@@ -44,11 +44,11 @@ development_status:
   1-5-our-mark-our-tab-title-our-favicon: done
   epic-1-retrospective: optional
 
-  epic-2: in-progress
+  epic-2: done
   2-1-outbound-attempts-are-denied-and-recorded: done
   2-2-the-egress-monitor-shows-a-counted-zero: done
   2-3-the-canary-proves-the-zero-is-enforced: done
-  2-4-the-audit-log-can-be-read-on-screen: backlog
+  2-4-the-audit-log-can-be-read-on-screen: done
   epic-2-retrospective: optional
 
   epic-3: done

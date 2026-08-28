@@ -78,6 +78,7 @@ const healthyHostModules = {
 	"react/jsx-runtime": healthyJsxRuntime,
 	react: {
 		useEffect: () => {},
+		useRef: (initial) => ({ current: initial }),
 		useState: (initial) => [initial, () => {}],
 		useSyncExternalStore: (_subscribe, getSnapshot) => getSnapshot(),
 	},
@@ -566,6 +567,25 @@ test("registers the bf-egress conversation view and the egress/denied event Defi
 	assert.equal(node.data.tool, "web_fetch");
 });
 
+test("Story 2.4: the denial Definition keeps the log's own timestamp and sequence number", () => {
+	const { exports } = loadClientHalf((specifier) => healthyHostModules[specifier]);
+	const { ctx, conversationEvents } = stubSlots();
+	exports.apply(ctx);
+	const def = conversationEvents.find((d) => d.kind === "bf-egress");
+	// The harness stamps `time` (unix epoch ms) and `seq` on the event envelope;
+	// the audit line reads those rather than taking a clock reading at render.
+	const state = def.start(undefined, {
+		event: { type: "egress/denied", seq: 7, time: 1787918400000, data: { tool: "bf_canary", target: "https://example.com/" } },
+	});
+	assert.equal(state.tool, "bf_canary");
+	assert.equal(state.target, "https://example.com/");
+	assert.equal(state.time, 1787918400000);
+	assert.equal(state.seq, 7);
+	// A record with no envelope time is reported as missing, never invented.
+	const undated = def.start(undefined, { event: { type: "egress/denied", seq: 8, data: { tool: "web_fetch", target: "a" } } });
+	assert.equal(undated.time, null);
+});
+
 test("the bf-egress view builder counts denial nodes — the zero is a count, not a literal", () => {
 	const { exports } = loadClientHalf((specifier) => healthyHostModules[specifier]);
 	const { ctx, conversationViews } = stubSlots();
@@ -586,6 +606,34 @@ test("the bf-egress view builder counts denial nodes — the zero is a count, no
 	// A fresh denial arriving as an upsert increments; a replayed key does not double-count.
 	assert.equal(builder.apply({ upserts: [{ key: "12", anchorSeq: 12, data: { tool: "web_fetch", target: "c" } }] }).count, 3);
 	assert.equal(builder.apply({ upserts: [{ key: "12", anchorSeq: 12, data: { tool: "web_fetch", target: "c" } }] }).count, 3);
+});
+
+test("Story 2.4: the bf-egress view lists denials in the order the log wrote them", () => {
+	const { exports } = loadClientHalf((specifier) => healthyHostModules[specifier]);
+	const { ctx, conversationViews } = stubSlots();
+	exports.apply(ctx);
+	const builder = conversationViews.find((v) => v.target === "bf-egress").create();
+	// Compared by length and by joined seq below, not with deepEqual: the browser
+	// half runs in a `vm` realm, so its arrays fail a strict deep-equality check
+	// against arrays built here however identical their contents.
+	assert.equal(builder.empty.entries.length, 0);
+	// Delivered out of order; ordered by the log's sequence number, oldest first.
+	const listed = builder.replace({
+		nodes: [
+			{ key: "9", anchorSeq: 9, data: { tool: "bf_canary", target: "https://example.com/", time: 1787918460000, seq: 9 } },
+			{ key: "3", anchorSeq: 3, data: { tool: "web_search", target: "MRPL", time: 1787918400000, seq: 3 } },
+		],
+	});
+	assert.equal(listed.entries.map((entry) => entry.seq).join(","), "3,9");
+	assert.equal(listed.entries[0].tool, "web_search");
+	assert.equal(listed.entries[0].time, 1787918400000);
+	assert.equal(listed.count, listed.entries.length);
+	// A later denial lands at the end of the list without a restart or a reload.
+	const after = builder.apply({
+		upserts: [{ key: "14", anchorSeq: 14, data: { tool: "web_fetch", target: "https://mrpl.example/x", time: 1787918520000, seq: 14 } }],
+	});
+	assert.equal(after.entries.map((entry) => entry.seq).join(","), "3,9,14");
+	assert.equal(after.latest.target, "https://mrpl.example/x");
 });
 
 test("the egress chip reads a counted zero and a green dot with no attempts", () => {
@@ -619,7 +667,11 @@ test("the egress chip turns red and names the count once something is denied", (
 test("the egress panel is hidden until the chip opens it, then shows the counted state", () => {
 	const { exports } = loadClientHalf((specifier) => healthyHostModules[specifier]);
 	const { ctx, registered } = stubSlots({
-		sessions: stubEgressSessions({ count: 1, latest: { tool: "web_search", target: "MRPL" } }),
+		sessions: stubEgressSessions({
+			count: 1,
+			entries: [{ tool: "web_search", target: "MRPL", time: 1787918400000, seq: 3 }],
+			latest: { tool: "web_search", target: "MRPL", time: 1787918400000, seq: 3 },
+		}),
 	});
 	exports.apply(ctx);
 	const panel = registered.find((call) => call.options.id === "bf-egress-panel");
@@ -644,13 +696,130 @@ test("the egress panel is hidden until the chip opens it, then shows the counted
 
 test("the egress panel says the zero is counted, not printed, when nothing has been denied", () => {
 	const { exports } = loadClientHalf((specifier) => healthyHostModules[specifier]);
-	const { ctx, registered } = stubSlots({ sessions: stubEgressSessions({ count: 0, latest: null }) });
+	const { ctx, registered } = stubSlots({ sessions: stubEgressSessions({ count: 0, entries: [], latest: null }) });
 	exports.apply(ctx);
 	const panel = registered.find((call) => call.options.id === "bf-egress-panel");
 	const chip = registered.find((call) => call.options.id === "bf-egress-chip");
 	chip.component({ sessionId: "s-1" }).props.onClick();
 	const flat = JSON.stringify(panel.component({}).props.children);
 	assert.match(flat, /counted from the denial log/);
+	// Nothing denied, so no audit list and no empty scaffolding for one.
+	assert.doesNotMatch(flat, /Audit log/);
+});
+
+/* ---- The audit log on screen (Story 2.4) ---- */
+
+/**
+ * Open the audit surface for a given folded snapshot and return the rendered
+ * panel. The panel is a pure function of that snapshot, which the view builder
+ * produces from the log (asserted separately above).
+ * @param snapshot - the folded `bf-egress` snapshot.
+ */
+function openAuditSurface(snapshot) {
+	const { exports } = loadClientHalf((specifier) => healthyHostModules[specifier]);
+	const { ctx, registered } = stubSlots({ sessions: stubEgressSessions(snapshot) });
+	exports.apply(ctx);
+	const panel = registered.find((call) => call.options.id === "bf-egress-panel");
+	const chip = registered.find((call) => call.options.id === "bf-egress-chip");
+	chip.component({ sessionId: "s-1" }).props.onClick();
+	return panel.component({});
+}
+
+/** Two recorded denials, oldest first, as the view builder orders them. */
+const AUDIT_ENTRIES = [
+	{ tool: "web_search", target: "MRPL inspection standards", time: 1787918400000, seq: 3 },
+	{ tool: "bf_canary", target: "https://example.com/", time: 1787918460000, seq: 9 },
+];
+
+test("Story 2.4: the audit surface lists each denial with timestamp, tool and refused target", () => {
+	const opened = openAuditSurface({ count: 2, entries: AUDIT_ENTRIES, latest: AUDIT_ENTRIES[1] });
+	const flat = JSON.stringify(opened.props.children);
+	assert.match(flat, /Audit log/);
+	// The tool and the refused target, per entry.
+	assert.match(flat, /web_search/);
+	assert.match(flat, /MRPL inspection standards/);
+	assert.match(flat, /bf_canary/);
+	assert.match(flat, /https:\/\/example\.com\//);
+	// The timestamp, from the log's own record: readable clock on the line,
+	// unambiguous ISO stamp in the title.
+	assert.match(flat, new RegExp(new Date(1787918400000).toLocaleTimeString().replace(/[.*+?^${}()|[\]\\]/g, "\\$&")));
+	assert.match(flat, /2026-08-28T\d{2}:00:00\.000Z/);
+	// The list is reachable by name for a screen reader, and nothing is invented.
+	assert.match(flat, /"aria-label":"Audit log — denied outbound attempts"/);
+	assert.doesNotMatch(flat, /unrecorded/);
+});
+
+test("Story 2.4: audit entries appear in the order they were written", () => {
+	const opened = openAuditSurface({ count: 2, entries: AUDIT_ENTRIES, latest: AUDIT_ENTRIES[1] });
+	const flat = JSON.stringify(opened.props.children);
+	assert.ok(flat.indexOf("web_search") < flat.indexOf("bf_canary"), "the older denial did not render first");
+});
+
+test("Story 2.4: a new denial appears on the open surface without a restart", () => {
+	// The panel subscribes to the session's bf-egress view, so a denial folded
+	// into that view after the surface was opened renders on the next snapshot.
+	const before = openAuditSurface({ count: 1, entries: [AUDIT_ENTRIES[0]], latest: AUDIT_ENTRIES[0] });
+	assert.doesNotMatch(JSON.stringify(before.props.children), /bf_canary/);
+	const after = openAuditSurface({ count: 2, entries: AUDIT_ENTRIES, latest: AUDIT_ENTRIES[1] });
+	const flat = JSON.stringify(after.props.children);
+	assert.match(flat, /bf_canary/);
+	assert.match(flat, /2 outbound attempts denied/);
+});
+
+test("Story 2.4: a denial with no recorded timestamp is named as missing, never filled in", () => {
+	const opened = openAuditSurface({
+		count: 1,
+		entries: [{ tool: "web_fetch", target: "", time: null, seq: 4 }],
+		latest: { tool: "web_fetch", target: "", time: null, seq: 4 },
+	});
+	const flat = JSON.stringify(opened.props.children);
+	assert.match(flat, /no timestamp recorded/);
+	assert.match(flat, /unrecorded target/);
+});
+
+test("Story 2.4: a fresh denial is scrolled into view rather than landing below the fold", () => {
+	// The list is oldest-first inside a capped box, so the fourth entry onwards
+	// renders below the fold — exactly the entry an evaluator pressing the canary
+	// is watching for. The panel scrolls the box to the end on every new entry.
+	const listBox = { scrollTop: 0, scrollHeight: 420, clientHeight: 168 };
+	const effects = [];
+	const hostModules = (specifier) => {
+		if (specifier === "react") {
+			return {
+				...healthyHostModules.react,
+				// The panel's one ref is the audit list's box.
+				useRef: () => ({ current: listBox }),
+				useEffect: (run, deps) => effects.push({ run, deps }),
+			};
+		}
+		return healthyHostModules[specifier];
+	};
+	const { exports } = loadClientHalf(hostModules);
+	const entries = [
+		...AUDIT_ENTRIES,
+		{ tool: "bf_canary", target: "https://example.com/", time: 1787918520000, seq: 14 },
+		{ tool: "bf_canary", target: "https://example.com/", time: 1787918580000, seq: 19 },
+	];
+	const { ctx, registered } = stubSlots({ sessions: stubEgressSessions({ count: 4, entries, latest: entries[3] }) });
+	exports.apply(ctx);
+	const panel = registered.find((call) => call.options.id === "bf-egress-panel");
+	const chip = registered.find((call) => call.options.id === "bf-egress-chip");
+	chip.component({ sessionId: "s-1" }).props.onClick();
+	panel.component({});
+	const scrollEffect = effects.find((entry) => Array.isArray(entry.deps) && entry.deps[0] === entries.length);
+	assert.ok(scrollEffect, "the panel registered no effect keyed to the entry count");
+	scrollEffect.run();
+	assert.equal(listBox.scrollTop, listBox.scrollHeight);
+});
+
+test("Story 2.4: the audit surface sets no hand-rolled colour of its own", () => {
+	const opened = openAuditSurface({ count: 2, entries: AUDIT_ENTRIES, latest: AUDIT_ENTRIES[1] });
+	const flat = JSON.stringify(opened);
+	// Every colour on the surface is a --dsw-* theme token, so it reads
+	// correctly in light and dark alike (UX-DR1/UX-DR2).
+	assert.doesNotMatch(flat, /#[0-9a-fA-F]{3,}/);
+	assert.doesNotMatch(flat, /rgb\(|hsl\(/);
+	assert.match(flat, /var\(--dsw-alias-label-secondary\)/);
 });
 
 test("puts the tab title back when the harness rewrites it after hydration", () => {

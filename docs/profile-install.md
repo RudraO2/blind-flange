@@ -381,9 +381,10 @@ dsh --profile web --dump-config | grep -c "bf-egress-monitor"   # 0 — the spik
 ```
 
 In the running app: the composer header carries an "Egress 0" pill with a green dot on a
-fresh session; clicking it opens the bottom-right panel reading a counted zero. Firing the
-canary (Story 2.3) is what first makes it non-zero and red. Screenshots in both themes at
-`docs/screenshots/2-2-egress-monitor-{light,dark}.png`.
+fresh session; clicking it opens the panel below that chip, reading a counted zero. Firing
+the canary (Story 2.3) is what first makes it non-zero and red. Screenshots in both themes at
+`docs/screenshots/2-2-egress-monitor-{light,dark}.png` — taken before Story 2.4 moved the panel
+up under the header chip and gave it the audit list.
 
 ## Story 2.3: the canary proves the zero is enforced
 
@@ -439,13 +440,52 @@ exception is a plan decision, not a point-of-use one. It is flagged here rather 
 In the running app, on a session that has had at least one turn: the composer row carries a
 "Canary" chip beside the routing chip. Press it — the chip takes a red state dot and reads
 "Canary denied. The attempt was refused by egress denial and written to the audit log.", the
-header pill goes from "Egress 0" (green) to "Egress 1" (red), and opening it shows
-`Last: bf_canary → https://example.com/blind-flange-canary`. Press it again and the count is 2.
+header pill goes from "Egress 0" (green) to "Egress 1" (red), and opening it lists that
+denial — timestamp, `bf_canary`, `https://example.com/blind-flange-canary` (Story 2.4; before
+that story the panel carried a single `Last:` line). Press it again and the count is 2.
 Screenshots in both themes at `docs/screenshots/2-3-canary-{light,dark}.png`.
 
 The button is present on the hero composer too, before the first turn, but firing it there
 fails with "The canary could not be fired": a session with no live agent has nowhere to record
 the denial, and a denial nobody can see is the silence this button exists to replace.
+
+## Story 2.4: the audit log can be read on screen
+
+No profile change. The audit surface is the egress monitor's own panel, already riding the
+`bf-base` insert row from step 3.
+
+- **Host half:** none. The denial event the waterfall already appends carries the tool and the
+  target, and the harness's `SessionEvent` envelope carries `seq` (monotonic) and `time` (unix
+  epoch milliseconds) on every record. The audit line reads the log's own timestamp rather than
+  a second clock reading taken when the panel rendered, so nothing new is written to the log for
+  this story.
+- **Client half** (`lib/client.js`): the `bf-egress` conversation view now reports `entries`
+  alongside `count` — every folded `egress/denied` node, ordered by the log's sequence number,
+  so they read in the order they were written however they were delivered. The panel lists them
+  under an "Audit log — oldest first" heading: local clock reading, tool, refused target, with
+  the ISO 8601 stamp and the whole sentence on the row's `title`. A record missing a field is
+  named as missing ("no timestamp recorded", "unrecorded target") rather than filled in.
+- **The panel moved.** Story 2.2 anchored this card bottom-right, which was fine while it was
+  three lines tall; the audit list makes it tall enough to cover the canary button in the
+  composer row — the one control an evaluator presses *while* watching the panel. It now opens
+  below the session header (`top: 88px`), where the chip that opens it lives. The list is capped
+  at `maxHeight: 168px` and scrolls, so the card cannot grow back down into the composer. That
+  cap holds three entries, so the list scrolls itself to the end whenever an entry arrives —
+  otherwise the fourth denial onwards renders below the fold, which is precisely the line
+  someone pressing the canary is watching for.
+- **Why this panel and not a new seat:** an evaluator who asks "show me" is already looking at
+  the monitor, and a second surface folding the same events would be two places to keep in step.
+  No new slot is registered for this story.
+
+**Checking it worked:**
+
+In the running app: fire the canary two or three times, then open the "Egress N" pill. Each
+denial is listed with its timestamp, `bf_canary`, and the target it was refused, oldest at the
+top. Leave the panel open and fire again — the new line appears in place and is scrolled into
+view, with no reload: the panel is subscribed to the same session view the count comes from.
+Verified 28 August 2026 on a running `dsh web` at five denials, including across a page reload
+(the stored log replays the denials back).
+Screenshots in both themes at `docs/screenshots/2-4-audit-log-{light,dark}.png`.
 
 ## Story 3.1: the replay provider answers a turn
 

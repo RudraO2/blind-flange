@@ -84,6 +84,13 @@
  * body runs, and the monitor above turns red off the recorded denial rather
  * than off anything the button says.
  *
+ * Story 2.4 adds no seat either. The egress monitor's full panel becomes the
+ * audit surface: it lists every recorded denial — the timestamp the harness
+ * stamped on the event, the tool, and the refused target — in the order the log
+ * wrote them. The lines come from the same `bf-egress` view the count comes
+ * from, so reading the log on screen needs no terminal and a fresh denial lands
+ * in the list through the subscription that was already there.
+ *
  * Story 3.8 adds no seat. Because the `bf-routing` view keeps the highest-seq
  * `router/routed` node and the chip subscribes through `useSyncExternalStore`,
  * a turn that classifies as a different task type moves the chip to the newly
@@ -641,6 +648,14 @@ window.__ModuleLoader__.load({
 		 * carries the green/red state through `--dsw-*` tokens, `Pill` and
 		 * `Button` are shipped primitives, and the panel's surface uses only
 		 * `ui-theme` background/border/shadow tokens.
+		 *
+		 * Story 2.4 makes the full panel the audit surface as well as the
+		 * instrument: the same fold that produces the count also carries every
+		 * denial's timestamp, tool and refused target, and the panel lists them
+		 * oldest first. The decision to extend this panel rather than declare a
+		 * separate audit seat is recorded in the story's spec — an evaluator who
+		 * asks "show me" is already looking at the monitor, and a second surface
+		 * showing the same events would be two places to keep in step.
 		 * ------------------------------------------------------------------- */
 
 		/** The denial marker the host half appends; see `index.js` `EGRESS_DENIED_EVENT`. */
@@ -652,26 +667,32 @@ window.__ModuleLoader__.load({
 		 * View builder for {@link EGRESS_VIEW_TARGET}. Keeps one node per
 		 * `egress/denied` event (keyed, so replay is idempotent) and reports
 		 * `count` as the number of those nodes — derived by counting, not
-		 * written down — plus the most recent denial for the panel's detail
-		 * line.
+		 * written down — alongside `entries`, the denials themselves in the
+		 * order the log wrote them (Story 2.4), and the most recent one for the
+		 * panel's summary line.
 		 * @returns a `ConversationViewBuilder` — `{ empty, replace, apply }`.
 		 */
 		function createEgressViewBuilder() {
 			/**
 			 * @param nodes - the retained denial nodes.
-			 * @returns `{ count, latest }` — `count` is `nodes.length`.
+			 * @returns `{ count, entries, latest }` — `entries` sorted by the
+			 * log's own sequence number, so they read in the order they were
+			 * written however they arrived; `count` is `entries.length`.
 			 */
 			function summarise(nodes) {
-				let latest = null;
-				let latestSeq = -1;
-				for (const node of nodes) {
-					const seq = node && typeof node.anchorSeq === "number" ? node.anchorSeq : -1;
-					if (seq >= latestSeq) {
-						latestSeq = seq;
-						latest = (node && node.data) || null;
-					}
-				}
-				return { count: nodes.length, latest };
+				const entries = nodes
+					.map((node) => {
+						const data = (node && node.data) || {};
+						const anchorSeq = node && typeof node.anchorSeq === "number" ? node.anchorSeq : null;
+						const seq = anchorSeq ?? (typeof data.seq === "number" ? data.seq : -1);
+						return { ...data, seq };
+					})
+					.sort((a, b) => a.seq - b.seq);
+				return {
+					count: entries.length,
+					entries,
+					latest: entries.length > 0 ? entries[entries.length - 1] : null,
+				};
 			}
 			let seen = new Map();
 			function keyOf(node) {
@@ -716,8 +737,19 @@ window.__ModuleLoader__.load({
 					? { id: String(event.seq), role: "start" }
 					: null;
 			},
+			// Story 2.4 keeps the envelope's own `time` and `seq` alongside the
+			// event's `{ tool, target }` data. `SessionEvent` carries both (unix
+			// epoch milliseconds and the monotonic log sequence), so the audit
+			// line on screen reads the timestamp the log recorded rather than a
+			// second clock reading taken when the panel happened to render.
 			start(_context, match) {
-				return match.event.data;
+				const data = match.event.data || {};
+				return {
+					tool: data.tool,
+					target: data.target,
+					time: typeof match.event.time === "number" ? match.event.time : null,
+					seq: typeof match.event.seq === "number" ? match.event.seq : null,
+				};
 			},
 			update(context) {
 				return context.state;
@@ -769,6 +801,28 @@ window.__ModuleLoader__.load({
 		}
 
 		const egressPanelOpen = createOpenStore();
+
+		/**
+		 * The clock reading for one audit line, from the `time` the harness
+		 * stamped on the denial event. Local wall time with seconds, because an
+		 * evaluator reads it against the moment they pressed the canary. Renders
+		 * an em dash rather than inventing a time when the record carries none.
+		 * @param time - unix epoch milliseconds, or null.
+		 */
+		function denialClock(time) {
+			if (typeof time !== "number" || !Number.isFinite(time)) return "—";
+			return new Date(time).toLocaleTimeString();
+		}
+
+		/**
+		 * The same instant as a full ISO 8601 stamp, for the audit line's
+		 * `title` — the unambiguous form, next to the readable one.
+		 * @param time - unix epoch milliseconds, or null.
+		 */
+		function denialStamp(time) {
+			if (typeof time !== "number" || !Number.isFinite(time)) return "no timestamp recorded";
+			return new Date(time).toISOString();
+		}
 
 		/**
 		 * Read the folded egress snapshot for a session, or null when the view
@@ -837,7 +891,7 @@ window.__ModuleLoader__.load({
 		 * @returns the component.
 		 */
 		function buildEgressPanel(ctx) {
-			const { useSyncExternalStore } = require("react");
+			const { useEffect, useRef, useSyncExternalStore } = require("react");
 			const { jsx, jsxs } = require("react/jsx-runtime");
 			const { StateDot, Button } = require("@deepseek-ai/dsh-client-ui-primitives");
 
@@ -854,10 +908,61 @@ window.__ModuleLoader__.load({
 			}
 
 			/**
+			 * One audit line: the timestamp the log recorded, the tool that
+			 * attempted the call, and the target it was refused. Two rows so a
+			 * long target wraps under the clock rather than squeezing it, and
+			 * `title` carries the ISO stamp and the whole sentence for a reader
+			 * who wants the unambiguous form.
+			 *
+			 * A field the record does not carry is named as missing rather than
+			 * filled in — an audit surface that invents a value is worse than
+			 * one that admits a gap.
+			 * @param entry - one folded `egress/denied` entry from the view.
+			 * @returns the row, keyed by the event's log sequence number.
+			 */
+			function auditLine(entry) {
+				const tool = typeof entry.tool === "string" && entry.tool !== "" ? entry.tool : "unrecorded tool";
+				const target =
+					typeof entry.target === "string" && entry.target !== "" ? entry.target : "unrecorded target";
+				return jsxs(
+					"div",
+					{
+						role: "listitem",
+						title: `${denialStamp(entry.time)} — ${tool} attempted ${target}. Denied by egress denial and written to the session log.`,
+						style: { display: "flex", flexDirection: "column", gap: "2px" },
+						children: [
+							jsxs("div", {
+								style: { display: "flex", alignItems: "baseline", gap: "8px" },
+								children: [
+									jsx("span", {
+										style: { ...SECONDARY, fontVariantNumeric: "tabular-nums", flex: "0 0 auto" },
+										children: denialClock(entry.time),
+									}),
+									jsx("span", { style: { flex: "1 1 auto", minWidth: 0 }, children: tool }),
+								],
+							}),
+							jsx("div", { style: { ...SECONDARY, wordBreak: "break-all" }, children: target }),
+						],
+					},
+					`bf-egress-line:${entry.seq}`,
+				);
+			}
+
+			/**
 			 * The panel: a small fixed card bottom-right of the overlay layer.
 			 * Surface colours, border and shadow are `ui-theme` tokens; the
 			 * state dot and buttons are primitives. Renders only while the chip
 			 * has opened it.
+			 *
+			 * Story 2.4 makes this the audit surface: below the counted state it
+			 * lists every recorded denial — timestamp, tool, refused target —
+			 * oldest first, which is the order the log wrote them. The list is
+			 * the `bf-egress` view's `entries`, folded from the same
+			 * `egress/denied` events the count is folded from, so a fresh denial
+			 * appears here through the standing `useSyncExternalStore`
+			 * subscription with no restart and no reopening — and the list
+			 * scrolls to keep that newest line in view once there are more of
+			 * them than the capped box shows.
 			 */
 			function EgressPanel() {
 				const open = useSyncExternalStore(egressPanelOpen.subscribe, egressPanelOpen.get);
@@ -867,12 +972,26 @@ window.__ModuleLoader__.load({
 					() => readEgressSnapshot(session),
 				);
 
-				if (!open) return null;
-
 				const ready = snapshot !== null;
 				const count = ready ? snapshot.count : null;
 				const breached = ready && count > 0;
-				const latest = ready ? snapshot.latest : null;
+				const entries = ready && Array.isArray(snapshot.entries) ? snapshot.entries : [];
+
+				// Keep the newest denial in view. The list reads oldest-first —
+				// the order the log wrote them, which is what this story asks for —
+				// so a fresh line lands at the bottom, and past the third it lands
+				// below the fold of the capped box. An evaluator pressing the canary
+				// while watching this panel would stop seeing the line their own
+				// press produced, so every new entry scrolls the box to the end.
+				// Declared above the `open` early return: hook order has to be the
+				// same on the render that draws the panel and the one that hides it.
+				const listRef = useRef(null);
+				useEffect(() => {
+					const node = listRef.current;
+					if (node) node.scrollTop = node.scrollHeight;
+				}, [entries.length]);
+
+				if (!open) return null;
 
 				const body = !ready
 					? jsx("span", { style: SECONDARY, children: "Waiting for a session." })
@@ -897,8 +1016,18 @@ window.__ModuleLoader__.load({
 					style: {
 						position: "absolute",
 						right: "16px",
-						bottom: "16px",
-						width: "300px",
+						// Anchored below the session header, not above the composer.
+						// Story 2.2 sat this card bottom-right, which was fine while it
+						// was three lines tall; Story 2.4's audit list makes it tall
+						// enough to cover the canary button in the composer row — the
+						// one control an evaluator presses *while* watching this panel.
+						// The header is fixed chrome (measured 76px at default density,
+						// 28 Aug 2026) where the chip that opens this panel also lives,
+						// so opening beneath that chip both clears the composer and
+						// reads as the chip's own surface. The list's `maxHeight` below
+						// keeps the card from growing back down into the composer.
+						top: "88px",
+						width: "320px",
 						padding: "12px 14px",
 						display: "flex",
 						flexDirection: "column",
@@ -922,10 +1051,20 @@ window.__ModuleLoader__.load({
 							],
 						}),
 						body,
-						latest
+						entries.length > 0 ? jsx("div", { style: SECONDARY, children: "Audit log — oldest first" }) : null,
+						entries.length > 0
 							? jsx("div", {
-									style: { ...SECONDARY, wordBreak: "break-all" },
-									children: `Last: ${latest.tool} → ${latest.target}`,
+									role: "list",
+									"aria-label": "Audit log — denied outbound attempts",
+									ref: listRef,
+									style: {
+										display: "flex",
+										flexDirection: "column",
+										gap: "8px",
+										maxHeight: "168px",
+										overflowY: "auto",
+									},
+									children: entries.map((entry) => auditLine(entry)),
 								})
 							: null,
 						jsx("div", {
