@@ -209,13 +209,13 @@ export function isLicenceAllowed(member) {
 }
 
 /**
- * The fleet with disallowed-licence members removed — what the UI model list
- * shows, so a model the box may not legally run never appears as choosable.
+ * The fleet with disallowed-licence members removed.
  *
- * This is a deliberately thin filter. Story 3.4 builds the real loader: a
- * stated refusal naming the offending licence, not a silent drop. When it
- * lands it owns this gate; until then this keeps `Qwen/Qwen2.5-3B-Instruct`
- * (Qwen Research Licence, declared only so 3.4 can refuse it) out of the list.
+ * Story 3.4's `loadFleet()` in `./loader.js` is the licence gate now — it
+ * states each refusal and names the offending licence rather than dropping it
+ * silently, and it is what the UI model list and the router read. This helper
+ * stays as the plain predicate-filter view (same list as `loadFleet().loaded`)
+ * for call sites and tests that only need "which members are allowed".
  * @param {string} [registryPath] - override for tests.
  */
 export function allowedFleet(registryPath = REGISTRY_PATH) {

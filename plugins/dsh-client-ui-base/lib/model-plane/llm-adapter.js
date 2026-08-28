@@ -23,7 +23,7 @@
  * nothing here for the symlink to break.
  */
 
-import { allowedFleet } from "../registry/fleet.js";
+import { announceRefusals, loadFleet } from "../registry/loader.js";
 
 /** Exact model identity this adapter reports; nothing here validates against a catalog (advisory only, per the harness's own contract). */
 async function resolveModel(provider, model) {
@@ -38,14 +38,15 @@ async function resolveModel(provider, model) {
  *
  * `licence`, `context`, `modalities` and `capabilities` ride along as advisory
  * fields — the harness duck-types model entries and does not validate them, and
- * the router (Stories 3.5-3.6) reads the same shape. Disallowed-licence members
- * are filtered by `allowedFleet` so an unrunnable model is never choosable; a
- * registry read failure yields an empty list rather than breaking the picker.
+ * the router (Stories 3.5-3.6) reads the same shape. The licence loader (Story
+ * 3.4) drops disallowed-licence members before they reach here, so an
+ * unrunnable model is never choosable; a registry read failure yields an empty
+ * list rather than breaking the picker.
  * @param {string} provider - the provider token this adapter serves under.
  */
 function fleetModels(provider) {
 	try {
-		return allowedFleet().map((member) => ({
+		return loadFleet().loaded.map((member) => ({
 			provider,
 			id: member.name,
 			name: member.name,
@@ -96,6 +97,16 @@ async function* streamImpl(modelProvider, options) {
  * @param {{ displayName: string }} options
  */
 export function createLlmAdapter(modelProvider, { displayName }) {
+	// State every licence refusal once, at mount — an error line per refused
+	// fleet member naming the licence that caused it (Story 3.4). This is the
+	// "not a warning, a refusal" the licence policy requires; `fleetModels`
+	// then serves only the members that passed.
+	try {
+		announceRefusals(loadFleet().refused);
+	} catch (error) {
+		console.warn(`@blind-flange/dsh-client-ui-base: fleet registry not read for the licence gate — ${error.message}`);
+	}
+
 	const stream = (options) => streamImpl(modelProvider, options);
 	return {
 		providerInfo(provider) {
