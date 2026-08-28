@@ -51,7 +51,7 @@ development_status:
   2-4-the-audit-log-can-be-read-on-screen: backlog
   epic-2-retrospective: optional
 
-  epic-3: in-progress
+  epic-3: done
   3-1-a-replay-provider-answers-a-turn-through-the-model-plane: done
   3-2-the-active-provider-is-always-visible-and-replay-says-replay: done
   3-3-the-fleet-is-declared-in-one-registry-file: done
@@ -59,7 +59,7 @@ development_status:
   3-5-the-router-classifies-a-request-into-a-task-type: done
   3-6-the-router-scores-the-fleet-and-picks-a-member: done
   3-7-the-routing-chip-shows-the-decision-and-the-working: done
-  3-8-the-model-changes-by-itself-when-the-task-type-changes: backlog
+  3-8-the-model-changes-by-itself-when-the-task-type-changes: done
   epic-3-retrospective: optional
 
   epic-4: in-progress

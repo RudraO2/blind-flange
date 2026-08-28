@@ -134,6 +134,32 @@ const ROUTING_DECISION_FIXTURE = {
 	],
 };
 
+/** Turn 1: a document task routes to the vision-document member. */
+const TURN_1_DECISION = {
+	taskType: "document",
+	tied: false,
+	allZero: false,
+	selected: "Qwen/Qwen2.5-VL-7B-Instruct",
+	scored: [
+		{ name: "Qwen/Qwen2.5-VL-7B-Instruct", score: 4, matched: [{ capability: "document-understanding", points: 3 }] },
+		{ name: "Qwen/Qwen2.5-7B-Instruct", score: 2, matched: [{ capability: "general-reasoning", points: 1 }] },
+	],
+	excluded: [],
+};
+
+/** Turn 2, same session: a coding task routes to the coder member — no user action between. */
+const TURN_2_DECISION = {
+	taskType: "code",
+	tied: false,
+	allZero: false,
+	selected: "Qwen/Qwen2.5-Coder-7B-Instruct",
+	scored: [
+		{ name: "Qwen/Qwen2.5-Coder-7B-Instruct", score: 6, matched: [{ capability: "code-generation", points: 3 }, { capability: "code-reasoning", points: 2 }] },
+		{ name: "Qwen/Qwen2.5-7B-Instruct", score: 1, matched: [{ capability: "general-reasoning", points: 1 }] },
+	],
+	excluded: [],
+};
+
 /** Host modules with `useState` forced to seat `seated` on its first call, then echo. */
 function hostModulesWithSeatedState(seated) {
 	let first = true;
@@ -422,6 +448,48 @@ test("the routing chip names the selected fleet member and expands to the workin
 	// The trigger names the fleet member (org prefix dropped for the compact surface).
 	const anchorChildren = JSON.stringify(rendered.props.anchor.props.children);
 	assert.match(anchorChildren, /Qwen2\.5-VL-7B-Instruct/);
+});
+
+test("Story 3.8: a later turn's routing decision supersedes the earlier one in the bf-routing view", () => {
+	const { exports } = loadClientHalf((specifier) => healthyHostModules[specifier]);
+	const { ctx, conversationViews } = stubSlots();
+	exports.apply(ctx);
+	const builder = conversationViews[0].create();
+	// Turn 1 lands first (lower seq), then turn 2 in the same session (higher seq).
+	builder.apply({ upserts: [{ anchorSeq: 4, data: TURN_1_DECISION }] });
+	const afterTurn2 = builder.apply({ upserts: [{ anchorSeq: 8, data: TURN_2_DECISION }] });
+	assert.equal(afterTurn2.decision.taskType, "code");
+	assert.equal(afterTurn2.decision.selected, "Qwen/Qwen2.5-Coder-7B-Instruct");
+	// A late-arriving lower-seq node (e.g. out-of-order delivery) must not regress it.
+	const stillTurn2 = builder.apply({ upserts: [{ anchorSeq: 5, data: TURN_1_DECISION }] });
+	assert.equal(stillTurn2.decision.selected, "Qwen/Qwen2.5-Coder-7B-Instruct");
+});
+
+test("Story 3.8: the routing chip follows the view to the new member and new scores, with no user action", () => {
+	const { exports } = loadClientHalf((specifier) => healthyHostModules[specifier]);
+	// The chip is a pure function of the current bf-routing snapshot; the view
+	// builder swaps that snapshot per turn (asserted above). Render it against
+	// each turn's decision and confirm it tracks — trigger and expanded working.
+	function renderChipFor(decision) {
+		const { ctx, registered } = stubSlots({ sessions: stubSessions(decision) });
+		exports.apply(ctx);
+		const chip = registered.find((call) => call.options.name === "conversation.input.model");
+		return chip.component({ sessionId: "s-1", locked: false });
+	}
+
+	const turn1 = renderChipFor(TURN_1_DECISION);
+	assert.equal(turn1.props.selectedId, "bf-r-score:Qwen/Qwen2.5-VL-7B-Instruct");
+	assert.match(JSON.stringify(turn1.props.anchor.props.children), /Qwen2\.5-VL-7B-Instruct/);
+	assert.match(JSON.stringify(turn1.props.items), /document/);
+
+	const turn2 = renderChipFor(TURN_2_DECISION);
+	assert.equal(turn2.props.selectedId, "bf-r-score:Qwen/Qwen2.5-Coder-7B-Instruct");
+	assert.match(JSON.stringify(turn2.props.anchor.props.children), /Qwen2\.5-Coder-7B-Instruct/);
+	const turn2Items = JSON.stringify(turn2.props.items);
+	assert.match(turn2Items, /"text":"code"/); // the newly classified task type row
+	assert.match(turn2Items, /score 6/); // the new per-member score
+	assert.match(turn2Items, /code-generation \+3/); // the working behind it
+	assert.doesNotMatch(turn2Items, /VL-7B/); // the previous member is gone
 });
 
 test("the routing chip shows a quiet indicator before the first turn records a decision", () => {

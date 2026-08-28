@@ -349,6 +349,32 @@ test("a scoring failure is swallowed and does not suppress the classification al
 	assert.match(warnings[0], /fleet not scored/);
 });
 
+test("Story 3.8: a second turn classifying as a different task type routes to a different member, with no user action", async () => {
+	const host = stubHostCtx({ webServer: false });
+	apply(host.ctx);
+	const agent = stubAgent();
+
+	// Turn 1: a document task.
+	await host.preStepListener(
+		{ agent, turn: 1, step: 1 },
+		async () => ({ kind: "enter", messages: [{ role: "user", content: [{ type: "text", text: "read the inspection report and summarise the findings" }] }] }),
+	);
+	// Turn 2, same session, no operator action between: a coding task.
+	await host.preStepListener(
+		{ agent, turn: 2, step: 1 },
+		async () => ({ kind: "enter", messages: [{ role: "user", content: [{ type: "text", text: "refactor this Python function and add unit tests" }] }] }),
+	);
+
+	const routed = agent.events.filter((event) => event.type === "router/routed");
+	assert.equal(routed.length, 2, "one routing decision per turn");
+	assert.equal(routed[0].data.taskType, "document");
+	assert.equal(routed[0].data.selected, "Qwen/Qwen2.5-VL-7B-Instruct");
+	assert.equal(routed[1].data.taskType, "code");
+	assert.equal(routed[1].data.selected, "Qwen/Qwen2.5-Coder-7B-Instruct");
+	assert.notEqual(routed[0].data.selected, routed[1].data.selected);
+	assert.equal(routed[1].data.turn, 2);
+});
+
 test("does not re-classify a tool-loop continuation step", async () => {
 	const host = stubHostCtx({ webServer: false });
 	apply(host.ctx);

@@ -38,6 +38,17 @@
  * 28 Aug 2026: SIH26117 requires the system to pick automatically, so a control
  * asking the operator to classify the task contradicts the entry's own claim.
  *
+ * Story 3.8 — "the model changes by itself when the task type changes" — lives
+ * on the routing chip, not here. `conversation.hero.*` is the new-session
+ * screen: `@deepseek-ai/dsh-client-ui-agent-preset`'s own `AgentPresetSeat`
+ * records that the hero seat "is only available before a conversation starts",
+ * and the hero is replaced by the conversation view once a turn runs — so the
+ * hero indicator is never on screen at the moment a mid-session reclassification
+ * happens. This indicator therefore stays a new-session affordance showing the
+ * deployment's authored task types; the surface that visibly moves when the
+ * router reclassifies is the routing chip at `conversation.input.model`, which
+ * re-reads the `bf-routing` view every turn (see `buildRoutingChip`).
+ *
  * Story 3.2 takes one more seat: `conversation.session.header.utilities`, a
  * read-only pill naming the active model-plane provider. When `replay` is the
  * provider it says so in plain words and says the responses are authored, not
@@ -58,6 +69,12 @@
  * through a registered conversation view (`bf-routing`) folded from that
  * event, so the chip shows the decision the router actually recorded — never
  * an animation without an event behind it (NFR8).
+ *
+ * Story 3.8 adds no seat. Because the `bf-routing` view keeps the highest-seq
+ * `router/routed` node and the chip subscribes through `useSyncExternalStore`,
+ * a turn that classifies as a different task type moves the chip to the newly
+ * selected fleet member — trigger and expanded working both — with no user
+ * action. Story 3.8 is the regression cover for that cross-turn behaviour.
  */
 window.__ModuleLoader__.load({
 	id: "@blind-flange/dsh-client-ui-base",
@@ -183,9 +200,10 @@ window.__ModuleLoader__.load({
 			 * `conversation.input.model` — a different seat — so the two would have
 			 * shipped side by side making opposite claims about the same decision.
 			 *
-			 * The read path below is kept deliberately: Story 3.8 makes the router set
-			 * the active preset when it reclassifies, and this is the surface that
-			 * shows it moving.
+			 * The read path below is the new-session task type only. It does not
+			 * track the router mid-session: the hero is gone by the time a turn
+			 * reclassifies (see the file header). Story 3.8's "shows it moving"
+			 * surface is the routing chip at `conversation.input.model`.
 			 *
 			 * Rendered as a bare inherited element rather than a `Button`. There is no
 			 * tag or badge primitive in the harness, a `Button` with no handler still
@@ -514,6 +532,15 @@ window.__ModuleLoader__.load({
 			/**
 			 * Subscribe to the session's `bf-routing` view and return the latest
 			 * routing decision, or null before the first turn records one.
+			 *
+			 * This is the whole of Story 3.8's client side: the host half appends a
+			 * fresh `router/routed` event on the first step of every turn (Story 3.6),
+			 * the `bf-routing` view builder folds each into a node and keeps the
+			 * highest-seq one, and `useSyncExternalStore` re-renders the chip whenever
+			 * that snapshot changes. So when turn N+1 classifies as a different task
+			 * type, the chip's trigger and its expanded working move to the newly
+			 * selected member with no user action — driven by a recorded event, never
+			 * an animation (NFR8).
 			 * @param sessionId - the framework-resolved session id from the slot.
 			 */
 			function useRoutingDecision(sessionId) {
