@@ -57,9 +57,13 @@ Saying "we only use permissive licences" proves nothing. Three mechanisms make i
 | tessdata (`tesseract-ocr/tessdata`, `tessdata_fast`, `tessdata_best`) | Apache-2.0 | 28 Aug 2026 — **re-verify by reading `LICENSE` at the pinned version before the claim ships** |
 | pytesseract (`madmaze/pytesseract`) | Apache-2.0 | 28 Aug 2026 — **re-verify by reading `LICENSE` at the pinned version before the claim ships** |
 | pypdfium2 (`pypdfium2-team/pypdfium2`) | Apache-2.0; bundled PDFium engine BSD-3-Clause | 28 Aug 2026 — **re-verify by reading `LICENSE` at the pinned version before the claim ships** |
+| `Qwen/Qwen2.5-7B-Instruct` (fleet — general reasoner) | Apache-2.0 | 28 Aug 2026 — read the `LICENSE` file at revision `a09a35458c702b33eeacc393d103063234e8bc28`: "Apache License, Version 2.0" |
+| `Qwen/Qwen2.5-Coder-7B-Instruct` (fleet — coder) | Apache-2.0 | 28 Aug 2026 — read the `LICENSE` file at revision `c03e6d358207e414f1eca0bb1891e29f1db0e242`: "Apache License, Version 2.0" |
+| `Qwen/Qwen2.5-VL-7B-Instruct` (fleet — vision-document) | Apache-2.0 | 28 Aug 2026 — **no `LICENSE` file exists in this repo at any revision**; verified from the `license: apache-2.0` field in `README.md` YAML frontmatter at revision `cc594898137f460bfe9f0759e9844b3ce807cfb5`. Recorded decision (28 Aug 2026): the model-card metadata at a pinned revision is a primary declaration and is accepted here in the absence of a `LICENSE` file. Re-check for a `LICENSE` file before the claim ships. |
+| `Qwen/Qwen2.5-3B-Instruct` (declared only so the loader refuses it — Story 3.4) | **Qwen RESEARCH LICENSE AGREEMENT** | 28 Aug 2026 — read the `LICENSE` file at revision `aa8e72537993ba99e69dfaafa59ed015b17504d1`: "Qwen RESEARCH LICENSE AGREEMENT, Release Date: September 19, 2024". Outside the allow-list by design — see the Rejected table. |
 
-The four rows added on 28 August were established from published project documentation, not
-yet from the `LICENSE` file at a pinned version. They are recorded here so the work is not
+The four `docs`-stack rows added on 28 August were established from published project
+documentation, not yet from the `LICENSE` file at a pinned version. They are recorded here so the work is not
 repeated, but they do **not** yet satisfy this policy's own standard. Close that gap before
 the claim goes in front of MRPL.
 
@@ -72,6 +76,7 @@ egress monitor's zero proves nothing without the canary.
 |---|---|---|
 | `ds4sd/docling-models` (Docling's layout + TableFormer models) | CDLA-Permissive-2.0 | Outside the allow-list. Docling's own code is MIT, but its models are not, and the models are the part that ships. **Not a legal hazard** — CDLA-Permissive-2.0 permits commercial use and places no restriction on results or models built from the data; the only obligation is shipping the licence text when redistributing the data itself, which we would be doing since artefacts are pre-staged offline. Rejected on fit and cost: a third licence name on the attestation report, and a much heavier stack (PyTorch + transformers) than Phase 0 needs. Replaced by the Tesseract stack — see ADR-0005 for the full reasoning. |
 | PyMuPDF | AGPL-3.0 | Copyleft with a disclosure obligation. Named here explicitly because it is the library every PDF tutorial reaches for and the default an agent will select unprompted. Use pypdfium2. |
+| `Qwen/Qwen2.5-3B-Instruct` | Qwen RESEARCH LICENSE AGREEMENT | Non-commercial research licence — outside the allow-list. **Declared in `registry/models.yaml` on purpose** so the loader (Story 3.4) refuses it and the refusal is checkable: same family, publisher and release as `Qwen2.5-7B-Instruct` (Apache-2.0), different licence. Never loads. |
 
 ## What this rules out
 

@@ -23,9 +23,42 @@
  * nothing here for the symlink to break.
  */
 
+import { allowedFleet } from "../registry/fleet.js";
+
 /** Exact model identity this adapter reports; nothing here validates against a catalog (advisory only, per the harness's own contract). */
 async function resolveModel(provider, model) {
 	return { provider, id: model, name: model };
+}
+
+/**
+ * The fleet from `registry/models.yaml`, shaped as the harness's model list
+ * entries and attributed to `provider`. This is what makes Story 3.3's "a new
+ * member added to that file appears in the UI model list" true: the list is
+ * read from the registry on every call, never from a second copy here.
+ *
+ * `licence`, `context`, `modalities` and `capabilities` ride along as advisory
+ * fields — the harness duck-types model entries and does not validate them, and
+ * the router (Stories 3.5-3.6) reads the same shape. Disallowed-licence members
+ * are filtered by `allowedFleet` so an unrunnable model is never choosable; a
+ * registry read failure yields an empty list rather than breaking the picker.
+ * @param {string} provider - the provider token this adapter serves under.
+ */
+function fleetModels(provider) {
+	try {
+		return allowedFleet().map((member) => ({
+			provider,
+			id: member.name,
+			name: member.name,
+			role: member.role,
+			licence: member.licence,
+			context: member.context,
+			modalities: member.modalities,
+			capabilities: member.capabilities,
+		}));
+	} catch (error) {
+		console.warn(`@blind-flange/dsh-client-ui-base: fleet registry not listed — ${error.message}`);
+		return [];
+	}
 }
 
 /**
@@ -71,8 +104,8 @@ export function createLlmAdapter(modelProvider, { displayName }) {
 		providerRetryPolicy() {
 			return undefined;
 		},
-		async listModels() {
-			return [];
+		async listModels(provider) {
+			return fleetModels(provider ?? "replay");
 		},
 		resolveModel,
 		async prepareCall(provider, model) {

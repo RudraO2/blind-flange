@@ -412,6 +412,33 @@ After it: an authored line from `replay-cache.json`, printed to the terminal —
 harness process, a real turn, served from replay. No UI surface is added by this story, so the
 Standing acceptance criteria's screenshot requirement does not apply.
 
+## Story 3.3: the fleet is declared in one registry file
+
+`registry/models.yaml` at the repo root declares the fleet (CONTEXT.md "Fleet"). It is read
+by `plugins/dsh-client-ui-base/lib/registry/fleet.js` — the one seam the UI model list, the
+router (Stories 3.5-3.6) and the licence loader (Story 3.4) all go through.
+
+**No profile change is needed.** The list rides the `bf-base` row and the replay adapter that
+Story 3.1 already mounted: `llm-adapter.js`'s `listModels()` returns the registry, filtered to
+the licence allow-list, so the harness's own model picker (the "Select model" control in the
+composer) shows the three permissive fleet members after a restart. `Qwen/Qwen2.5-3B-Instruct`
+is in the file under the Qwen Research Licence — declared only so Story 3.4's loader can refuse
+it — and is filtered out of the list until that loader lands.
+
+Verified 28 August 2026, `dsh web` running: the "Select model" menu lists
+`Qwen/Qwen2.5-7B-Instruct`, `Qwen/Qwen2.5-Coder-7B-Instruct` and `Qwen/Qwen2.5-VL-7B-Instruct`
+under "Blind Flange (replay)", and nothing else. Screenshots in both themes at
+`docs/screenshots/3-3-model-list-{light,dark}.png`.
+
+Each licence in the file was re-verified by reading the licence text in the model repository
+at the exact `revision` pinned there (NFR1); see `docs/licence-policy.md`.
+
+```sh
+curl -s http://127.0.0.1:3080/api/llm.models -X POST -H "Content-Type: application/json" \
+  -d '{"type":"client-request","rpcId":"t","method":"llm.models","payload":{}}'
+# -> one group "Blind Flange (replay)" with the three permissive members
+```
+
 ## The headless profile
 
 `dsh` is a launcher, not an app: it boots a *profile*, and a profile is a stack of plugin

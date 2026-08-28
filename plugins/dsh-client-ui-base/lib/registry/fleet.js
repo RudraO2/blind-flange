@@ -1,0 +1,223 @@
+/**
+ * The fleet reader (Story 3.3).
+ *
+ * `registry/models.yaml` at the repo root is the one file that declares the
+ * fleet (CONTEXT.md "Fleet"). This module is the single seam three consumers
+ * read it through, so adding a model stays a one-file edit:
+ *
+ *   - the UI model list — `listModels()` in `../model-plane/llm-adapter.js`
+ *     returns `readFleet()` mapped to the harness's model shape, so a new
+ *     registry entry appears under the active provider after a restart;
+ *   - the licence loader (Story 3.4) — reads `member.licence` and refuses
+ *     anything outside the allow-list;
+ *   - the router (Stories 3.5-3.6) — scores `member.capabilities` and
+ *     `member.modalities` against the classified task type.
+ *
+ * ## Why a hand-written parser and not `js-yaml`
+ *
+ * This plugin ships no bundler and no `node_modules` of its own, and it is
+ * mounted through a symlink — Node resolves bare specifiers from the
+ * symlink's real on-disk path (this repo), not the profile's `node_modules`
+ * where the harness's packages live, so `import "js-yaml"` from here fails
+ * with `ERR_MODULE_NOT_FOUND` exactly as `import "@deepseek-ai/dsh-llm"`
+ * does (see `../model-plane/llm-adapter.js` for the verified write-up).
+ *
+ * `models.yaml` is ours and fixed-shape, so a parser for just the subset it
+ * uses — one `fleet:` sequence of maps with scalar and inline-array values —
+ * is ~40 lines and adds zero dependencies. The file is still valid YAML, so
+ * swapping in `js-yaml` later (once this package has a real `node_modules`)
+ * is a drop-in change here and nowhere else.
+ */
+
+import { readFileSync } from "node:fs";
+import { dirname, join } from "node:path";
+import { fileURLToPath } from "node:url";
+
+const REGISTRY_PATH = join(dirname(fileURLToPath(import.meta.url)), "..", "..", "..", "..", "registry", "models.yaml");
+
+/** Thrown when the registry file is missing, unparseable, or internally inconsistent. */
+export class FleetRegistryError extends Error {
+	constructor(message) {
+		super(message);
+		this.name = "FleetRegistryError";
+	}
+}
+
+/** Every field a fleet member must carry (Story 3.3, first acceptance block). */
+const REQUIRED_FIELDS = ["name", "licence", "size", "context", "modalities", "capabilities"];
+
+/**
+ * Parse one scalar value token from `models.yaml`. Handles the three shapes
+ * the file uses: a quoted string, an inline flow sequence `[a, b, c]`, and a
+ * bare scalar (kept as a string unless it is a plain integer, which `context`
+ * needs as a number).
+ * @param {string} raw - the text after the `key:` on a line, already trimmed.
+ * @returns {string | number | string[]}
+ */
+function parseValue(raw) {
+	if (raw.startsWith('"') && raw.endsWith('"') && raw.length >= 2) {
+		return raw.slice(1, -1);
+	}
+	if (raw.startsWith("[") && raw.endsWith("]")) {
+		const inner = raw.slice(1, -1).trim();
+		if (inner === "") return [];
+		return inner.split(",").map((item) => item.trim());
+	}
+	if (/^-?\d+$/.test(raw)) {
+		return Number(raw);
+	}
+	return raw;
+}
+
+/**
+ * Strip a trailing ` # comment` from a value line without eating a `#` that
+ * sits inside a quoted string. Deliberately simple: `models.yaml` never puts
+ * a `#` inside a quoted value, so a bare "first unquoted hash wins" rule is
+ * enough and stays readable.
+ */
+function stripInlineComment(line) {
+	let inQuote = false;
+	for (let i = 0; i < line.length; i += 1) {
+		const char = line[i];
+		if (char === '"') inQuote = !inQuote;
+		if (char === "#" && !inQuote && (i === 0 || line[i - 1] === " ")) {
+			return line.slice(0, i);
+		}
+	}
+	return line;
+}
+
+/**
+ * Parse the `fleet:` sequence from `models.yaml` text.
+ *
+ * The grammar accepted is exactly what the file uses and no more:
+ *   - full-line `#` comments and blank lines are skipped;
+ *   - a top-level `fleet:` key introduces the sequence;
+ *   - `  - key: value` opens a new member and sets its first field;
+ *   - `    key: value` adds a field to the member currently open.
+ * Anything outside that shape raises {@link FleetRegistryError} rather than
+ * being silently dropped — a malformed registry must fail loud.
+ * @param {string} text
+ * @returns {Array<Record<string, unknown>>}
+ */
+export function parseFleet(text) {
+	const members = [];
+	let current = null;
+	let seenFleetKey = false;
+
+	const lines = text.split(/\r?\n/);
+	for (let lineNumber = 0; lineNumber < lines.length; lineNumber += 1) {
+		const rawLine = stripInlineComment(lines[lineNumber]).replace(/\s+$/, "");
+		if (rawLine.trim() === "") continue;
+
+		if (rawLine === "fleet:") {
+			seenFleetKey = true;
+			continue;
+		}
+		if (!seenFleetKey) {
+			throw new FleetRegistryError(`registry/models.yaml line ${lineNumber + 1}: content before the "fleet:" key`);
+		}
+
+		const itemMatch = rawLine.match(/^ {2}- (\w[\w-]*): (.+)$/);
+		if (itemMatch) {
+			current = {};
+			members.push(current);
+			current[itemMatch[1]] = parseValue(itemMatch[2].trim());
+			continue;
+		}
+
+		const fieldMatch = rawLine.match(/^ {4}(\w[\w-]*): (.+)$/);
+		if (fieldMatch) {
+			if (current === null) {
+				throw new FleetRegistryError(`registry/models.yaml line ${lineNumber + 1}: field outside any "- " member`);
+			}
+			current[fieldMatch[1]] = parseValue(fieldMatch[2].trim());
+			continue;
+		}
+
+		throw new FleetRegistryError(`registry/models.yaml line ${lineNumber + 1}: unrecognised line ${JSON.stringify(rawLine)}`);
+	}
+
+	if (!seenFleetKey) {
+		throw new FleetRegistryError('registry/models.yaml: no "fleet:" key found');
+	}
+	return members;
+}
+
+/**
+ * Validate one parsed member: every required field present, `modalities` and
+ * `capabilities` non-empty lists, `context` a positive number.
+ * @param {Record<string, unknown>} member
+ * @param {number} index - position in the sequence, for the error message.
+ */
+function validateMember(member, index) {
+	const label = typeof member.name === "string" ? member.name : `#${index + 1}`;
+	for (const field of REQUIRED_FIELDS) {
+		if (member[field] === undefined) {
+			throw new FleetRegistryError(`registry/models.yaml: fleet member ${label} is missing "${field}"`);
+		}
+	}
+	for (const field of ["modalities", "capabilities"]) {
+		if (!Array.isArray(member[field]) || member[field].length === 0) {
+			throw new FleetRegistryError(`registry/models.yaml: fleet member ${label} needs a non-empty "${field}" list`);
+		}
+	}
+	if (typeof member.context !== "number" || member.context <= 0) {
+		throw new FleetRegistryError(`registry/models.yaml: fleet member ${label} needs a positive numeric "context"`);
+	}
+}
+
+/**
+ * Read and validate the fleet from `registry/models.yaml`.
+ * @param {string} [registryPath] - override for tests; defaults to the repo's `registry/models.yaml`.
+ * @returns {Array<{ name: string, role: string, licence: string, size: string, context: number, modalities: string[], capabilities: string[], [extra: string]: unknown }>}
+ */
+export function readFleet(registryPath = REGISTRY_PATH) {
+	let text;
+	try {
+		text = readFileSync(registryPath, "utf8");
+	} catch (error) {
+		throw new FleetRegistryError(`registry/models.yaml could not be read at ${registryPath}: ${error.message}`);
+	}
+	const members = parseFleet(text);
+	if (members.length === 0) {
+		throw new FleetRegistryError("registry/models.yaml declares an empty fleet");
+	}
+	members.forEach(validateMember);
+
+	const names = members.map((member) => member.name);
+	const duplicate = names.find((name, i) => names.indexOf(name) !== i);
+	if (duplicate) {
+		throw new FleetRegistryError(`registry/models.yaml declares "${duplicate}" more than once`);
+	}
+	return members;
+}
+
+/**
+ * The licence allow-list from `docs/licence-policy.md` (ADR-0005). Matching is
+ * case-insensitive on the trimmed `licence` string. Widening this list is an
+ * ADR-level decision, never an edit made here.
+ */
+const ALLOWED_LICENCES = new Set(["apache-2.0", "mit", "bsd-2-clause", "bsd-3-clause"]);
+
+/**
+ * Whether a fleet member's declared licence is inside the allow-list.
+ * @param {{ licence: string }} member
+ */
+export function isLicenceAllowed(member) {
+	return ALLOWED_LICENCES.has(String(member.licence).trim().toLowerCase());
+}
+
+/**
+ * The fleet with disallowed-licence members removed — what the UI model list
+ * shows, so a model the box may not legally run never appears as choosable.
+ *
+ * This is a deliberately thin filter. Story 3.4 builds the real loader: a
+ * stated refusal naming the offending licence, not a silent drop. When it
+ * lands it owns this gate; until then this keeps `Qwen/Qwen2.5-3B-Instruct`
+ * (Qwen Research Licence, declared only so 3.4 can refuse it) out of the list.
+ * @param {string} [registryPath] - override for tests.
+ */
+export function allowedFleet(registryPath = REGISTRY_PATH) {
+	return readFleet(registryPath).filter(isLicenceAllowed);
+}

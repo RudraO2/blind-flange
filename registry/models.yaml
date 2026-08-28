@@ -1,0 +1,76 @@
+# The fleet — one file declares every model Blind Flange knows about.
+#
+# CONTEXT.md "Fleet": the set of open-weight models installed on the box.
+# Story 3.3 makes this the single source the UI model list, the router
+# (Stories 3.5-3.6) and the licence loader (Story 3.4) all read from, so
+# "how do you add a model?" is answered by editing this file and nothing else.
+#
+# Phase 0 runs on the `replay` provider and downloads no weights. These
+# entries are still real models with real licences: the declaration drives
+# the UI list, the router score and the licence gate whether or not a
+# weight file is ever fetched (Story 3.3, third acceptance block).
+#
+# LICENCE POLICY (docs/licence-policy.md): only Apache-2.0, MIT,
+# BSD-2-Clause and BSD-3-Clause ship. `Qwen/Qwen2.5-3B-Instruct` is
+# declared here *specifically so the loader can refuse it* (Story 3.4) —
+# it is the same family, publisher and release as the 7B, under a
+# different licence, so the refusal is checkable in ten seconds.
+#
+# Each `licence` below was re-verified on 28 August 2026 by reading the
+# licence text in the model repository at the exact `revision` pinned here
+# (NFR1) — not from a blog post, not from this project's own tables:
+#   - Qwen2.5-7B-Instruct       LICENSE file  -> "Apache License, Version 2.0"
+#   - Qwen2.5-Coder-7B-Instruct LICENSE file  -> "Apache License, Version 2.0"
+#   - Qwen2.5-3B-Instruct       LICENSE file  -> "Qwen RESEARCH LICENSE AGREEMENT"
+#   - Qwen2.5-VL-7B-Instruct    no LICENSE file exists at any revision; the
+#     `license: apache-2.0` field in README.md YAML frontmatter at the
+#     pinned revision is the repository's primary licence declaration
+#     (recorded decision, 28 August 2026 — see docs/licence-policy.md).
+#
+# No embedder or reranker is declared: retrieval is past the Phase 0 cut
+# line, and declaring unused members would mean verifying licences we do
+# not need (Story 3.3).
+
+fleet:
+  - name: Qwen/Qwen2.5-7B-Instruct
+    role: general reasoner
+    licence: Apache-2.0
+    licence_source: LICENSE file at the pinned revision
+    revision: a09a35458c702b33eeacc393d103063234e8bc28
+    size: 7B
+    context: 32768
+    modalities: [text]
+    capabilities: [general-reasoning, instruction-following, tool-use]
+
+  - name: Qwen/Qwen2.5-Coder-7B-Instruct
+    role: coder
+    licence: Apache-2.0
+    licence_source: LICENSE file at the pinned revision
+    revision: c03e6d358207e414f1eca0bb1891e29f1db0e242
+    size: 7B
+    context: 32768
+    modalities: [text]
+    capabilities: [code-generation, code-reasoning, tool-use]
+    note: serves the sandboxed coding task
+
+  - name: Qwen/Qwen2.5-VL-7B-Instruct
+    role: vision-document
+    licence: Apache-2.0
+    licence_source: README.md YAML frontmatter at the pinned revision (no LICENSE file in repo)
+    revision: cc594898137f460bfe9f0759e9844b3ce807cfb5
+    size: 7B
+    context: 128000
+    modalities: [text, image]
+    capabilities: [document-understanding, drawing-understanding, visual-grounding]
+    note: serves the document and drawing task types
+
+  - name: Qwen/Qwen2.5-3B-Instruct
+    role: none
+    licence: Qwen Research Licence
+    licence_source: LICENSE file at the pinned revision
+    revision: aa8e72537993ba99e69dfaafa59ed015b17504d1
+    size: 3B
+    context: 32768
+    modalities: [text]
+    capabilities: [general-reasoning]
+    note: "declared so the loader can refuse it (Story 3.4) — the Qwen Research Licence is outside the allow-list"
