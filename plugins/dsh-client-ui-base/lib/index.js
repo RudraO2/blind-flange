@@ -43,6 +43,16 @@
  * harness's persistence read-path vocabulary at mount
  * (`session-events/known-types.js`), so a stored session containing them
  * still opens instead of failing with `SessionFormatUnsupportedError`.
+ *
+ * Story 3.10 fixes the classifier reading the wrong turn's text (or none).
+ * `agent/pre-step` hands the listener `messages: claimed` directly in its
+ * payload — `Inbox.claim()` in the harness (`packages/core/agent/src/inbox.ts`)
+ * defines that as exactly the batch proposed for *this* step, stamped with
+ * this turn's number before the event even fires. Story 3.5/3.6 ignored that
+ * and read `decision.messages` from the far end of the `next()` waterfall
+ * instead — whatever every other `agent/pre-step` listener downstream chose
+ * to hand back, which is not the same guarantee. Classification now reads the
+ * payload's own `messages`, never `decision.messages`.
  */
 
 import { readFileSync } from "node:fs";
@@ -196,10 +206,21 @@ const ROUTED_EVENT = "router/routed";
  * a new one — and never throws into the loop: a classification or scoring
  * failure is logged and swallowed so the turn proceeds. Scoring failing does
  * not suppress the classification event that already landed.
+ *
+ * `messages` must be the `agent/pre-step` event's own payload field — the
+ * turn-scoped batch `Inbox.claim()` proposed for this step — never
+ * `decision.messages` read back out of the `next()` waterfall (Story 3.10;
+ * see the file header).
+ *
+ * When no request text is found at all — `lastUserText` returns `""` — this
+ * is recorded as `noRequestText: true` on the same event, distinct from an
+ * ordinary fallback (text present, no rule matched). A silent fallback here
+ * looks like a routing decision; this makes the anomaly itself visible in the
+ * session record instead.
  * @param {{ session: { append: (type: string, data: unknown) => unknown } }} agent
  * @param {number} turn
  * @param {number} step
- * @param {Array<{ role?: string, content?: unknown }>} messages - the messages entering this step.
+ * @param {Array<{ role?: string, content?: unknown }>} messages - this step's own claimed batch, from the `agent/pre-step` payload.
  */
 function classifyAndRoute(agent, turn, step, messages) {
 	if (step !== 1) return;
@@ -207,7 +228,7 @@ function classifyAndRoute(agent, turn, step, messages) {
 	try {
 		const text = lastUserText(messages);
 		classification = classifyRequest(text);
-		agent.session.append(CLASSIFIED_EVENT, { turn, step, ...classification });
+		agent.session.append(CLASSIFIED_EVENT, { turn, step, ...classification, noRequestText: text === "" });
 	} catch (error) {
 		console.warn(`@blind-flange/dsh-client-ui-base: request not classified — ${error instanceof Error ? error.message : String(error)}`);
 		return;
@@ -354,10 +375,17 @@ export function apply(ctx, config) {
 	// incoming request into a task type, scores the licence-checked fleet against
 	// it, and appends both structured results; it never rejects a step or
 	// rewrites its messages.
-	ctx.on("agent/pre-step", async ({ agent, turn, step }, next) => {
+	//
+	// Story 3.10: `messages` is read from this event's own payload — the batch
+	// `Inbox.claim()` proposed for this exact step, present the instant the
+	// event fires — never from `decision.messages`, which is whatever the rest
+	// of the `agent/pre-step` waterfall handed back by the time `next()`
+	// resolves. `next()` is still awaited first, only to learn whether the step
+	// was accepted (`decision.kind === "enter"`); its `messages` are unused.
+	ctx.on("agent/pre-step", async ({ agent, turn, step, messages }, next) => {
 		const decision = await next();
 		if (decision.kind === "enter") {
-			classifyAndRoute(agent, turn, step, decision.messages);
+			classifyAndRoute(agent, turn, step, messages);
 		}
 		return decision;
 	});

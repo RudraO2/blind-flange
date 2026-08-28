@@ -415,13 +415,14 @@ test("classifies the request entering a fresh turn and records it on the session
 
 	const agent = stubAgent();
 	const messages = [{ role: "user", content: [{ type: "text", text: "Refactor this Python function and add unit tests" }] }];
-	const decision = await host.preStepListener({ agent, turn: 1, step: 1 }, async () => ({ kind: "enter", messages }));
+	const decision = await host.preStepListener({ agent, turn: 1, step: 1, messages }, async () => ({ kind: "enter", messages }));
 
 	assert.deepEqual(decision, { kind: "enter", messages }, "the listener must pass the loop's decision through unchanged");
 	assert.equal(agent.events.length, 2);
 	assert.equal(agent.events[0].type, "router/classified");
 	assert.equal(agent.events[0].data.taskType, "code");
 	assert.equal(agent.events[0].data.turn, 1);
+	assert.equal(agent.events[0].data.noRequestText, false);
 	assert.equal(typeof agent.events[0].data.scores.document, "number");
 });
 
@@ -431,7 +432,7 @@ test("scores the licence-checked fleet against the classified task type and reco
 
 	const agent = stubAgent();
 	const messages = [{ role: "user", content: [{ type: "text", text: "Refactor this Python function and add unit tests" }] }];
-	await host.preStepListener({ agent, turn: 2, step: 1 }, async () => ({ kind: "enter", messages }));
+	await host.preStepListener({ agent, turn: 2, step: 1, messages }, async () => ({ kind: "enter", messages }));
 
 	const routed = agent.events.find((event) => event.type === "router/routed");
 	assert.ok(routed, "no router/routed event recorded");
@@ -464,7 +465,7 @@ test("a scoring failure is swallowed and does not suppress the classification al
 			},
 		};
 		const messages = [{ role: "user", content: [{ type: "text", text: "calculate the pressure drop" }] }];
-		const decision = await host.preStepListener({ agent, turn: 1, step: 1 }, async () => ({ kind: "enter", messages }));
+		const decision = await host.preStepListener({ agent, turn: 1, step: 1, messages }, async () => ({ kind: "enter", messages }));
 		assert.equal(decision.kind, "enter");
 		assert.equal(agent.events.length, 1);
 		assert.equal(agent.events[0].type, "router/classified");
@@ -481,15 +482,11 @@ test("Story 3.8: a second turn classifying as a different task type routes to a 
 	const agent = stubAgent();
 
 	// Turn 1: a document task.
-	await host.preStepListener(
-		{ agent, turn: 1, step: 1 },
-		async () => ({ kind: "enter", messages: [{ role: "user", content: [{ type: "text", text: "read the inspection report and summarise the findings" }] }] }),
-	);
+	const turn1Messages = [{ role: "user", content: [{ type: "text", text: "read the inspection report and summarise the findings" }] }];
+	await host.preStepListener({ agent, turn: 1, step: 1, messages: turn1Messages }, async () => ({ kind: "enter", messages: turn1Messages }));
 	// Turn 2, same session, no operator action between: a coding task.
-	await host.preStepListener(
-		{ agent, turn: 2, step: 1 },
-		async () => ({ kind: "enter", messages: [{ role: "user", content: [{ type: "text", text: "refactor this Python function and add unit tests" }] }] }),
-	);
+	const turn2Messages = [{ role: "user", content: [{ type: "text", text: "refactor this Python function and add unit tests" }] }];
+	await host.preStepListener({ agent, turn: 2, step: 1, messages: turn2Messages }, async () => ({ kind: "enter", messages: turn2Messages }));
 
 	const routed = agent.events.filter((event) => event.type === "router/routed");
 	assert.equal(routed.length, 2, "one routing decision per turn");
@@ -501,12 +498,107 @@ test("Story 3.8: a second turn classifying as a different task type routes to a 
 	assert.equal(routed[1].data.turn, 2);
 });
 
+/* -------------------------------------------------------------------------
+ * Story 3.10: the first turn classifies on what was actually asked.
+ *
+ * `agent/pre-step`'s own payload carries `messages: claimed` — the harness's
+ * `Inbox.claim()` batch for exactly this step (see `lib/index.js`'s file
+ * header). These tests give the payload's `messages` and `next()`'s resolved
+ * `decision.messages` *different* content, the way the real waterfall can:
+ * the payload is always this turn's real claim, `decision.messages` is
+ * whatever the rest of the chain (or, before this story, first-turn harness
+ * timing) handed back. A listener reading `decision.messages` — the ordering
+ * this story replaces — fails every one of these; reading the payload's own
+ * `messages` passes all of them.
+ * ---------------------------------------------------------------------- */
+
+test("Story 3.10: classifies the first turn's clear drawing-review prompt as drawing, not the document fallback", async () => {
+	const host = stubHostCtx({ webServer: false });
+	apply(host.ctx);
+	const agent = stubAgent();
+	// The P&ID prompt recorded in deferred-work.md as currently failing on turn one.
+	const messages = [{ role: "user", content: [{ type: "text", text: "Review this P&ID and give me the tag inventory for the line" }] }];
+	// Simulate the real first-turn failure this story fixes: `next()`'s
+	// resolved decision carries no messages, exactly as the harness was
+	// observed to hand back on turn one. Only the event payload's own
+	// `messages` — the turn's actual claim — carries the real request.
+	await host.preStepListener({ agent, turn: 1, step: 1, messages }, async () => ({ kind: "enter", messages: [] }));
+
+	const classified = agent.events.find((event) => event.type === "router/classified");
+	assert.ok(classified, "no router/classified event recorded");
+	assert.equal(classified.data.taskType, "drawing", "first turn must classify on its own request text, not the empty decision.messages the old ordering read");
+	assert.ok(classified.data.matchedRuleCount > 0, "matchedRuleCount must be greater than zero for a clear drawing-review prompt");
+	assert.equal(classified.data.noRequestText, false);
+});
+
+test("Story 3.10: three turns of one session each classify on their own request text, never another turn's and never empty", async () => {
+	const host = stubHostCtx({ webServer: false });
+	apply(host.ctx);
+	const agent = stubAgent();
+
+	const turns = [
+		{ text: "Review this P&ID and give me the tag inventory for the line", expected: "drawing" },
+		{ text: "calculate the pressure drop across this line", expected: "calculation" },
+		{ text: "refactor this Python function and add unit tests", expected: "code" },
+	];
+	for (const [index, { text }] of turns.entries()) {
+		const turn = index + 1;
+		const messages = [{ role: "user", content: [{ type: "text", text }] }];
+		// `next()` resolves with a decoy — a *different* turn's stale text, the
+		// shape of the real bug ("turns two and three see the previous turns'
+		// messages"). The fix must never read it.
+		const decoy = index === 0 ? [] : [{ role: "user", content: [{ type: "text", text: turns[index - 1].text }] }];
+		await host.preStepListener({ agent, turn, step: 1, messages }, async () => ({ kind: "enter", messages: decoy }));
+	}
+
+	const classified = agent.events.filter((event) => event.type === "router/classified");
+	assert.equal(classified.length, 3);
+	assert.deepEqual(
+		classified.map((event) => event.data.taskType),
+		turns.map((t) => t.expected),
+		"each turn must classify on its own request text",
+	);
+	assert.ok(
+		classified.every((event) => event.data.noRequestText === false),
+		"no turn may read empty text when its own request text was available",
+	);
+});
+
+test("Story 3.10: no request text found is recorded on the session, not silently folded into the fallback", async () => {
+	const host = stubHostCtx({ webServer: false });
+	apply(host.ctx);
+	const agent = stubAgent();
+	// No user-role message at all in this step's claim.
+	const messages = [];
+	await host.preStepListener({ agent, turn: 1, step: 1, messages }, async () => ({ kind: "enter", messages }));
+
+	const classified = agent.events.find((event) => event.type === "router/classified");
+	assert.ok(classified, "no router/classified event recorded");
+	assert.equal(classified.data.taskType, "document", "still falls back so routing can proceed");
+	assert.equal(classified.data.matchedRuleCount, 0);
+	assert.equal(classified.data.noRequestText, true, "must say explicitly that no request text was found");
+});
+
+test("Story 3.10: a fallback with request text present is not confused with no request text found", async () => {
+	const host = stubHostCtx({ webServer: false });
+	apply(host.ctx);
+	const agent = stubAgent();
+	// Real text, but it trips no rule in any task type.
+	const messages = [{ role: "user", content: [{ type: "text", text: "good morning" }] }];
+	await host.preStepListener({ agent, turn: 1, step: 1, messages }, async () => ({ kind: "enter", messages }));
+
+	const classified = agent.events.find((event) => event.type === "router/classified");
+	assert.equal(classified.data.taskType, "document");
+	assert.equal(classified.data.matchedRuleCount, 0);
+	assert.equal(classified.data.noRequestText, false, "text was present, even though no rule matched it");
+});
+
 test("does not re-classify a tool-loop continuation step", async () => {
 	const host = stubHostCtx({ webServer: false });
 	apply(host.ctx);
 	const agent = stubAgent();
 	const messages = [{ role: "user", content: [{ type: "text", text: "read the inspection report" }] }];
-	await host.preStepListener({ agent, turn: 1, step: 2 }, async () => ({ kind: "enter", messages }));
+	await host.preStepListener({ agent, turn: 1, step: 2, messages }, async () => ({ kind: "enter", messages }));
 	assert.deepEqual(agent.events, [], "step 2 is the same request, not a new one");
 });
 
@@ -533,7 +625,7 @@ test("a classification failure is swallowed so the turn still proceeds", async (
 			},
 		};
 		const messages = [{ role: "user", content: [{ type: "text", text: "calculate the pressure drop" }] }];
-		const decision = await host.preStepListener({ agent: brokenAgent, turn: 1, step: 1 }, async () => ({ kind: "enter", messages }));
+		const decision = await host.preStepListener({ agent: brokenAgent, turn: 1, step: 1, messages }, async () => ({ kind: "enter", messages }));
 		assert.equal(decision.kind, "enter");
 	} finally {
 		console.warn = originalWarn;

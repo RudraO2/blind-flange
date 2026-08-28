@@ -51,7 +51,7 @@ development_status:
   2-4-the-audit-log-can-be-read-on-screen: done
   epic-2-retrospective: optional
 
-  epic-3: in-progress
+  epic-3: done
   3-1-a-replay-provider-answers-a-turn-through-the-model-plane: done
   3-2-the-active-provider-is-always-visible-and-replay-says-replay: done
   3-3-the-fleet-is-declared-in-one-registry-file: done
@@ -61,7 +61,7 @@ development_status:
   3-7-the-routing-chip-shows-the-decision-and-the-working: done
   3-8-the-model-changes-by-itself-when-the-task-type-changes: done
   3-9-a-stored-session-still-opens: done
-  3-10-the-first-turn-classifies-on-what-was-actually-asked: backlog
+  3-10-the-first-turn-classifies-on-what-was-actually-asked: done
   epic-3-retrospective: optional
 
   epic-4: in-progress
