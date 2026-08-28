@@ -1,7 +1,14 @@
 # Ralph loop — one story per chat
 
-**How to use this:** open a new Claude Code chat in this repo, paste everything below the line,
-and add one line naming the story and the lane. It builds that one story and stops.
+**How to use this:** open a new Claude Code chat in this repo, run `/model sonnet`, and paste:
+
+> Read `docs/ralph-loop.md` and do exactly what it says.
+
+That is the whole prompt. It works out which story is next by itself, builds it, gates it,
+commits, pushes and stops. Nothing to edit between chats.
+
+To force a specific story instead, add one line: `Do story 4.5.` An explicit story always wins
+over the picking rule below.
 
 **Run it on Sonnet.** `/model sonnet`. The stories in `epics.md` already carry their acceptance
 criteria in Given/When/Then form, so the thinking has been done — what is left is mechanical, and
@@ -10,6 +17,29 @@ every subagent inherits the session's model, which multiplies the cost of choosi
 ---
 
 You are implementing **Blind Flange** (SIH26117). Do exactly one story, then stop.
+
+## 0 — Work out which story
+
+Skip this only if you were told a story by name.
+
+Read `_bmad-output/implementation-artifacts/sprint-status.yaml` and apply these rules in order.
+The first one that matches decides it:
+
+1. **A story is `in-progress` or `review`.** That one is yours — finish it. Something stopped
+   mid-flight and leaving it is worse than starting new work. Read what blocked it first.
+2. **Otherwise, the first `backlog` story in the build order.** The order is *not* numerical.
+   It is set in `epics.md` under **Build order** and is currently:
+
+   **3 → 2 → 5 → 4.5 → 6**
+
+   Walk it in that sequence and take the first story still marked `backlog`.
+
+**Never take a story marked `deferred`.** Those were cut on 28 Aug 2026 with reasons recorded at
+each story. `deferred` is a decision, not a gap to be helpfully filled.
+
+**Say which story you picked and why, in one line, before you do anything else.** If the tracker
+and the build order disagree, or every remaining story is `deferred` or `done`, stop and ask
+rather than guessing.
 
 ## 1 — Read
 
@@ -42,8 +72,8 @@ exists to avoid.
 explore the codebase, stop: the slot table, the plugin format, the extension-point map and the
 install path are all in `docs/deepseek-harness-notes.md`, verified from source.
 
-**Announce the plan in one line before starting** — the route, and how many subagents you intend
-to spawn. If that number is above one, you have misread this section.
+**Announce the plan in one line before starting** — the story you picked, the route, and how many
+subagents you intend to spawn. If that number is above one, you have misread this section.
 
 Rules while building:
 
@@ -93,7 +123,8 @@ mark it done.
 ## 5 — Report and stop
 
 Four lines, plain language: what you built · **what you had to decide that the plan did not
-record** · anything that will bite the next story · which story is next.
+record** · anything that will bite the next story · which story is next by the picking rule in
+step 0.
 
 Then stop. The next story goes in a new chat.
 
@@ -112,8 +143,6 @@ If a tool offers to move you into a worktree, decline it.
 **Before you start:** `git pull --rebase`. **Before you finish:** `git pull --rebase`, then
 push to `main`. A story is done when it is on `origin/main`, not when it is committed
 somewhere.
-
-**You are told which story to do — never auto-pick.**
 
 The Python ingestion service (`services/ingestion/`) and the harness plugins
 (`plugins/`, the profile) are separate trees, so a story touches one or the other. If your
