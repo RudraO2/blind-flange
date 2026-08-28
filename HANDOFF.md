@@ -77,8 +77,8 @@ instruction, and `epics.md` supersedes it wherever they disagree.
 Three stories carry the real risk and each has its escape hatch written into its acceptance
 criteria: **3.1** the replay adapter seam (timeboxed, fallback is our own loop), **4.2**
 proving Tesseract returns bounding boxes on this laptop (timeboxed, and **no fake crop** if it
-slips), and **6.4** the licence audit that closes the gap `licence-policy.md` records against
-itself.
+slips), and **6.4** the licence audit, which now closes two open questions rather than one — Pillow's
+MIT-CMU and Clipper's BSL-1.0.
 
 Matt Pocock's skills are installed at user level but **stood down for this project** — see
 `CLAUDE.md`. `.scratch/phase-0-spine/spec.md` is a pre-BMAD draft: input, not authority.
@@ -103,10 +103,18 @@ Five decisions are recorded in `docs/adr/` and the artifact does not yet reflect
   spike proved an out-of-tree UI plugin renders with no fork and no bundler, and that a full
   page load makes zero external requests. Our panels take declared slots. Disclose the
   dependency loudly and first; rebrand *after* the panels exist, never before.
-- **ADR-0005** (28 Aug) — Tesseract, not Docling, for ingestion, and the licence allow-list
+- **ADR-0005** (28 Aug, **amended same day**) — Tesseract, not Docling, for ingestion, and the licence allow-list
   widens from two to four. Docling's models are CDLA-Permissive-2.0, which is genuinely
   permissive and legally safe but outside the list; the Tesseract stack is Apache-2.0
   throughout and far lighter. `PyMuPDF` is AGPL-3.0 and banned by name — use `pypdfium2`.
+
+**ADR-0005 carries a 28 Aug amendment**: RapidOCR replaced Tesseract as the ingestion engine.
+Tesseract read the degraded fixture at 0.89–0.96 confidence and mangled reference numbers and
+equipment tags; RapidOCR reads it at 0.997 and reads them exactly, for 2.3× the memory and no
+VRAM. Findings are now one per detected line, not per word. **The amendment leaves one licence
+question open** — `pyclipper` embeds Clipper under BSL-1.0, a fifth licence — deliberately
+deferred to Story 6.4, which cannot pass without closing it. GEOS (LGPL-2.1) also arrived with
+the swap and was removed rather than accepted; a test fails if it returns.
 
 **ADR-0001 also carries a 28 Aug amendment**: the Phase 0 replay cache is authored by hand,
 not captured from real `local` runs, because local inference is a day-4 stretch goal. Read
