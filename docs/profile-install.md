@@ -4,8 +4,51 @@ How Blind Flange is assembled on a machine. Everything here goes through the har
 supported paths — a profile dependency and a patch row. **No harness source file is ever
 edited** (NFR5).
 
-The `~/.dsh` profile is not in this repository and never will be, so this file is the record
-that makes it reproducible. Epic 6 turns it into one command.
+## One command (Story 6.1)
+
+```sh
+npm start
+```
+
+From the repository root, on a clean clone. `scripts/start.mjs` performs every step in this
+file — prerequisites, the pinned harness, the plugin package in both profiles, the patch
+layers, the task-type presets and the settings keys — and then starts the web profile. It is
+idempotent, so it is also how you pick up an edit made under `profile/`. `npm run setup` does
+all of it except the start.
+
+**The profile's own files are now tracked**, which they were not before Story 6.1: the
+`~/.dsh` tree is still never committed, but the parts of it this project authors live under
+`profile/` in the repository and are copied out by the start command.
+
+| Tracked source | Written to |
+|---|---|
+| `profile/web/cordis.patch.yml` | `$DSH_HOME/profiles/web/cordis.patch.yml` |
+| `profile/headless/cordis.patch.yml` | `$DSH_HOME/profiles/headless/cordis.patch.yml` |
+| `profile/agent-presets/{document,drawing,calculation,code-task}/` | `$DSH_HOME/.agent-presets/` |
+| `profile/settings.yaml` | merged into `$DSH_HOME/settings.yaml` |
+| *(generated)* | `$DSH_HOME/storages/workspace.json`, **only when it does not already exist** |
+
+The patch layers and the presets are **copied over** whatever is there — edit the repository
+copy, not the profile's. `settings.yaml` is the exception and is **merged**: the same file
+holds the operator's own settings (`ui-theme.preference` above all), so every key this project
+owns is enforced and every key it does not own is left alone.
+
+**The workspace registry is seeded, and this is not cosmetic.** The composer refuses to start
+a session until a workspace is chosen — a fresh home has none, and the placeholder reads
+"Choose a workspace to start" — so without a seed the documented command stops one click short
+of the first demo beat. `scripts/start.mjs` writes one workspace pointing at the checkout, in
+the shape the harness's own domain spec declares (`name: workspace`, `version: 2`;
+`packages/workspace/workspace/src/spec.ts`), through the same `json` storage backend the web
+profile already configures. It is written **only when the file is absent**: an operator's own
+workspace list is theirs, and a re-run on an installed machine leaves it untouched. Verified
+28 August 2026 on a fresh `DSH_HOME` — the composer opened ready, on the `document` preset,
+with the workspace already selected.
+
+`$DSH_HOME` defaults to `~/.dsh` and is honoured if set, which is how a cold start can be
+proved without disturbing an existing install.
+
+**The rest of this file is the explanation**, kept because it says *why* each row exists and
+how to do the same work by hand. It is no longer the installation procedure.
 
 ## Versions
 

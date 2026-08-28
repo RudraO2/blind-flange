@@ -1,0 +1,16 @@
+{
+  "name": "blind-flange",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Blind Flange (SIH26117) — a sovereign, air-gapped agentic AI workbench built on DeepSeek Harness. This manifest exists to carry the one documented start command; the workbench itself is the plugin package under plugins/ mounted into a dsh profile.",
+  "license": "MIT",
+  "type": "module",
+  "engines": {
+    "node": ">=22.15.0"
+  },
+  "scripts": {
+    "start": "node scripts/start.mjs",
+    "setup": "node scripts/start.mjs --setup-only",
+    "test": "cd plugins/dsh-client-ui-base && node --test"
+  }
+}

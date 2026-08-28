@@ -1,0 +1,109 @@
+# Your patch layer for this dsh profile, applied after every bundle layer:
+# a top-level YAML array of loader patch entries (id-targeted config
+# overrides, disables, and insert lists; `!!js` expressions allowed).
+#
+# Blind Flange (SIH26117). THIS COPY, in the project repo under `profile/`, is
+# the source of truth. `npm start` (scripts/start.mjs) copies it over the
+# profile's own file, so an edit made here reaches the next start and an edit
+# made in $DSH_HOME is overwritten by it. docs/profile-install.md explains what
+# each row is for and how to do the same work by hand.
+
+- insert:
+    - id: bf-base
+      name: '@blind-flange/dsh-client-ui-base'
+
+# Story 1.2: no network-capable tool anywhere in the tool list. The tool
+# itself (`tool-web`) is mounted per agent preset, not here — sealing it took
+# Blind Flange copies of every built-in preset that carried it (see
+# ~/.dsh/.agent-presets/blind-flange-*). These two rows close the host-side
+# surface the presets' tool-web used to reach: no search provider left
+# configured, no "Add an API key" prompt, nothing live in Settings > Plugins.
+- id: web-search-deepseek
+  disabled: true
+
+- id: web
+  disabled: true
+
+# Story 1.3: no cloud model provider in the model list or provider list. Both
+# shipped LLM adapters talk to a network endpoint (deepseek-official via
+# dsh-llm-deepseek; the multi-vendor pi-ai gateway via dsh-llm-pi-ai), so both
+# rows are disabled here. Neither adapter's npm dependency (@anthropic-ai,
+# @aws-sdk, @google, @mistralai, openai) is removable this way — they live
+# under the harness's own global install
+# (AppData/Roaming/npm/node_modules/@deepseek-ai/dsh/node_modules/...), not
+# under this profile, and NFR5 forbids touching harness install files. See
+# docs/profile-install.md step 6 for the verified finding.
+- id: llm-deepseek
+  disabled: true
+
+- id: llm-pi-ai
+  disabled: true
+
+# Story 1.4: the workbench introduces itself as Blind Flange. The host-level
+# persona row (`packages/bundle/web-app/cordis.patch.yml`'s `system-prompt`
+# id) is the deployment default a rosterless session would fall back to, and
+# it is what `dsh --profile web --dump-config` actually shows — the four
+# task-type presets (document, drawing, calculation, code; see
+# ~/.dsh/.agent-presets/) each carry their OWN persona row that shadows this
+# one for every session in practice, since every session joins one of them.
+# Both are kept in step so neither surface still reads "You are a coding
+# agent powered by the {{model}} model."
+- id: system-prompt
+  config:
+    persona: >-
+      You are Blind Flange, a sovereign industrial knowledge-work workbench running
+      entirely offline on the {{model}} model within the DeepSeek Harness. Your working
+      directory is {{cwd}}.
+
+# Story 1.5: our mark, our tab title, our favicon. conversation.hero.brand.mark is a
+# single slot, and a dynamically-registered (out-of-tree) entry gets a lower priority
+# than a shipped one — the same rule the harness notes call out for the literal `root`
+# slot, generalised. Registering @blind-flange/dsh-client-ui-base into the slot was not
+# enough on its own: the DeepSeek whale (@deepseek-ai/dsh-client-ui-brand-official) kept
+# winning. Disabling its row is what actually clears the seat.
+- id: ui-brand-official
+  disabled: true
+
+# Story 3.1: sessions default to the replay provider (ADR-0001; FR7).
+# dsh-agent-default-model otherwise points every new session at
+# deepseek-official, which Story 1.3 already disabled — this row is what
+# makes a session answer at all.
+- id: agent-default-model
+  config:
+    provider: replay
+    model: replay-authored-v1
+
+# Story 3.7: the routing chip replaces the stock model picker.
+# conversation.input.model is a single slot; disabling ui-model-selection
+# (the composer model seat + /model popup) is what makes bf-base's routing
+# chip the sole occupant rather than sitting beside the shipped picker.
+- id: ui-model-selection
+  disabled: true
+
+# Story 5.2: helper agents are visible while they work. ui-jobs and ui-subagent
+# are already mounted and reading real session/subagent state (see
+# docs/profile-install.md); only the model-facing tools that drive them were
+# off, disabled by dsh-web-app itself (not our Epic 1 sealing, which only ever
+# touched network-capable rows — subagent delegation and background jobs make
+# no outbound call). Enabling these three gives a real agent something to make
+# ui-jobs' badge and ui-subagent's header lineage move.
+- id: tool-jobs
+  disabled: false
+
+- id: tool-subagent
+  disabled: false
+
+- id: tool-subagent-control
+  disabled: false
+
+# Story 5.3: a coding task runs and is verified in the sandbox. tool-pwsh is
+# the Windows executor (dsh-bash-sandbox's `disabled` expression is true on
+# win32 and never loads here); sandbox, sandbox-policy and pwsh-sandbox are
+# already active per the epic's own survey. Enabling this row is what gives a
+# real agent something to run through ctx.sandbox — the shipped terminal card
+# already renders the run and its result, success or failure. The base
+# plugin's tools/pre-execute waterfall (lib/index.js) now also inspects this
+# tool's command text for a network attempt and denies+records it the same
+# way the canary is denied, so the sandbox's shell is sealed too.
+- id: tool-pwsh
+  disabled: false

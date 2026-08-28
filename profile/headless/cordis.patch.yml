@@ -1,0 +1,73 @@
+# Your patch layer for this dsh profile, applied after every bundle layer:
+# a top-level YAML array of loader patch entries (id-targeted config
+# overrides, disables, and insert lists; `!!js` expressions allowed).
+#
+# Blind Flange (SIH26117). THIS COPY, in the project repo under `profile/`, is
+# the source of truth. `npm start` (scripts/start.mjs) copies it over the
+# profile's own file, so an edit made here reaches the next start and an edit
+# made in $DSH_HOME is overwritten by it. docs/profile-install.md explains what
+# each row is for and how to do the same work by hand.
+#
+# The headless profile answers one task on the command line and exits. It has
+# no web server and no browser, so the plugin's presentation half never runs
+# here — but its host half does, which is the point: the egress denial
+# waterfall, and later the model plane, are enforced whether or not anything
+# is being rendered. Sovereignty that only holds in the UI is not sovereignty.
+
+- insert:
+    - id: bf-base
+      name: '@blind-flange/dsh-client-ui-base'
+
+# The same two cloud LLM adapters Story 1.3 disabled in the web profile. Both
+# reach a network endpoint, and headless would otherwise happily use one.
+- id: llm-deepseek
+  disabled: true
+
+- id: llm-pi-ai
+  disabled: true
+
+# The same network-capable search provider and web tool Story 1.2 disabled.
+#
+# `tool-web` must be disabled here as well, which the web profile does not
+# need: there, the tool is mounted per agent preset and sealing it meant
+# Blind Flange copies of the presets that carried it. The headless profile has
+# no presets — dsh-base mounts `tool-web` directly — and disabling only the
+# `web` service it depends on makes it hang the boot with
+# "dsh-tool-web: pending (waiting for service: web)" rather than going away.
+- id: tool-web
+  disabled: true
+
+- id: web-search-deepseek
+  disabled: true
+
+- id: web
+  disabled: true
+
+# Story 3.1: sessions default to the replay provider (ADR-0001; FR7). This is
+# the config edit that makes "provider chosen by configuration, never by a
+# code path" real for a whole session, not just a direct ctx.llm.stream()
+# call — dsh-agent-default-model is the shipped row that otherwise points
+# every new session at deepseek-official.
+- id: agent-default-model
+  config:
+    provider: replay
+    model: replay-authored-v1
+
+# Story 5.2: helper agents are visible while they work. The web profile's own
+# comment explains why these three are safe to enable (no network reach);
+# mirrored here so a headless run exercises the same real subagent/job
+# dispatch the web profile's UI renders.
+- id: tool-jobs
+  disabled: false
+
+- id: tool-subagent
+  disabled: false
+
+- id: tool-subagent-control
+  disabled: false
+
+# Story 5.3: mirrored from the web profile so a headless run exercises the
+# same real sandboxed pwsh execution — and the same command-text egress seal —
+# the web profile's UI renders.
+- id: tool-pwsh
+  disabled: false

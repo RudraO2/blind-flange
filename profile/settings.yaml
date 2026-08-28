@@ -1,0 +1,24 @@
+# Blind Flange (SIH26117) — the harness settings this project owns.
+#
+# `scripts/start.mjs` MERGES these keys into $DSH_HOME/settings.yaml rather
+# than overwriting the file: the same file also holds settings that belong to
+# the operator, not to us (`ui-theme.preference` is the one that matters —
+# every panel we build renders in both themes, and which one is on screen is
+# the operator's choice). A key already present is left alone.
+
+# Story 1.1 / Story 6.1: the harness's "Internal Testing Notice" is a
+# developer-preview disclaimer shown once per notice version. Shipping the
+# version it was published under marks it already seen, so a judge's first
+# screen is the workbench rather than a modal.
+#
+# There is no matching key for the "Add an API key to get started" modal, and
+# none is needed: that modal is a function of there being a provider left to
+# configure, and Story 1.3 disabled both cloud adapters. No provider, no modal.
+ui-onboarding:
+  welcomeNoticeVersion: 2026-08-13.1
+
+# Story 1.4: a new session opens on a Blind Flange task type rather than a
+# shipped preset. `document` is the deployment default because the demo opens
+# on the inspection report.
+agent-presets:
+  default: document
