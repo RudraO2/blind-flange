@@ -45,6 +45,19 @@
  * the host's `llm.providers` directory — the Blind Flange adapter registered
  * in the host half (`index.js`) surfaces there as `Blind Flange (<provider>)` —
  * so this indicator reports the configured provider rather than guessing it.
+ *
+ * Story 3.7 takes the last seat: `conversation.input.model`, a `single` slot,
+ * so occupying it replaces the stock model picker outright
+ * (`@deepseek-ai/dsh-client-ui-model-selection` is disabled in the profile —
+ * docs/profile-install.md, Story 3.7 section). This is the routing chip
+ * (CONTEXT.md): it names the fleet member the router picked for the last turn
+ * and expands to show the working — the classified task type, the score per
+ * fleet member, and the members filtered out before scoring with the reason
+ * each was. The decision is not recomputed here: the host half appends a
+ * `router/routed` session event per turn (Story 3.6), and this reads it back
+ * through a registered conversation view (`bf-routing`) folded from that
+ * event, so the chip shows the decision the router actually recorded — never
+ * an animation without an event behind it (NFR8).
  */
 window.__ModuleLoader__.load({
 	id: "@blind-flange/dsh-client-ui-base",
@@ -305,6 +318,270 @@ window.__ModuleLoader__.load({
 		}
 
 		/**
+		 * The plugin-owned session event the host half's router appends per turn
+		 * (Story 3.6, `index.js` `ROUTED_EVENT`). Its data is the whole
+		 * `RoutingDecision`: `{ taskType, scored, excluded, selected, tied, allZero }`.
+		 */
+		const ROUTED_EVENT = "router/routed";
+
+		/**
+		 * The conversation view target and Definition kind the routing chip reads.
+		 * The Definition folds every `router/routed` event into a node; the view
+		 * builder keeps the one from the latest turn (highest `anchorSeq`), which
+		 * is the decision the chip shows.
+		 */
+		const ROUTING_VIEW_TARGET = "bf-routing";
+		const ROUTING_DEFINITION_KIND = "bf-routing";
+
+		/**
+		 * View builder for {@link ROUTING_VIEW_TARGET}: retains the routing
+		 * decision from the highest-seq `router/routed` node it has seen. Routing
+		 * events are append-only and one-per-turn, so "highest seq" is "latest
+		 * turn" and an older node never supersedes a newer one.
+		 * @returns a `ConversationViewBuilder` — `{ empty, replace, apply }`.
+		 */
+		function createRoutingViewBuilder() {
+			const empty = { decision: null };
+			let bestSeq = -1;
+			let snapshot = empty;
+			function consider(node) {
+				if (node && typeof node.anchorSeq === "number" && node.anchorSeq >= bestSeq) {
+					bestSeq = node.anchorSeq;
+					snapshot = { decision: node.data };
+				}
+			}
+			return {
+				empty,
+				replace(input) {
+					bestSeq = -1;
+					snapshot = empty;
+					for (const node of input.nodes) consider(node);
+					return snapshot;
+				},
+				apply(input) {
+					for (const node of input.upserts) consider(node);
+					return snapshot;
+				},
+			};
+		}
+
+		/** The view Definition registered with `ctx.conversationViews`. */
+		const routingViewDefinition = {
+			target: ROUTING_VIEW_TARGET,
+			create: createRoutingViewBuilder,
+		};
+
+		/**
+		 * The event Definition registered with `ctx.conversationEvents`. A
+		 * single-event business: each `router/routed` event is its own Context,
+		 * keyed by the event's own seq, and carries the whole decision as state.
+		 */
+		const routingNodeDefinition = {
+			kind: ROUTING_DEFINITION_KIND,
+			target: ROUTING_VIEW_TARGET,
+			match(event) {
+				return event && event.type === ROUTED_EVENT
+					? { id: String(event.seq), role: "start" }
+					: null;
+			},
+			start(_context, match) {
+				return match.event.data;
+			},
+			update(context) {
+				return context.state;
+			},
+			buildViewNode(context) {
+				if (context.state === undefined) return null;
+				return {
+					key: context.key,
+					kind: ROUTING_DEFINITION_KIND,
+					id: context.id,
+					target: ROUTING_VIEW_TARGET,
+					anchorSeq: context.start?.event?.seq ?? 0,
+					data: context.state,
+				};
+			},
+		};
+
+		/**
+		 * Drop the `Qwen/` org prefix for the chip's compact surfaces; the full
+		 * id still rides `title` attributes and the expanded rows.
+		 * @param name - a fleet member id, e.g. `Qwen/Qwen2.5-VL-7B-Instruct`.
+		 */
+		function shortMemberName(name) {
+			if (typeof name !== "string") return String(name ?? "");
+			const slash = name.lastIndexOf("/");
+			return slash >= 0 ? name.slice(slash + 1) : name;
+		}
+
+		/**
+		 * Build the `Menu` entries that show the router's working: the classified
+		 * task type, one scored row per fleet member (the selected one carries the
+		 * check), and one row per member filtered out before scoring with its
+		 * reason. Everything is `Menu` primitive chrome; only flexbox layout and
+		 * `ui-theme` colour tokens are set inline.
+		 * @param decision - the `RoutingDecision` from the `router/routed` event.
+		 * @param jsx - host `react/jsx-runtime` `jsx`.
+		 * @param jsxs - host `react/jsx-runtime` `jsxs`.
+		 * @returns `MenuEntry[]`.
+		 */
+		function buildRoutingMenuItems(decision, jsx, jsxs) {
+			const SECONDARY = { color: "var(--dsw-alias-label-secondary)" };
+			const items = [];
+
+			// `tied` / `allZero` come straight from the scorer (Story 3.6): a
+			// score tie is broken by fleet declaration order, and `allZero` means
+			// no eligible member declared a capability this task type scores.
+			const taskNotes = [];
+			if (decision.tied) taskNotes.push("score tie — broken by fleet order");
+			if (decision.allZero) taskNotes.push("no strong match");
+			const taskLabel =
+				decision.taskType + (taskNotes.length > 0 ? ` (${taskNotes.join("; ")})` : "");
+			items.push({ type: "label", id: "bf-r-task-h", text: "Task type — classified by the router" });
+			items.push({ type: "label", id: "bf-r-task", text: taskLabel });
+
+			items.push({ type: "separator", id: "bf-r-s1" });
+			items.push({ type: "label", id: "bf-r-scored-h", text: "Fleet — score per member" });
+			const scored = Array.isArray(decision.scored) ? decision.scored : [];
+			if (scored.length === 0) {
+				items.push({ type: "label", id: "bf-r-scored-none", text: "No fleet member was eligible to score" });
+			}
+			for (const member of scored) {
+				const matched = Array.isArray(member.matched) ? member.matched : [];
+				const working =
+					matched.length > 0
+						? matched.map((hit) => `${hit.capability} +${hit.points}`).join(" · ")
+						: decision.allZero
+							? "no scored capability — first eligible member selected"
+							: "no scored capability";
+				items.push({
+					id: `bf-r-score:${member.name}`,
+					label: jsxs("span", {
+						title: `${member.name} — score ${member.score}`,
+						style: { display: "flex", alignItems: "baseline", gap: "8px", minWidth: 0 },
+						children: [
+							jsx("span", { style: { flex: "1 1 auto", minWidth: 0 }, children: shortMemberName(member.name) }),
+							jsx("span", { style: SECONDARY, children: `score ${member.score}` }),
+						],
+					}),
+				});
+				items.push({ type: "label", id: `bf-r-score-w:${member.name}`, text: working });
+			}
+
+			const excluded = Array.isArray(decision.excluded) ? decision.excluded : [];
+			if (excluded.length > 0) {
+				items.push({ type: "separator", id: "bf-r-s2" });
+				items.push({ type: "label", id: "bf-r-excl-h", text: "Filtered out before scoring" });
+				for (const member of excluded) {
+					const reason = member.reason || {};
+					items.push({
+						id: `bf-r-excl:${member.name}`,
+						label: jsx("span", {
+							title: reason.detail || reason.code || "",
+							style: { display: "block", minWidth: 0 },
+							children: shortMemberName(member.name),
+						}),
+					});
+					items.push({
+						type: "label",
+						id: `bf-r-excl-r:${member.name}`,
+						text: reason.detail || reason.code || "excluded before scoring",
+					});
+				}
+			}
+
+			// The rows are informational; nothing is selectable. A member row is
+			// kept as an `item` only so the trailing check can mark the selected
+			// member — the working lines below each are `label` entries, which the
+			// primitive renders as wrapping tertiary text.
+			return items;
+		}
+
+		/**
+		 * Build the routing chip component for the `conversation.input.model`
+		 * seat. Built inside a function so every host module it needs is resolved
+		 * once, at mount time, alongside the React-seam check.
+		 * @param ctx - client root context, carrying `sessions`.
+		 * @returns the component.
+		 */
+		function buildRoutingChip(ctx) {
+			const { useState, useSyncExternalStore } = require("react");
+			const { jsx, jsxs } = require("react/jsx-runtime");
+			const { Pill, StateDot, Menu } = require("@deepseek-ai/dsh-client-ui-primitives");
+
+			const NO_DECISION = null;
+
+			/**
+			 * Subscribe to the session's `bf-routing` view and return the latest
+			 * routing decision, or null before the first turn records one.
+			 * @param sessionId - the framework-resolved session id from the slot.
+			 */
+			function useRoutingDecision(sessionId) {
+				const session = ctx.sessions?.binding?.(sessionId)?.session ?? null;
+				return useSyncExternalStore(
+					(onChange) => (session ? session.subscribe(onChange) : () => {}),
+					() => {
+						if (!session) return NO_DECISION;
+						const view = session.getSnapshot().views.get(ROUTING_VIEW_TARGET);
+						return (view && view.decision) || NO_DECISION;
+					},
+				);
+			}
+
+			/**
+			 * The routing chip. Trigger names the selected fleet member (or
+			 * "Auto-routing" before a turn records a decision); clicking it opens
+			 * the working. A `single` slot with nothing to show renders a quiet
+			 * non-interactive pill rather than null, so the seat the stock picker
+			 * used to hold is never visibly empty.
+			 * @returns the chip.
+			 */
+			function RoutingChip(props) {
+				const decision = useRoutingDecision(props.sessionId);
+				const [open, setOpen] = useState(false);
+				const locked = props.locked === true;
+
+				const selected = decision && typeof decision.selected === "string" ? decision.selected : null;
+				const label = selected ? shortMemberName(selected) : "Auto-routing";
+				const canOpen = decision !== NO_DECISION && !locked;
+
+				const anchor = jsx(Pill, {
+					active: open,
+					onClick: canOpen ? () => setOpen((v) => !v) : undefined,
+					"aria-haspopup": canOpen ? "menu" : undefined,
+					"aria-expanded": canOpen ? open : undefined,
+					disabled: locked,
+					title: selected
+						? `The router picked ${selected} for this task type. Open for the score per fleet member.`
+						: "The router picks a fleet member from its classifier score once the first turn runs.",
+					children: jsxs("span", {
+						style: { display: "inline-flex", alignItems: "center", gap: "6px" },
+						children: [
+							selected ? jsx(StateDot, { state: "done", size: 8 }) : null,
+							label,
+						],
+					}),
+				});
+
+				if (!canOpen) return anchor;
+
+				return jsx(Menu, {
+					open,
+					anchor,
+					items: buildRoutingMenuItems(decision, jsx, jsxs),
+					selectedId: `bf-r-score:${selected}`,
+					onSelect: () => {},
+					onClose: () => setOpen(false),
+					side: "top",
+					align: "end",
+					portal: true,
+				});
+			}
+
+			return RoutingChip;
+		}
+
+		/**
 		 * Hold the tab title against the harness, which rewrites it after hydration.
 		 *
 		 * `@deepseek-ai/dsh-client-ui-renderer` renders a `DocumentTitle` component
@@ -353,7 +630,7 @@ window.__ModuleLoader__.load({
 		}
 
 		/**
-		 * Client plugin body. Checks the React seam, then takes four seats.
+		 * Client plugin body. Checks the React seam, then takes five seats.
 		 *
 		 * Story 1.5's mark goes into `conversation.hero.brand.mark` — `single`,
 		 * so occupying it replaces whatever the host registered there (the
@@ -381,18 +658,37 @@ window.__ModuleLoader__.load({
 		 * model-plane provider, and saying "replay" and "authored" in plain words
 		 * when that is the provider (see `buildProviderDisclosure`).
 		 *
-		 * A broken React seam aborts all four: every one of them renders
+		 * Story 3.7's routing chip goes into `conversation.input.model` — `single`,
+		 * so occupying it replaces the stock model picker
+		 * (`@deepseek-ai/dsh-client-ui-model-selection`, disabled in the profile).
+		 * It also registers a conversation view (`bf-routing`) and the event
+		 * Definition that feeds it, both on `ctx.conversationEvents` /
+		 * `ctx.conversationViews`, so the chip reads the router's recorded
+		 * `router/routed` decision rather than recomputing it.
+		 *
+		 * A broken React seam aborts all five: every one of them renders
 		 * through the host's `react/jsx-runtime`, so registering into a slot
-		 * without it would trade one loud console error for four obscure
-		 * render failures.
-		 * @param ctx - client root context, carrying the `slots` service
+		 * without it would trade one loud console error for obscure render
+		 * failures. (The conversation Definitions carry no React and are
+		 * registered regardless — a chip that never renders still leaves the
+		 * session log's routing view correct for anything else that reads it.)
+		 * @param ctx - client root context, carrying the `slots`,
+		 * `conversationEvents`, `conversationViews` and `sessions` services
 		 * declared in `inject` below.
 		 */
 		function apply(ctx) {
-			if (!checkHostReactSeam()) return;
+			const disposeRoutingView = ctx.conversationViews?.register?.(routingViewDefinition);
+			const disposeRoutingEvents = ctx.conversationEvents?.register?.(routingNodeDefinition);
+			if (!checkHostReactSeam()) {
+				return () => {
+					disposeRoutingView?.();
+					disposeRoutingEvents?.();
+				};
+			}
 			const disposeTabTitle = holdTabTitle();
 			const TaskTypeIndicator = buildTaskTypeIndicator();
 			const ProviderDisclosure = buildProviderDisclosure();
+			const RoutingChip = buildRoutingChip(ctx);
 			const disposeSidebarMark = ctx.slots.inject("sidebar.brand.mark", function* () {
 				yield ctx.slots.register({ name: "sidebar.brand.mark" }, BlindFlangeMark);
 			});
@@ -420,17 +716,36 @@ window.__ModuleLoader__.load({
 				);
 				return () => { dispose(); };
 			});
+			// `conversation.input.model` is a session-scoped `single` slot
+			// ui-conversation declares. The stock picker is disabled in the
+			// profile, so this occupies it outright. The `inject` factory hands
+			// the framework-resolved session id to the component, which reads the
+			// `bf-routing` view for that session.
+			const disposeRoutingChip = ctx.slots.inject("conversation.input.model", () => {
+				const dispose = ctx.slots.register(
+					{
+						name: "conversation.input.model",
+						id: "bf-routing-chip",
+						inject: (sessionId) => ({ sessionId }),
+					},
+					RoutingChip,
+				);
+				return () => { dispose(); };
+			});
 			return () => {
 				disposeTabTitle();
 				disposeSidebarMark();
 				disposeHeroMark();
 				disposeIndicator?.();
 				disposeProviderDisclosure?.();
+				disposeRoutingChip?.();
+				disposeRoutingView?.();
+				disposeRoutingEvents?.();
 			};
 		}
 
 		/** Cordis services this plugin needs from the client root context. */
-		const inject = ["slots"];
+		const inject = ["slots", "conversationEvents", "conversationViews", "sessions"];
 
 		exports.apply = apply;
 		exports.inject = inject;

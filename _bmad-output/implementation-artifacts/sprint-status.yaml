@@ -58,7 +58,7 @@ development_status:
   3-4-the-loader-refuses-a-fleet-member-with-a-disallowed-licence: done
   3-5-the-router-classifies-a-request-into-a-task-type: done
   3-6-the-router-scores-the-fleet-and-picks-a-member: done
-  3-7-the-routing-chip-shows-the-decision-and-the-working: backlog
+  3-7-the-routing-chip-shows-the-decision-and-the-working: done
   3-8-the-model-changes-by-itself-when-the-task-type-changes: backlog
   epic-3-retrospective: optional
 

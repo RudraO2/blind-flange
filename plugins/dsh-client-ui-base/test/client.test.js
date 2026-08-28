@@ -76,12 +76,62 @@ const healthyJsxRuntime = {
  */
 const healthyHostModules = {
 	"react/jsx-runtime": healthyJsxRuntime,
-	react: { useEffect: () => {}, useState: (initial) => [initial, () => {}] },
+	react: {
+		useEffect: () => {},
+		useState: (initial) => [initial, () => {}],
+		useSyncExternalStore: (_subscribe, getSnapshot) => getSnapshot(),
+	},
 	"@deepseek-ai/dsh-client-ui-primitives": {
 		IconAgentPresetOutline16: () => {},
 		Pill: (props) => ({ type: "Pill", props }),
 		StateDot: (props) => ({ type: "StateDot", props }),
+		Menu: (props) => ({ type: "Menu", props }),
 	},
+};
+
+/**
+ * A `ctx.sessions` stub whose one session exposes a `bf-routing` conversation
+ * view snapshot carrying `decision` (or no decision when `decision` is null).
+ */
+function stubSessions(decision) {
+	const session = {
+		subscribe: () => () => {},
+		getSnapshot: () => ({
+			views: {
+				get: (target) =>
+					target === "bf-routing" ? { decision: decision ?? null } : undefined,
+			},
+		}),
+	};
+	return { binding: () => ({ session }) };
+}
+
+/** A routing decision shaped like the host's `router/routed` event data. */
+const ROUTING_DECISION_FIXTURE = {
+	taskType: "drawing",
+	tied: false,
+	allZero: false,
+	selected: "Qwen/Qwen2.5-VL-7B-Instruct",
+	scored: [
+		{
+			name: "Qwen/Qwen2.5-VL-7B-Instruct",
+			score: 5,
+			matched: [
+				{ capability: "drawing-understanding", points: 3 },
+				{ capability: "visual-grounding", points: 2 },
+			],
+		},
+	],
+	excluded: [
+		{
+			name: "Qwen/Qwen2.5-7B-Instruct",
+			reason: {
+				code: "modality-missing",
+				detail:
+					'task type "drawing" needs a member that accepts image input; "Qwen/Qwen2.5-7B-Instruct" declares modalities [text]',
+			},
+		},
+	],
 };
 
 /** Host modules with `useState` forced to seat `seated` on its first call, then echo. */
@@ -112,9 +162,11 @@ function hostModulesWithSeatedState(seated) {
  * (Story 1.4's task-type picker). Both shapes are in `apply`, so the stub
  * drains a generator and passes a plain return through.
  */
-function stubSlots() {
+function stubSlots({ sessions } = {}) {
 	const injectedNames = [];
 	const registered = [];
+	const conversationViews = [];
+	const conversationEvents = [];
 	const slots = {
 		inject: (name, factory) => {
 			injectedNames.push(name);
@@ -130,7 +182,23 @@ function stubSlots() {
 			return () => {};
 		},
 	};
-	return { ctx: { slots }, injectedNames, registered };
+	const ctx = {
+		slots,
+		conversationViews: {
+			register: (definition) => {
+				conversationViews.push(definition);
+				return () => {};
+			},
+		},
+		conversationEvents: {
+			register: (definition) => {
+				conversationEvents.push(definition);
+				return () => {};
+			},
+		},
+		sessions: sessions ?? { binding: () => undefined },
+	};
+	return { ctx, injectedNames, registered, conversationViews, conversationEvents };
 }
 
 test("registers under the package name so the served bundle and the manifest agree", () => {
@@ -138,9 +206,14 @@ test("registers under the package name so the served bundle and the manifest agr
 	assert.equal(id, manifest.name);
 });
 
-test("declares the slots service so the host supplies ctx.slots to apply", () => {
+test("declares the client services the host must supply to apply", () => {
 	const { exports } = loadClientHalf(() => healthyJsxRuntime);
-	assert.deepEqual(Array.from(exports.inject), ["slots"]);
+	assert.deepEqual(Array.from(exports.inject), [
+		"slots",
+		"conversationEvents",
+		"conversationViews",
+		"sessions",
+	]);
 });
 
 test("says nothing when the host supplies a complete react/jsx-runtime", () => {
@@ -175,6 +248,7 @@ test("occupies both places the DeepSeek whale used to render, and the hero's tas
 	assert.deepEqual(names, [
 		"conversation.hero.agentPreset",
 		"conversation.hero.brand.mark",
+		"conversation.input.model",
 		"conversation.session.header.utilities",
 		"sidebar.brand.mark",
 	]);
@@ -263,9 +337,103 @@ test("the hero seat holds an indicator, not a control the operator can operate",
 	// This asserts against the source: the component must not reach for a Menu, and must
 	// not write the deployment default back.
 	const source = readFileSync(join(packageDir, "lib", "client.js"), "utf8");
-	assert.doesNotMatch(source, /Menu/, "the hero seat must not render a Menu");
-	assert.doesNotMatch(source, /settings\.update/, "the hero seat must not set the task type");
-	assert.doesNotMatch(source, /onSelect|onClick/, "the hero seat must not be interactive");
+	const start = source.indexOf("function buildTaskTypeIndicator");
+	const end = source.indexOf("function buildProviderDisclosure");
+	assert.ok(start >= 0 && end > start, "could not locate the task-type builder in the source");
+	const builder = source.slice(start, end);
+	assert.doesNotMatch(builder, /Menu/, "the hero seat must not render a Menu");
+	assert.doesNotMatch(builder, /settings\.update/, "the hero seat must not set the task type");
+	assert.doesNotMatch(builder, /onSelect|onClick/, "the hero seat must not be interactive");
+});
+
+test("registers the routing chip into conversation.input.model, replacing the stock picker", () => {
+	const { exports } = loadClientHalf((specifier) => healthyHostModules[specifier]);
+	const { ctx, injectedNames, registered } = stubSlots();
+	exports.apply(ctx);
+	assert.ok(injectedNames.includes("conversation.input.model"));
+	const chip = registered.find((call) => call.options.name === "conversation.input.model");
+	assert.equal(chip.options.id, "bf-routing-chip");
+	assert.equal(typeof chip.component, "function");
+	// The seat is `single`, so the profile disables ui-model-selection — the doc
+	// records that; here we assert the inject factory carries the sessionId.
+	assert.equal(chip.options.inject("s-1").sessionId, "s-1");
+});
+
+test("registers the bf-routing conversation view and the router/routed event Definition", () => {
+	const { exports } = loadClientHalf((specifier) => healthyHostModules[specifier]);
+	const { ctx, conversationViews, conversationEvents } = stubSlots();
+	exports.apply(ctx);
+	assert.equal(conversationViews.length, 1);
+	assert.equal(conversationViews[0].target, "bf-routing");
+	assert.equal(conversationEvents.length, 1);
+	const def = conversationEvents[0];
+	assert.equal(def.kind, "bf-routing");
+	assert.equal(def.target, "bf-routing");
+	const m = def.match({ type: "router/routed", seq: 7 });
+	assert.equal(m.id, "7");
+	assert.equal(m.role, "start");
+	assert.equal(def.match({ type: "assistant/message", seq: 8 }), null);
+	// start() adopts the event data as the Context state; buildViewNode carries it.
+	const node = def.buildViewNode({
+		key: "k", id: "7", state: { taskType: "code" }, start: { event: { seq: 7 } },
+	});
+	assert.equal(node.target, "bf-routing");
+	assert.equal(node.anchorSeq, 7);
+	assert.equal(node.data.taskType, "code");
+});
+
+test("the bf-routing view builder keeps the highest-seq routing decision", () => {
+	const { exports } = loadClientHalf((specifier) => healthyHostModules[specifier]);
+	const { ctx, conversationViews } = stubSlots();
+	exports.apply(ctx);
+	const builder = conversationViews[0].create();
+	assert.equal(builder.empty.decision, null);
+	const first = { anchorSeq: 3, data: { taskType: "document" } };
+	const second = { anchorSeq: 9, data: { taskType: "code" } };
+	assert.equal(builder.replace({ nodes: [first, second] }).decision.taskType, "code");
+	// A later (higher-seq) turn wins; an older upsert never supersedes it.
+	assert.equal(
+		builder.apply({ upserts: [{ anchorSeq: 2, data: { taskType: "drawing" } }] }).decision.taskType,
+		"code",
+	);
+	assert.equal(
+		builder.apply({ upserts: [{ anchorSeq: 12, data: { taskType: "calculation" } }] }).decision.taskType,
+		"calculation",
+	);
+});
+
+test("the routing chip names the selected fleet member and expands to the working", () => {
+	const { exports } = loadClientHalf((specifier) => healthyHostModules[specifier]);
+	const { ctx, registered } = stubSlots({ sessions: stubSessions(ROUTING_DECISION_FIXTURE) });
+	exports.apply(ctx);
+	const chip = registered.find((call) => call.options.name === "conversation.input.model");
+	const rendered = chip.component({ sessionId: "s-1", locked: false });
+	const primitives = healthyHostModules["@deepseek-ai/dsh-client-ui-primitives"];
+	// With a decision and no lock, the chip is a Menu whose anchor is the Pill.
+	assert.equal(rendered.type, primitives.Menu);
+	assert.equal(rendered.props.side, "top");
+	assert.equal(rendered.props.selectedId, "bf-r-score:Qwen/Qwen2.5-VL-7B-Instruct");
+	const flat = JSON.stringify(rendered.props.items);
+	assert.match(flat, /drawing/); // the classified task type
+	assert.match(flat, /score 5/); // the per-member score
+	assert.match(flat, /drawing-understanding \+3/); // the working behind the score
+	assert.match(flat, /Filtered out before scoring/);
+	assert.match(flat, /modality-missing|accepts image input/); // the exclusion reason
+	// The trigger names the fleet member (org prefix dropped for the compact surface).
+	const anchorChildren = JSON.stringify(rendered.props.anchor.props.children);
+	assert.match(anchorChildren, /Qwen2\.5-VL-7B-Instruct/);
+});
+
+test("the routing chip shows a quiet indicator before the first turn records a decision", () => {
+	const { exports } = loadClientHalf((specifier) => healthyHostModules[specifier]);
+	const { ctx, registered } = stubSlots({ sessions: stubSessions(null) });
+	exports.apply(ctx);
+	const chip = registered.find((call) => call.options.name === "conversation.input.model");
+	const rendered = chip.component({ sessionId: "s-1", locked: false });
+	// No decision yet: a bare non-interactive Pill, no Menu, no open handler.
+	assert.equal(rendered.type, healthyHostModules["@deepseek-ai/dsh-client-ui-primitives"].Pill);
+	assert.equal(rendered.props.onClick, undefined);
+	assert.match(JSON.stringify(rendered.props.children), /Auto-routing/);
 });
 
 test("puts the tab title back when the harness rewrites it after hydration", () => {

@@ -439,6 +439,42 @@ curl -s http://127.0.0.1:3080/api/llm.models -X POST -H "Content-Type: applicati
 # -> one group "Blind Flange (replay)" with the three permissive members
 ```
 
+## Story 3.7: the routing chip replaces the stock model picker
+
+`conversation.input.model` is a `single` slot — one occupant, and taking it means
+rendering the whole model affordance yourself. `plugins/dsh-client-ui-base`'s client half
+registers the routing chip there. For it to *replace* the stock picker rather than sit
+beside it, the shipped picker's row is disabled. Append to
+`~/.dsh/profiles/web/cordis.patch.yml`:
+
+```yaml
+- id: ui-model-selection
+  disabled: true
+```
+
+`@deepseek-ai/dsh-client-ui-model-selection` is the plugin behind both the composer
+model seat and the `/model` popup command; disabling the row removes both. Blind Flange
+picks the model by classifier score, not by a menu (CONTEXT.md "Router"), so an operator
+control that sets the model contradicts the workbench's own claim — the same reasoning
+that turned the Story 1.4 hero chip from a dropdown into an indicator.
+
+No new patch row is needed for the plugin package — this rides the `bf-base` insert row
+from step 3. The client half also registers a conversation view (`bf-routing`) and the
+event Definition that folds the router's `router/routed` session events (Story 3.6) into
+it, so the chip shows the decision the router actually recorded rather than recomputing
+it.
+
+**Checking it worked:**
+
+```sh
+dsh --profile web --dump-config | grep -A1 "id: ui-model-selection"   # disabled: true
+```
+
+In the running app: run one turn, then the chip at the right end of the composer names
+the fleet member the router picked; clicking it expands to the classified task type, the
+score per fleet member, and any member filtered out before scoring with its reason.
+Screenshots in both themes at `docs/screenshots/3-7-routing-chip-{light,dark}.png`.
+
 ## The headless profile
 
 `dsh` is a launcher, not an app: it boots a *profile*, and a profile is a stack of plugin
