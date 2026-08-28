@@ -7,8 +7,9 @@
  * route, `tapIndex` for a pure html-to-html transform) rather than by
  * editing the harness's built `dist/index.html` or `dist/favicon.svg`, which
  * NFR5 forbids touching. Story 2.1 adds the egress denial waterfall
- * alongside it. The canary tool and the model plane still hang here in
- * later stories.
+ * alongside it, and Story 2.2 has that waterfall append an `egress/denied`
+ * marker event the on-screen egress monitor counts. The canary tool and the
+ * model plane still hang here in later stories.
  *
  * `conversation.hero.brand.mark` — the third piece of AC1 — is a client-side
  * slot and is registered in client.js instead; this file only reaches what a
@@ -85,6 +86,24 @@ function replaceOrWarn(html, search, replacement, label) {
  * attempt — must be added here.
  */
 const NETWORK_TOOL_NAMES = new Set(["web_search", "web_fetch"]);
+
+/**
+ * The session-log event the egress denial waterfall writes when it refuses a
+ * call (Story 2.2). Story 2.1 leaned on the harness's own `tool/call` record
+ * for the audit trail — but `tool/call` is appended for every call, allowed or
+ * denied, so it cannot be counted as a denial. This is the distinct marker the
+ * egress monitor folds: the counted zero is `the number of these events`, never
+ * a literal (FR15), and the canary's increment (Story 2.3) is one more of them.
+ *
+ * A plugin-owned event type, like the router's {@link CLASSIFIED_EVENT} and
+ * {@link ROUTED_EVENT}, and it carries the same persistence read-path caveat:
+ * `Session.append` gives no way to mark an event `ignorable`, so a stored log
+ * containing this event needs the downstream event-type registration the
+ * harness's `known-event-types` note defers "until such a consumer exists".
+ * That does not bite Phase 0, where the demo runs on `replay` and sessions
+ * are created fresh, not resumed from disk.
+ */
+const EGRESS_DENIED_EVENT = "egress/denied";
 
 /**
  * The session-log event the router's classifier writes (Story 3.5). It is a
@@ -186,9 +205,18 @@ function describeTarget(rawArguments) {
 export function apply(ctx, config) {
 	ctx.on("tools/pre-execute", (exec, next) => {
 		if (NETWORK_TOOL_NAMES.has(exec.name)) {
+			const target = describeTarget(exec.arguments);
+			// The distinct denial marker the egress monitor counts (Story 2.2).
+			// Best-effort: a denial with no reachable session still fails the
+			// call — the seal holds — it just is not on the on-screen counter.
+			try {
+				exec.agent?.session?.append?.(EGRESS_DENIED_EVENT, { tool: exec.name, target });
+			} catch (error) {
+				console.warn(`@blind-flange/dsh-client-ui-base: egress denial not recorded — ${error instanceof Error ? error.message : String(error)}`);
+			}
 			return {
 				kind: "deny",
-				reason: `Blind Flange denies outbound network access: "${exec.name}" attempted to reach ${describeTarget(exec.arguments)}`,
+				reason: `Blind Flange denies outbound network access: "${exec.name}" attempted to reach ${target}`,
 			};
 		}
 		return next();

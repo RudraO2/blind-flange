@@ -70,6 +70,14 @@
  * event, so the chip shows the decision the router actually recorded — never
  * an animation without an event behind it (NFR8).
  *
+ * Story 2.2 adds the egress monitor: a compact chip sharing
+ * `conversation.session.header.utilities` and a full panel in `shell.overlay`.
+ * Both show one number — the count of `egress/denied` session events the
+ * denial waterfall records (host half) — folded through a registered
+ * `bf-egress` conversation view. The zero is counted, never a literal (FR15),
+ * and it is the rebuild of the 27 August spike's hand-rolled monitor against
+ * the shipped primitives and theme tokens (UX-DR7).
+ *
  * Story 3.8 adds no seat. Because the `bf-routing` view keeps the highest-seq
  * `router/routed` node and the chip subscribes through `useSyncExternalStore`,
  * a turn that classifies as a different task type moves the chip to the newly
@@ -608,6 +616,328 @@ window.__ModuleLoader__.load({
 			return RoutingChip;
 		}
 
+		/* ---------------------------------------------------------------------
+		 * Egress monitor (Story 2.2)
+		 *
+		 * The always-on display of outbound attempts (CONTEXT.md "Egress
+		 * monitor"). Two seats: a compact chip in
+		 * `conversation.session.header.utilities` (list, session) and a full
+		 * panel in `shell.overlay` (list, root). Both read one number — the
+		 * count of `egress/denied` session events the denial waterfall appends
+		 * (host half, `index.js`) — folded through a registered conversation
+		 * view. The zero is `that fold's node count`, never a literal (FR15),
+		 * and it moves only on a real recorded denial, never an animation
+		 * (NFR8). Story 2.3's canary is what first makes it non-zero on stage.
+		 *
+		 * This replaces the 27 August spike's `@blind-flange/dsh-client-ui-egress`
+		 * (hand-written greens, a hand-rolled pill — the counter-example the UI
+		 * rules exist to prevent, UX-DR7). Nothing here sets a colour: `StateDot`
+		 * carries the green/red state through `--dsw-*` tokens, `Pill` and
+		 * `Button` are shipped primitives, and the panel's surface uses only
+		 * `ui-theme` background/border/shadow tokens.
+		 * ------------------------------------------------------------------- */
+
+		/** The denial marker the host half appends; see `index.js` `EGRESS_DENIED_EVENT`. */
+		const EGRESS_DENIED_EVENT = "egress/denied";
+		const EGRESS_VIEW_TARGET = "bf-egress";
+		const EGRESS_DEFINITION_KIND = "bf-egress";
+
+		/**
+		 * View builder for {@link EGRESS_VIEW_TARGET}. Keeps one node per
+		 * `egress/denied` event (keyed, so replay is idempotent) and reports
+		 * `count` as the number of those nodes — derived by counting, not
+		 * written down — plus the most recent denial for the panel's detail
+		 * line.
+		 * @returns a `ConversationViewBuilder` — `{ empty, replace, apply }`.
+		 */
+		function createEgressViewBuilder() {
+			/**
+			 * @param nodes - the retained denial nodes.
+			 * @returns `{ count, latest }` — `count` is `nodes.length`.
+			 */
+			function summarise(nodes) {
+				let latest = null;
+				let latestSeq = -1;
+				for (const node of nodes) {
+					const seq = node && typeof node.anchorSeq === "number" ? node.anchorSeq : -1;
+					if (seq >= latestSeq) {
+						latestSeq = seq;
+						latest = (node && node.data) || null;
+					}
+				}
+				return { count: nodes.length, latest };
+			}
+			let seen = new Map();
+			function keyOf(node) {
+				return node && (node.key ?? node.id);
+			}
+			return {
+				empty: summarise([]),
+				replace(input) {
+					seen = new Map();
+					for (const node of input.nodes) {
+						const key = keyOf(node);
+						if (key !== undefined && key !== null) seen.set(key, node);
+					}
+					return summarise([...seen.values()]);
+				},
+				apply(input) {
+					for (const node of input.upserts) {
+						const key = keyOf(node);
+						if (key !== undefined && key !== null) seen.set(key, node);
+					}
+					return summarise([...seen.values()]);
+				},
+			};
+		}
+
+		/** The view Definition registered with `ctx.conversationViews`. */
+		const egressViewDefinition = {
+			target: EGRESS_VIEW_TARGET,
+			create: createEgressViewBuilder,
+		};
+
+		/**
+		 * The event Definition registered with `ctx.conversationEvents`: each
+		 * `egress/denied` event is its own Context, keyed by its seq, carrying
+		 * `{ tool, target }` as state.
+		 */
+		const egressNodeDefinition = {
+			kind: EGRESS_DEFINITION_KIND,
+			target: EGRESS_VIEW_TARGET,
+			match(event) {
+				return event && event.type === EGRESS_DENIED_EVENT
+					? { id: String(event.seq), role: "start" }
+					: null;
+			},
+			start(_context, match) {
+				return match.event.data;
+			},
+			update(context) {
+				return context.state;
+			},
+			buildViewNode(context) {
+				if (context.state === undefined) return null;
+				return {
+					key: context.key,
+					kind: EGRESS_DEFINITION_KIND,
+					id: context.id,
+					target: EGRESS_VIEW_TARGET,
+					anchorSeq: context.start?.event?.seq ?? 0,
+					data: context.state,
+				};
+			},
+		};
+
+		/**
+		 * A tiny observable holding whether the full egress panel is open. The
+		 * chip toggles it; the panel renders on it. Module-scoped so the two
+		 * seats — which sit in different slot scopes and never share props —
+		 * see the same value. Hand-rolled rather than pulled from
+		 * `dsh-client-runtime/client` because a value import of that package
+		 * from a plugin bundle inlines a second module instance (its README's
+		 * documented boundary).
+		 */
+		function createOpenStore() {
+			let open = false;
+			const listeners = new Set();
+			function emit() {
+				for (const listener of listeners) listener();
+			}
+			return {
+				get: () => open,
+				set(next) {
+					if (next === open) return;
+					open = next;
+					emit();
+				},
+				toggle() {
+					open = !open;
+					emit();
+				},
+				subscribe(listener) {
+					listeners.add(listener);
+					return () => listeners.delete(listener);
+				},
+			};
+		}
+
+		const egressPanelOpen = createOpenStore();
+
+		/**
+		 * Read the folded egress snapshot for a session, or null when the view
+		 * is not ready yet. `count` on a ready snapshot is the counted number
+		 * of denial events — this function never invents one.
+		 * @param session - a session face, or null.
+		 */
+		function readEgressSnapshot(session) {
+			if (!session) return null;
+			const view = session.getSnapshot().views.get(EGRESS_VIEW_TARGET);
+			return view || null;
+		}
+
+		/**
+		 * Build the compact egress chip for `conversation.session.header.utilities`.
+		 * @param ctx - client root context, carrying `sessions`.
+		 * @returns the component.
+		 */
+		function buildEgressChip(ctx) {
+			const { useSyncExternalStore } = require("react");
+			const { jsx, jsxs } = require("react/jsx-runtime");
+			const { Pill, StateDot } = require("@deepseek-ai/dsh-client-ui-primitives");
+
+			/**
+			 * The chip: "Egress N", a green state dot at zero and a red one once
+			 * anything has been denied (Story 2.3's red state). Clicking it opens
+			 * the full panel. Reads the session's `bf-egress` view through
+			 * `useSyncExternalStore`, so a fresh denial moves the number with no
+			 * user action.
+			 */
+			function EgressChip(props) {
+				const session = ctx.sessions?.binding?.(props.sessionId)?.session ?? null;
+				const snapshot = useSyncExternalStore(
+					(onChange) => (session ? session.subscribe(onChange) : () => {}),
+					() => readEgressSnapshot(session),
+				);
+				const ready = snapshot !== null;
+				const count = ready ? snapshot.count : null;
+				const breached = ready && count > 0;
+
+				return jsx(Pill, {
+					active: breached,
+					onClick: () => egressPanelOpen.toggle(),
+					"aria-haspopup": "dialog",
+					title: breached
+						? `Egress monitor: ${count} outbound attempt${count === 1 ? "" : "s"} denied and recorded this session. Open for the audit detail.`
+						: "Egress monitor: no outbound attempt has been made this session. The count is the number of recorded denials, not a fixed label.",
+					children: jsxs("span", {
+						style: { display: "inline-flex", alignItems: "center", gap: "6px" },
+						children: [
+							jsx(StateDot, { state: breached ? "error" : "done", size: 8 }),
+							ready ? `Egress ${count}` : "Egress",
+						],
+					}),
+				});
+			}
+
+			return EgressChip;
+		}
+
+		/**
+		 * Build the full egress panel for `shell.overlay`. Root-scoped, so it
+		 * has no `sessionId` prop — it reads `ctx.sessions.list.current` and
+		 * binds that session itself.
+		 * @param ctx - client root context, carrying `sessions`.
+		 * @returns the component.
+		 */
+		function buildEgressPanel(ctx) {
+			const { useSyncExternalStore } = require("react");
+			const { jsx, jsxs } = require("react/jsx-runtime");
+			const { StateDot, Button } = require("@deepseek-ai/dsh-client-ui-primitives");
+
+			const SECONDARY = { color: "var(--dsw-alias-label-secondary)" };
+
+			/** Current session id from the sessions list store, or null. */
+			function useCurrentSession() {
+				const list = ctx.sessions?.list ?? null;
+				const current = useSyncExternalStore(
+					(onChange) => (list ? list.subscribe(onChange) : () => {}),
+					() => (list ? list.getSnapshot().current ?? null : null),
+				);
+				return current ? ctx.sessions?.binding?.(current)?.session ?? null : null;
+			}
+
+			/**
+			 * The panel: a small fixed card bottom-right of the overlay layer.
+			 * Surface colours, border and shadow are `ui-theme` tokens; the
+			 * state dot and buttons are primitives. Renders only while the chip
+			 * has opened it.
+			 */
+			function EgressPanel() {
+				const open = useSyncExternalStore(egressPanelOpen.subscribe, egressPanelOpen.get);
+				const session = useCurrentSession();
+				const snapshot = useSyncExternalStore(
+					(onChange) => (session ? session.subscribe(onChange) : () => {}),
+					() => readEgressSnapshot(session),
+				);
+
+				if (!open) return null;
+
+				const ready = snapshot !== null;
+				const count = ready ? snapshot.count : null;
+				const breached = ready && count > 0;
+				const latest = ready ? snapshot.latest : null;
+
+				const body = !ready
+					? jsx("span", { style: SECONDARY, children: "Waiting for a session." })
+					: jsxs("span", {
+							style: SECONDARY,
+							children: [
+								breached
+									? `${count} outbound attempt${count === 1 ? "" : "s"} denied and written to the session log.`
+									: "No outbound attempt has been made. This zero is counted from the denial log, not printed.",
+							],
+						});
+
+				// `ui-theme` exposes colour, shadow and font tokens but no radius
+				// or spacing scale — every shipped primitive hard-codes those in
+				// px (Pill, HoverCard and Toast all use `border-radius: 12px`).
+				// So the surface's colours, border and shadow are `--dsw-*`
+				// tokens, and the radius/padding/gap match the shipped `Pill`'s
+				// own values rather than inventing a look. Same pattern as the
+				// inline `gap` on the provider and routing chips above.
+				return jsx("section", {
+					"aria-label": "Egress monitor",
+					style: {
+						position: "absolute",
+						right: "16px",
+						bottom: "16px",
+						width: "300px",
+						padding: "12px 14px",
+						display: "flex",
+						flexDirection: "column",
+						gap: "8px",
+						borderRadius: "12px",
+						background: "var(--dsw-alias-bg-layer-1)",
+						border: "1px solid var(--dsw-alias-border-l2)",
+						boxShadow: "var(--dsw-shadow-lv2)",
+						color: "var(--dsw-alias-label-primary)",
+					},
+					children: [
+						jsxs("div", {
+							style: { display: "flex", alignItems: "center", gap: "8px" },
+							children: [
+								jsx(StateDot, { state: breached ? "error" : "done", size: 10 }),
+								jsx("strong", { style: { flex: "1 1 auto" }, children: "Egress monitor" }),
+								jsx("span", {
+									style: { ...SECONDARY, fontVariantNumeric: "tabular-nums" },
+									children: ready ? String(count) : "—",
+								}),
+							],
+						}),
+						body,
+						latest
+							? jsx("div", {
+									style: { ...SECONDARY, wordBreak: "break-all" },
+									children: `Last: ${latest.tool} → ${latest.target}`,
+								})
+							: null,
+						jsx("div", {
+							style: { display: "flex", justifyContent: "flex-end" },
+							children: jsx(Button, {
+								variant: "ghost",
+								size: "sm",
+								onClick: () => egressPanelOpen.set(false),
+								children: "Dismiss",
+							}),
+						}),
+					],
+				});
+			}
+
+			return EgressPanel;
+		}
+
 		/**
 		 * Hold the tab title against the harness, which rewrites it after hydration.
 		 *
@@ -657,7 +987,7 @@ window.__ModuleLoader__.load({
 		}
 
 		/**
-		 * Client plugin body. Checks the React seam, then takes five seats.
+		 * Client plugin body. Checks the React seam, then takes seven seats.
 		 *
 		 * Story 1.5's mark goes into `conversation.hero.brand.mark` — `single`,
 		 * so occupying it replaces whatever the host registered there (the
@@ -693,12 +1023,20 @@ window.__ModuleLoader__.load({
 		 * `ctx.conversationViews`, so the chip reads the router's recorded
 		 * `router/routed` decision rather than recomputing it.
 		 *
-		 * A broken React seam aborts all five: every one of them renders
+		 * Story 2.2's egress monitor takes two more: the compact chip shares
+		 * `conversation.session.header.utilities` with the provider disclosure
+		 * (list, additive), and the full panel takes `shell.overlay` (list,
+		 * root). Both read one number — the count of `egress/denied` events —
+		 * through a registered `bf-egress` conversation view; the chip toggles
+		 * the panel through a module-scoped open store.
+		 *
+		 * A broken React seam aborts all seven: every one of them renders
 		 * through the host's `react/jsx-runtime`, so registering into a slot
 		 * without it would trade one loud console error for obscure render
 		 * failures. (The conversation Definitions carry no React and are
 		 * registered regardless — a chip that never renders still leaves the
-		 * session log's routing view correct for anything else that reads it.)
+		 * session log's routing and egress views correct for anything else
+		 * that reads them.)
 		 * @param ctx - client root context, carrying the `slots`,
 		 * `conversationEvents`, `conversationViews` and `sessions` services
 		 * declared in `inject` below.
@@ -706,16 +1044,22 @@ window.__ModuleLoader__.load({
 		function apply(ctx) {
 			const disposeRoutingView = ctx.conversationViews?.register?.(routingViewDefinition);
 			const disposeRoutingEvents = ctx.conversationEvents?.register?.(routingNodeDefinition);
+			const disposeEgressView = ctx.conversationViews?.register?.(egressViewDefinition);
+			const disposeEgressEvents = ctx.conversationEvents?.register?.(egressNodeDefinition);
 			if (!checkHostReactSeam()) {
 				return () => {
 					disposeRoutingView?.();
 					disposeRoutingEvents?.();
+					disposeEgressView?.();
+					disposeEgressEvents?.();
 				};
 			}
 			const disposeTabTitle = holdTabTitle();
 			const TaskTypeIndicator = buildTaskTypeIndicator();
 			const ProviderDisclosure = buildProviderDisclosure();
 			const RoutingChip = buildRoutingChip(ctx);
+			const EgressChip = buildEgressChip(ctx);
+			const EgressPanel = buildEgressPanel(ctx);
 			const disposeSidebarMark = ctx.slots.inject("sidebar.brand.mark", function* () {
 				yield ctx.slots.register({ name: "sidebar.brand.mark" }, BlindFlangeMark);
 			});
@@ -743,6 +1087,32 @@ window.__ModuleLoader__.load({
 				);
 				return () => { dispose(); };
 			});
+			// The egress monitor's compact chip shares that same session-scoped
+			// list slot (Story 2.2). The `inject` factory hands it the resolved
+			// session id so it can read that session's `bf-egress` view; clicking
+			// it toggles the full panel below.
+			const disposeEgressChip = ctx.slots.inject("conversation.session.header.utilities", () => {
+				const dispose = ctx.slots.register(
+					{
+						name: "conversation.session.header.utilities",
+						id: "bf-egress-chip",
+						inject: (sessionId) => ({ sessionId }),
+					},
+					EgressChip,
+				);
+				return () => { dispose(); };
+			});
+			// The egress monitor's full panel takes `shell.overlay` (list, root).
+			// Root-scoped, so no session id is injected — the panel reads
+			// `ctx.sessions.list.current` itself. It renders only once the chip
+			// has opened it.
+			const disposeEgressPanel = ctx.slots.inject("shell.overlay", () => {
+				const dispose = ctx.slots.register(
+					{ name: "shell.overlay", id: "bf-egress-panel" },
+					EgressPanel,
+				);
+				return () => { dispose(); };
+			});
 			// `conversation.input.model` is a session-scoped `single` slot
 			// ui-conversation declares. The stock picker is disabled in the
 			// profile, so this occupies it outright. The `inject` factory hands
@@ -765,9 +1135,13 @@ window.__ModuleLoader__.load({
 				disposeHeroMark();
 				disposeIndicator?.();
 				disposeProviderDisclosure?.();
+				disposeEgressChip?.();
+				disposeEgressPanel?.();
 				disposeRoutingChip?.();
 				disposeRoutingView?.();
 				disposeRoutingEvents?.();
+				disposeEgressView?.();
+				disposeEgressEvents?.();
 			};
 		}
 

@@ -233,6 +233,62 @@ test("allows a tool that cannot reach the network", async () => {
 	assert.equal(decision, allow);
 });
 
+test("records a distinct egress/denied event on the session log when it denies (Story 2.2)", async () => {
+	const host = stubHostCtx();
+	apply(host.ctx);
+	const agent = stubAgent();
+	const decision = await host.preExecuteListener(
+		{ name: "web_fetch", arguments: '{"url":"https://example.com"}', agent },
+		() => {
+			throw new Error("next() must not be called for a denied tool");
+		},
+	);
+	assert.equal(decision.kind, "deny");
+	assert.equal(agent.events.length, 1);
+	assert.equal(agent.events[0].type, "egress/denied");
+	assert.equal(agent.events[0].data.tool, "web_fetch");
+	assert.equal(agent.events[0].data.target, "https://example.com");
+});
+
+test("an allowed tool records no egress/denied event", async () => {
+	const host = stubHostCtx();
+	apply(host.ctx);
+	const agent = stubAgent();
+	await host.preExecuteListener({ name: "read_file", arguments: "{}", agent }, () => ({ kind: "allow" }));
+	assert.deepEqual(agent.events, []);
+});
+
+test("still denies fast when no session is reachable to record the denial", async () => {
+	const host = stubHostCtx();
+	apply(host.ctx);
+	const decision = await host.preExecuteListener({ name: "web_search", arguments: '{"queries":["x"]}' }, () => {
+		throw new Error("next() must not be called for a denied tool");
+	});
+	assert.equal(decision.kind, "deny");
+});
+
+test("a session-append failure does not stop the denial", async () => {
+	const host = stubHostCtx();
+	apply(host.ctx);
+	const originalWarn = console.warn;
+	const warnings = [];
+	console.warn = (...args) => warnings.push(args.join(" "));
+	try {
+		const brokenAgent = { session: { append: () => { throw new Error("log unavailable"); } } };
+		const decision = await host.preExecuteListener(
+			{ name: "web_fetch", arguments: '{"url":"https://example.com"}', agent: brokenAgent },
+			() => {
+				throw new Error("next() must not be called for a denied tool");
+			},
+		);
+		assert.equal(decision.kind, "deny");
+	} finally {
+		console.warn = originalWarn;
+	}
+	assert.equal(warnings.length, 1);
+	assert.match(warnings[0], /egress denial not recorded/);
+});
+
 test("registers the replay adapter under the 'replay' route by default (Story 3.1)", () => {
 	const host = stubHostCtx();
 	apply(host.ctx);

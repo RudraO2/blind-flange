@@ -350,6 +350,41 @@ In the running app: the browser tab reads "Blind Flange" and shows our favicon; 
 appears both in the collapsed sidebar rail and in the hero at the top of the conversation; the
 whale appears nowhere.
 
+## Story 2.2: the egress monitor shows a counted zero
+
+No profile change. The egress monitor rides the `bf-base` insert row from step 3 —
+both seats and the conversation view are registered by
+`plugins/dsh-client-ui-base`'s client half.
+
+- **Host half** (`lib/index.js`): the `tools/pre-execute` denial waterfall from Story 2.1
+  now also appends an `egress/denied` session event (`{ tool, target }`) whenever it refuses
+  a call. Story 2.1 leaned on the harness's own `tool/call` record for the audit trail, but
+  that event is written for every call, allowed or denied — it cannot be counted as a
+  denial. `egress/denied` is the distinct marker the monitor folds. It carries the same
+  persistence read-path caveat as the router's `router/routed` event and does not bite
+  Phase 0's fresh-session `replay` demo.
+- **Client half** (`lib/client.js`): a `bf-egress` conversation view folds every
+  `egress/denied` event and reports `count` as the number of those nodes — the on-screen
+  zero is a count, never a literal (FR15). The compact chip takes
+  `conversation.session.header.utilities` (list, additive — it sits beside Story 3.2's
+  provider pill); the full panel takes `shell.overlay` (list, root) and renders only when
+  the chip opens it. `StateDot` carries the green→red state through `--dsw-*` tokens; the
+  panel's surface uses only `ui-theme` background/border/shadow tokens. This is the rebuild
+  of the 27 August spike's hand-rolled monitor (UX-DR7) — the spike's own
+  `@blind-flange/dsh-client-ui-egress` package and any `bf-egress-monitor` patch row stay
+  retired (step 5).
+
+**Checking it worked:**
+
+```sh
+dsh --profile web --dump-config | grep -c "bf-egress-monitor"   # 0 — the spike row is gone
+```
+
+In the running app: the composer header carries an "Egress 0" pill with a green dot on a
+fresh session; clicking it opens the bottom-right panel reading a counted zero. Firing the
+canary (Story 2.3) is what first makes it non-zero and red. Screenshots in both themes at
+`docs/screenshots/2-2-egress-monitor-{light,dark}.png`.
+
 ## Story 3.1: the replay provider answers a turn
 
 `ctx.llm.registerAdapter` (dsh-llm's model seam) was the riskiest unknown in the project

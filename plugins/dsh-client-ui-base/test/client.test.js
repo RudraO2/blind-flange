@@ -86,6 +86,7 @@ const healthyHostModules = {
 		Pill: (props) => ({ type: "Pill", props }),
 		StateDot: (props) => ({ type: "StateDot", props }),
 		Menu: (props) => ({ type: "Menu", props }),
+		Button: (props) => ({ type: "Button", props }),
 	},
 };
 
@@ -276,6 +277,8 @@ test("occupies both places the DeepSeek whale used to render, and the hero's tas
 		"conversation.hero.brand.mark",
 		"conversation.input.model",
 		"conversation.session.header.utilities",
+		"conversation.session.header.utilities",
+		"shell.overlay",
 		"sidebar.brand.mark",
 	]);
 });
@@ -389,10 +392,9 @@ test("registers the bf-routing conversation view and the router/routed event Def
 	const { exports } = loadClientHalf((specifier) => healthyHostModules[specifier]);
 	const { ctx, conversationViews, conversationEvents } = stubSlots();
 	exports.apply(ctx);
-	assert.equal(conversationViews.length, 1);
-	assert.equal(conversationViews[0].target, "bf-routing");
-	assert.equal(conversationEvents.length, 1);
-	const def = conversationEvents[0];
+	assert.ok(conversationViews.some((v) => v.target === "bf-routing"));
+	const def = conversationEvents.find((d) => d.kind === "bf-routing");
+	assert.ok(def, "no bf-routing event Definition registered");
 	assert.equal(def.kind, "bf-routing");
 	assert.equal(def.target, "bf-routing");
 	const m = def.match({ type: "router/routed", seq: 7 });
@@ -412,7 +414,7 @@ test("the bf-routing view builder keeps the highest-seq routing decision", () =>
 	const { exports } = loadClientHalf((specifier) => healthyHostModules[specifier]);
 	const { ctx, conversationViews } = stubSlots();
 	exports.apply(ctx);
-	const builder = conversationViews[0].create();
+	const builder = conversationViews.find((v) => v.target === "bf-routing").create();
 	assert.equal(builder.empty.decision, null);
 	const first = { anchorSeq: 3, data: { taskType: "document" } };
 	const second = { anchorSeq: 9, data: { taskType: "code" } };
@@ -454,7 +456,7 @@ test("Story 3.8: a later turn's routing decision supersedes the earlier one in t
 	const { exports } = loadClientHalf((specifier) => healthyHostModules[specifier]);
 	const { ctx, conversationViews } = stubSlots();
 	exports.apply(ctx);
-	const builder = conversationViews[0].create();
+	const builder = conversationViews.find((v) => v.target === "bf-routing").create();
 	// Turn 1 lands first (lower seq), then turn 2 in the same session (higher seq).
 	builder.apply({ upserts: [{ anchorSeq: 4, data: TURN_1_DECISION }] });
 	const afterTurn2 = builder.apply({ upserts: [{ anchorSeq: 8, data: TURN_2_DECISION }] });
@@ -502,6 +504,131 @@ test("the routing chip shows a quiet indicator before the first turn records a d
 	assert.equal(rendered.type, healthyHostModules["@deepseek-ai/dsh-client-ui-primitives"].Pill);
 	assert.equal(rendered.props.onClick, undefined);
 	assert.match(JSON.stringify(rendered.props.children), /Auto-routing/);
+});
+
+/* ---- Egress monitor (Story 2.2) ---- */
+
+/**
+ * A `ctx.sessions` stub exposing a `bf-egress` view snapshot, and a `list`
+ * store whose `current` points at the one session, so both the session-scoped
+ * chip and the root-scoped panel can resolve it.
+ * @param snapshot - the folded egress snapshot, or null for "view not ready".
+ */
+function stubEgressSessions(snapshot) {
+	const session = {
+		subscribe: () => () => {},
+		getSnapshot: () => ({
+			views: { get: (target) => (target === "bf-egress" ? snapshot ?? undefined : undefined) },
+		}),
+	};
+	return {
+		binding: () => ({ session }),
+		list: { subscribe: () => () => {}, getSnapshot: () => ({ current: "s-1" }) },
+	};
+}
+
+test("registers the bf-egress conversation view and the egress/denied event Definition", () => {
+	const { exports } = loadClientHalf((specifier) => healthyHostModules[specifier]);
+	const { ctx, conversationViews, conversationEvents } = stubSlots();
+	exports.apply(ctx);
+	assert.ok(conversationViews.some((v) => v.target === "bf-egress"), "no bf-egress view registered");
+	const def = conversationEvents.find((d) => d.kind === "bf-egress");
+	assert.ok(def, "no egress/denied event Definition registered");
+	assert.equal(def.match({ type: "egress/denied", seq: 4 }).id, "4");
+	assert.equal(def.match({ type: "tool/call", seq: 5 }), null);
+	const node = def.buildViewNode({
+		key: "k", id: "4", state: { tool: "web_fetch", target: "https://example.com" },
+		start: { event: { seq: 4 } },
+	});
+	assert.equal(node.target, "bf-egress");
+	assert.equal(node.data.tool, "web_fetch");
+});
+
+test("the bf-egress view builder counts denial nodes — the zero is a count, not a literal", () => {
+	const { exports } = loadClientHalf((specifier) => healthyHostModules[specifier]);
+	const { ctx, conversationViews } = stubSlots();
+	exports.apply(ctx);
+	const builder = conversationViews.find((v) => v.target === "bf-egress").create();
+	// No events: a counted zero.
+	assert.equal(builder.empty.count, 0);
+	assert.equal(builder.replace({ nodes: [] }).count, 0);
+	// Two denials in the log: count is two, latest detail is the higher-seq one.
+	const s1 = builder.replace({
+		nodes: [
+			{ key: "3", anchorSeq: 3, data: { tool: "web_search", target: "a" } },
+			{ key: "9", anchorSeq: 9, data: { tool: "web_fetch", target: "b" } },
+		],
+	});
+	assert.equal(s1.count, 2);
+	assert.equal(s1.latest.target, "b");
+	// A fresh denial arriving as an upsert increments; a replayed key does not double-count.
+	assert.equal(builder.apply({ upserts: [{ key: "12", anchorSeq: 12, data: { tool: "web_fetch", target: "c" } }] }).count, 3);
+	assert.equal(builder.apply({ upserts: [{ key: "12", anchorSeq: 12, data: { tool: "web_fetch", target: "c" } }] }).count, 3);
+});
+
+test("the egress chip reads a counted zero and a green dot with no attempts", () => {
+	const { exports } = loadClientHalf((specifier) => healthyHostModules[specifier]);
+	const { ctx, registered } = stubSlots({ sessions: stubEgressSessions({ count: 0, latest: null }) });
+	exports.apply(ctx);
+	const chip = registered.find((call) => call.options.id === "bf-egress-chip");
+	assert.ok(chip, "the egress chip took no seat");
+	assert.equal(chip.options.name, "conversation.session.header.utilities");
+	const rendered = chip.component({ sessionId: "s-1" });
+	assert.equal(rendered.type, healthyHostModules["@deepseek-ai/dsh-client-ui-primitives"].Pill);
+	const flat = JSON.stringify(rendered.props.children);
+	assert.match(flat, /Egress 0/);
+	assert.match(flat, /"state":"done"/);
+	assert.equal(rendered.props.active, false);
+});
+
+test("the egress chip turns red and names the count once something is denied", () => {
+	const { exports } = loadClientHalf((specifier) => healthyHostModules[specifier]);
+	const { ctx, registered } = stubSlots({
+		sessions: stubEgressSessions({ count: 2, latest: { tool: "web_fetch", target: "https://example.com" } }),
+	});
+	exports.apply(ctx);
+	const chip = registered.find((call) => call.options.id === "bf-egress-chip");
+	const rendered = chip.component({ sessionId: "s-1" });
+	assert.match(JSON.stringify(rendered.props.children), /Egress 2/);
+	assert.match(JSON.stringify(rendered.props.children), /"state":"error"/);
+	assert.equal(rendered.props.active, true);
+});
+
+test("the egress panel is hidden until the chip opens it, then shows the counted state", () => {
+	const { exports } = loadClientHalf((specifier) => healthyHostModules[specifier]);
+	const { ctx, registered } = stubSlots({
+		sessions: stubEgressSessions({ count: 1, latest: { tool: "web_search", target: "MRPL" } }),
+	});
+	exports.apply(ctx);
+	const panel = registered.find((call) => call.options.id === "bf-egress-panel");
+	assert.ok(panel, "the egress panel took no seat");
+	assert.equal(panel.options.name, "shell.overlay");
+	// Closed by default.
+	assert.equal(panel.component({}), null);
+	// The chip's click toggles the shared open store.
+	const chip = registered.find((call) => call.options.id === "bf-egress-chip");
+	chip.component({ sessionId: "s-1" }).props.onClick();
+	const opened = panel.component({});
+	assert.equal(opened.type, "section");
+	assert.equal(opened.props["aria-label"], "Egress monitor");
+	const flat = JSON.stringify(opened.props.children);
+	assert.match(flat, /1 outbound attempt denied/);
+	assert.match(flat, /web_search/);
+	// Only theme tokens on the surface — no hand-rolled hex.
+	assert.match(opened.props.style.background, /var\(--dsw-/);
+	assert.match(opened.props.style.border, /var\(--dsw-/);
+	assert.doesNotMatch(JSON.stringify(opened.props.style), /#[0-9a-fA-F]{3,}/);
+});
+
+test("the egress panel says the zero is counted, not printed, when nothing has been denied", () => {
+	const { exports } = loadClientHalf((specifier) => healthyHostModules[specifier]);
+	const { ctx, registered } = stubSlots({ sessions: stubEgressSessions({ count: 0, latest: null }) });
+	exports.apply(ctx);
+	const panel = registered.find((call) => call.options.id === "bf-egress-panel");
+	const chip = registered.find((call) => call.options.id === "bf-egress-chip");
+	chip.component({ sessionId: "s-1" }).props.onClick();
+	const flat = JSON.stringify(panel.component({}).props.children);
+	assert.match(flat, /counted from the denial log/);
 });
 
 test("puts the tab title back when the harness rewrites it after hydration", () => {
