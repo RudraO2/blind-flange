@@ -27,12 +27,16 @@ The first one that matches decides it:
 
 1. **A story is `in-progress` or `review`.** That one is yours — finish it. Something stopped
    mid-flight and leaving it is worse than starting new work. Read what blocked it first.
-2. **Otherwise, the first `backlog` story in the build order.** The order is *not* numerical.
-   It is set in `epics.md` under **Build order** and is currently:
+2. **Otherwise, the first `backlog` story in the build order.** The order is *not* numerical,
+   and it is **not written here** — read it from the **Build order** section of
+   `_bmad-output/planning-artifacts/epics.md`. That section is the only copy; it changes as the
+   plan changes, and a copy kept in this file would go stale and send you to the wrong story.
 
-   **3 → 2 → 5 → 4.5 → 6**
+   Walk that sequence and take the first story still marked `backlog`.
 
-   Walk it in that sequence and take the first story still marked `backlog`.
+   **Order stories within an epic numerically, not alphabetically.** Story 3.9 comes *before*
+   story 3.10 — sorting the tracker's keys as text puts `3-10-...` first, which is wrong. An
+   epic can carry more than nine stories; two do.
 
 **Never take a story marked `deferred`.** Those were cut on 28 Aug 2026 with reasons recorded at
 each story. `deferred` is a decision, not a gap to be helpfully filled.
