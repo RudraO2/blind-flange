@@ -17,6 +17,7 @@
 // widen it. Nothing here downloads a model or a font.
 
 import { spawnSync } from 'node:child_process'
+import { createServer } from 'node:net'
 import { randomUUID } from 'node:crypto'
 import { cpSync, existsSync, mkdirSync, readFileSync, realpathSync, writeFileSync } from 'node:fs'
 import { homedir } from 'node:os'
@@ -43,6 +44,22 @@ const forwarded = args.filter((argument) => argument !== '--setup-only')
 
 const say = (message) => console.log(message)
 const step = (message) => console.log(`\n==> ${message}`)
+
+/**
+ * Is anything already listening there?
+ *
+ * Asked by binding rather than by connecting: a connect test cannot tell a
+ * refused connection from a slow one, and a false "busy" would block a start
+ * that would have worked.
+ */
+function portIsBusy(candidate) {
+  return new Promise((done) => {
+    const probe = createServer()
+    probe.once('error', (error) => done(error.code === 'EADDRINUSE'))
+    probe.once('listening', () => probe.close(() => done(false)))
+    probe.listen(Number(candidate), '127.0.0.1')
+  })
+}
 
 /** Stop with a message a human can act on rather than a stack trace. */
 function fail(message) {
@@ -287,7 +304,23 @@ if (setupOnly) {
 }
 
 step('Starting the workbench')
-const port = forwarded[forwarded.indexOf('--port') + 1]
-say(`  It serves http://127.0.0.1:${forwarded.includes('--port') ? port : '3080'} and nothing else. Stop it with Ctrl+C.`)
+const port = forwarded.includes('--port') ? forwarded[forwarded.indexOf('--port') + 1] : '3080'
+
+// Check the port before handing over to the harness. Its own failure here is a
+// forty-line nested stack trace ending in EADDRINUSE, which reads as a broken
+// install rather than "it is already running" — and the usual cause is exactly
+// that: a second run, or a previous one whose server outlived its terminal.
+// Losing a demo to a misread error message is an avoidable way to lose one.
+if (await portIsBusy(port)) {
+  fail(
+    `something is already listening on 127.0.0.1:${port}.\n\n` +
+      '  Almost always Blind Flange itself, still running from an earlier start — try\n' +
+      `  opening http://127.0.0.1:${port} before starting another one.\n\n` +
+      '  Otherwise: close the other window, or start this one on a different port with\n' +
+      `  \`npm start -- --port ${Number(port) + 1}\`.`,
+  )
+}
+
+say(`  It serves http://127.0.0.1:${port} and nothing else. Stop it with Ctrl+C.`)
 const web = spawnSync(['dsh web', ...forwarded].join(' '), { shell: true, stdio: 'inherit' })
 process.exit(web.status ?? 0)

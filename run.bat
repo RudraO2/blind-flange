@@ -11,7 +11,8 @@ rem Everything it does is idempotent - run it as often as you like. The real
 rem work lives in scripts/start.mjs; this file exists so that "how do I run
 rem it?" has an answer that does not begin with "first, open a terminal".
 rem
-rem   run.bat            set up if needed, then start
+rem   run.bat            set up if needed, then open FULLSCREEN (kiosk)
+rem   run.bat windowed   the same, in an ordinary browser tab
 rem   run.bat check      check the install and stop, starting nothing
 rem   run.bat setup      set up and stop, starting nothing
 rem   run.bat ingestion  install the optional Python OCR service
@@ -75,6 +76,25 @@ if /i "%~1"=="setup" (
   exit /b %errorlevel%
 )
 
+rem ---- windowed: the old behaviour, an ordinary browser tab -------------------
+
+if /i "%~1"=="windowed" (
+  call npm run setup
+  if errorlevel 1 (
+    echo.
+    echo   Setup did not finish. The message above says what stopped it.
+    echo.
+    pause
+    exit /b 1
+  )
+  echo.
+  echo   Starting the workbench at http://127.0.0.1:3080
+  echo   Close this window to stop it.
+  echo.
+  call npm start
+  exit /b %errorlevel%
+)
+
 rem ---- the normal path: set up, then start ------------------------------------
 
 echo   Setting up. The first run installs the harness and takes a few minutes;
@@ -93,9 +113,12 @@ if errorlevel 1 (
 
 echo.
 echo   Starting the workbench. It serves http://127.0.0.1:3080 and nothing else.
-echo   Your browser should open by itself. Close this window to stop it.
+echo.
+echo   It will open FULLSCREEN once it is ready - no address bar, no tabs.
+echo   Press Alt+F4 to close it, or Ctrl+C in this window to stop everything.
+echo   Prefer an ordinary browser tab? Run:  run.bat windowed
 echo.
 
-call npm start
+call npm run kiosk
 
 endlocal

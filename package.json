@@ -14,6 +14,7 @@
     "test": "cd plugins/dsh-client-ui-base && node --test && cd ../.. && node scripts/licence-audit.mjs",
     "licence-audit": "node scripts/licence-audit.mjs",
     "record-demo": "node scripts/record-demo.mjs",
+    "kiosk": "node scripts/kiosk.mjs",
     "doctor": "node scripts/doctor.mjs",
     "setup-ingestion": "node scripts/setup-ingestion.mjs",
     "ingestion": "node scripts/run-ingestion.mjs"

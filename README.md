@@ -18,8 +18,24 @@ Two prerequisites, both checked for you before anything is installed:
 | Node.js | 22.15.0 or newer | <https://nodejs.org> — `npm` comes with it |
 | pnpm | 10.11.0 or newer | `npm install -g pnpm` |
 
-Then, from a clean clone — **on Windows, double-click `run.bat`**. It installs pnpm if it is
-missing, sets everything up, and starts the workbench. Nothing else to read.
+Get it:
+
+```sh
+git clone https://github.com/RudraO2/blind-flange.git
+cd blind-flange
+```
+
+Then — **on Windows, double-click `run.bat`**. It installs pnpm if it is missing, sets
+everything up, and opens the workbench **fullscreen**: no address bar, no tabs, nothing on
+screen but Blind Flange. Alt+F4 closes it. Nothing else to read.
+
+```
+run.bat            set up if needed, then open fullscreen
+run.bat windowed   the same, in an ordinary browser tab
+run.bat check      check the install and stop
+run.bat setup      set up and stop
+run.bat ingestion  install the optional Python OCR service
+```
 
 From a terminal, on any platform, in the repository root:
 
