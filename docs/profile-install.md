@@ -809,6 +809,78 @@ so the path is reachable even if a future harness version changes how the row it
 rendered (FR12's own degrade-not-lose requirement). Screenshots in both themes at
 `docs/screenshots/5-4-approval-note-{light,dark}.png`.
 
+## Story 4.5: clicking a finding shows the crop it was read from
+
+No tool to enable and no profile change. This story is one route on the host half and one seat
+in the browser half, both inside the plugin package already installed by step 2.
+
+**The seat is `conversation.view`** — a session-scoped `list` slot whose entries are the view
+ring's tabs, rendered one at a time. The crop viewer registers as `bf-provenance`, `order: 20`,
+labelled "Provenance", so it sits after the shipped Chat (order 0) and Trajectory (order 10)
+tabs rather than replacing either. Registration carries an explicit `label`: ui-conversation
+falls back to the entry id when one is missing (`apply.ts`, `viewTabs()`), which would put
+`bf-provenance` on screen as the tab's name.
+
+**The route** is `GET /blind-flange/provenance/...`, registered on the same `webServer` service
+the favicon route uses, `kind: "prefix"` so one registration serves both paths:
+
+| Path | What it answers |
+|---|---|
+| `/blind-flange/provenance/findings` | The ingestion capture (`lib/findings/sample-report-findings.json`, the same file the `bf_report_findings` tool reads) plus a page manifest carrying each page's real pixel size |
+| `/blind-flange/provenance/pages/<n>` | Page `n` of the report as the real 300 dpi PNG |
+
+The page manifest's `width`/`height` are parsed from each PNG's own IHDR header rather than
+recorded as constants, so the pixel space the browser scales its crop in is the page image's
+real pixel space. A page the findings cite but whose image is missing comes back
+`available: false` and the panel says that finding's region cannot be shown — a visible gap
+rather than a silently dropped finding.
+
+**The page images are copies.** `lib/findings/pages/sample-inspection-report-p{1,2}.png` are
+byte-identical copies of the Epic 4 fixtures at `services/ingestion/fixtures/`, committed into
+the plugin for the same reason the findings capture is: the Python ingestion service is a
+separate tree, and reaching across it at runtime would tie this panel to the repository layout
+that happens to hold while the profile installs the plugin with `link:`. A test asserts the
+copies have not drifted from the fixtures.
+
+**Nothing is pre-cropped.** The crop is cut in the browser: a box the size of the finding's
+bounding box, `overflow: hidden`, with the whole page image inside it scaled and offset by that
+box's own top-left. Move a bounding box in the capture and the pixels on screen move with it —
+if the OCR slips, the crop slips (Story 4.2's acceptance criteria, NFR8). There is no
+pre-rendered crop image anywhere in this package.
+
+**Checking it worked**, verified 28 August 2026 against a running `dsh web`:
+
+```sh
+curl -s -o /dev/null -w "%{http_code} %{content_type} %{size_download}\n" \
+  http://127.0.0.1:3080/blind-flange/provenance/findings
+# -> 200 application/json; charset=utf-8 18438
+curl -s -o /dev/null -w "%{http_code} %{content_type} %{size_download}\n" \
+  http://127.0.0.1:3080/blind-flange/provenance/pages/1
+# -> 200 image/png 2687458
+curl -s -o /dev/null -w "%{http_code}\n" http://127.0.0.1:3080/blind-flange/provenance/pages/9
+# -> 404
+```
+
+In the app: the Provenance tab lists all 156 findings the ingestion service returned for
+`sample-inspection-report.pdf`. Clicking "Insulation cladding open at the channel end.
+Corrosion" (a Major finding, page 1, bbox 560, 2048, 814 × 58) renders the crop with the
+computed geometry `left: -385.26px; top: -1408.94px; width: 1706.83px` over
+`/blind-flange/provenance/pages/1` — the scanned line itself, skew and speckle included, above
+a caption reading `Page 1 · region 560, 2048 · 814 × 58 px · OCR confidence 100.0%`, beside a
+whole-page locator showing where on the page it sits. Screenshots in both themes at
+`docs/screenshots/4-5-provenance-crop-{light,dark}.png`.
+
+One layout note worth keeping: the session body grows with its content and scrolls as a whole
+in an active session (`ConversationRoot.module.css`, `.root[data-phase='active'] .viewArea
+{ flex: 1 0 auto; min-height: auto }`), and the slot wrapper around a view entry is
+`display: contents`. A `height: 100%` on the panel therefore resolves to the content's own
+height rather than the viewport's. The findings list caps itself and scrolls instead, and the
+crop beside it is `position: sticky`, so the evidence stays on screen while the list is
+scrolled. The list column also needs `min-width: 0` — without it the automatic minimum size of
+a row of unwrapped text overrides the `flex: 0 0 320px` basis and the list eats the whole panel,
+squeezing the crop to zero width. That happened on the first run and is what the screenshots
+were re-taken against.
+
 ## The headless profile
 
 `dsh` is a launcher, not an app: it boots a *profile*, and a profile is a stack of plugin

@@ -91,6 +91,14 @@
  * from, so reading the log on screen needs no terminal and a fresh denial lands
  * in the list through the subscription that was already there.
  *
+ * Story 4.5 adds the provenance crop viewer, this package's first
+ * `conversation.view` seat — a whole tab. It lists every OCR finding the
+ * ingestion service returned for the sample inspection report and, when one is
+ * clicked, shows the region of the real scanned page that finding's bounding
+ * box covers. The crop is cut in the browser from the full page image the host
+ * serves (`findings/provenance.js`), so there is no pre-rendered crop anywhere
+ * in this package and a changed bounding box moves the pixels on screen.
+ *
  * Story 3.8 adds no seat. Because the `bf-routing` view keeps the highest-seq
  * `router/routed` node and the chip subscribes through `useSyncExternalStore`,
  * a turn that classifies as a different task type moves the chip to the newly
@@ -1233,8 +1241,451 @@ window.__ModuleLoader__.load({
 			};
 		}
 
+		/* ---------------------------------------------------------------------
+		 * Provenance crop viewer (Story 4.5)
+		 *
+		 * CONTEXT.md: a provenance crop is "the image region a cited fact was
+		 * actually read from, shown next to the claim. Provenance here always
+		 * means page *and* region, never just a filename." This panel is where
+		 * an evaluator checks that claim for themselves: every OCR finding the
+		 * ingestion service returned for the sample inspection report is listed,
+		 * and clicking one shows the patch of the scanned page its bounding box
+		 * covers, beside the text the engine read there.
+		 *
+		 * It takes `conversation.view` (list, session) — a whole tab beside Chat
+		 * and Trajectory, which is the seat `docs/deepseek-harness-notes.md`
+		 * proposes for provenance crops and the one this story's acceptance
+		 * criteria name.
+		 *
+		 * **The crop is generated here, in the browser, from the real page
+		 * image.** The host serves the full 300 dpi page PNG
+		 * (`findings/provenance.js`); this clips a box the size of the finding's
+		 * bounding box over it and offsets the page inside that box by the
+		 * box's own top-left. There is no pre-cut crop image in this package and
+		 * nothing draws a rectangle from remembered numbers: move a bounding box
+		 * in the capture and the pixels on screen move with it. If the OCR
+		 * slips, the crop slips (Story 4.2's own acceptance criteria, NFR8).
+		 * ------------------------------------------------------------------- */
+
+		const PROVENANCE_VIEW_ID = "bf-provenance";
+		const PROVENANCE_FINDINGS_URL = "/blind-flange/provenance/findings";
+
+		/** The box a crop is fitted into, in CSS pixels. */
+		const CROP_BOX = { width: 560, height: 200 };
+		/** Never magnify past this: a single OCR line blown up is mush, not evidence. */
+		const CROP_MAX_SCALE = 3;
+		/** Width of the whole-page locator beside the crop, in CSS pixels. */
+		const LOCATOR_WIDTH = 132;
+
 		/**
-		 * Client plugin body. Checks the React seam, then takes eight seats.
+		 * Where the host serves one page of the report as its real PNG.
+		 * @param page - 1-indexed page number, as recorded on the finding.
+		 */
+		function pageImageUrl(page) {
+			return `/blind-flange/provenance/pages/${page}`;
+		}
+
+		/** A CSS pixel length, rounded to hundredths so a style string is stable. */
+		function px(value) {
+			return `${Math.round(value * 100) / 100}px`;
+		}
+
+		/**
+		 * Everything needed to show one finding's region: a clipping box the
+		 * size of the bounding box, and the offset that brings that region of
+		 * the full page underneath it.
+		 *
+		 * `scale` fits the bounding box inside {@link CROP_BOX} — small lines are
+		 * magnified up to {@link CROP_MAX_SCALE}, a full-width banner is reduced
+		 * until it fits. The page image is then rendered at that same scale and
+		 * pushed left and up by the box's own origin, so exactly the recorded
+		 * region lands inside the clip and nothing else does.
+		 * @param bbox - the finding's `{ left, top, width, height }` in source-image pixels.
+		 * @param page - the page manifest entry, carrying the page's real pixel size.
+		 * @returns the geometry, or `null` when either rectangle is unusable.
+		 */
+		function cropGeometry(bbox, page) {
+			const usable = (n) => typeof n === "number" && Number.isFinite(n) && n > 0;
+			if (!bbox || !usable(bbox.width) || !usable(bbox.height)) return null;
+			if (!page || !usable(page.width) || !usable(page.height)) return null;
+			const scale = Math.min(CROP_BOX.width / bbox.width, CROP_BOX.height / bbox.height, CROP_MAX_SCALE);
+			return {
+				scale,
+				width: bbox.width * scale,
+				height: bbox.height * scale,
+				imageWidth: page.width * scale,
+				imageHeight: page.height * scale,
+				left: -bbox.left * scale,
+				top: -bbox.top * scale,
+			};
+		}
+
+		/**
+		 * The same region expressed on a whole-page thumbnail, so the crop is
+		 * placed on the page rather than floating free. Derived from the one
+		 * bounding box the crop uses, at the thumbnail's own scale.
+		 * @param bbox - the finding's bounding box.
+		 * @param page - the page manifest entry.
+		 */
+		function locatorGeometry(bbox, page) {
+			const usable = (n) => typeof n === "number" && Number.isFinite(n) && n > 0;
+			if (!bbox || !page || !usable(page.width) || !usable(page.height)) return null;
+			const scale = LOCATOR_WIDTH / page.width;
+			return {
+				scale,
+				width: LOCATOR_WIDTH,
+				height: page.height * scale,
+				markLeft: bbox.left * scale,
+				markTop: bbox.top * scale,
+				markWidth: Math.max(bbox.width * scale, 2),
+				markHeight: Math.max(bbox.height * scale, 2),
+			};
+		}
+
+		/**
+		 * Build the crop viewer for `conversation.view`.
+		 *
+		 * The findings and the page manifest are loaded once per mount from the
+		 * host's provenance route — the same capture the `bf_report_findings`
+		 * tool reads, so the panel and the agent cite one set of numbers. The
+		 * page manifest carries each page's real pixel size, read from the PNG
+		 * itself on the host, which is what the geometry above scales in.
+		 * @returns the component.
+		 */
+		function buildProvenanceView() {
+			const { useEffect, useState } = require("react");
+			const { jsx, jsxs } = require("react/jsx-runtime");
+			const { Button, StateDot } = require("@deepseek-ai/dsh-client-ui-primitives");
+
+			const SECONDARY = { color: "var(--dsw-alias-label-secondary)" };
+
+			/**
+			 * Load the ingested report's findings and page manifest.
+			 * @returns `{ status: "loading" | "ready" | "error", payload?, message? }`.
+			 */
+			function useProvenance() {
+				const [state, setState] = useState({ status: "loading" });
+				useEffect(() => {
+					let live = true;
+					fetch(PROVENANCE_FINDINGS_URL, { headers: { accept: "application/json" } })
+						.then((response) => {
+							if (!response.ok) throw new Error(`the findings route answered ${response.status}`);
+							return response.json();
+						})
+						.then((payload) => {
+							if (live) setState({ status: "ready", payload });
+						})
+						.catch((error) => {
+							if (live) setState({ status: "error", message: error instanceof Error ? error.message : String(error) });
+						});
+					return () => {
+						live = false;
+					};
+				}, []);
+				return state;
+			}
+
+			/** OCR confidence as a percentage, or an em dash when the record has none. */
+			function confidenceText(confidence) {
+				return typeof confidence === "number" && Number.isFinite(confidence) ? `${confidence.toFixed(1)}%` : "—";
+			}
+
+			/**
+			 * One row of the findings list: the page it was read from, the text
+			 * the engine read, and its confidence. A `Button` primitive, so the
+			 * row is keyboard-reachable and carries the shipped focus ring; only
+			 * layout and `--dsw-*` tokens are set here.
+			 * @param finding - one entry of the capture.
+			 * @param index - its position, used as the selection key.
+			 * @param selected - whether it is the finding on show.
+			 * @param onSelect - selects this finding.
+			 */
+			function findingRow(finding, index, selected, onSelect) {
+				const text = typeof finding.text === "string" && finding.text !== "" ? finding.text : "(no text read)";
+				return jsx(
+					Button,
+					{
+						variant: selected ? "outline" : "ghost",
+						size: "sm",
+						onClick: () => onSelect(index),
+						"aria-pressed": selected,
+						title: `Page ${finding.page} · ${text}`,
+						style: { width: "100%", justifyContent: "flex-start", textAlign: "left" },
+						children: jsxs("span", {
+							style: { display: "flex", alignItems: "baseline", gap: "8px", width: "100%", minWidth: 0 },
+							children: [
+								jsx("span", {
+									style: { ...SECONDARY, flex: "0 0 auto", fontVariantNumeric: "tabular-nums" },
+									children: `p${finding.page}`,
+								}),
+								jsx("span", {
+									style: {
+										flex: "1 1 auto",
+										minWidth: 0,
+										overflow: "hidden",
+										textOverflow: "ellipsis",
+										whiteSpace: "nowrap",
+									},
+									children: text,
+								}),
+								jsx("span", {
+									style: { ...SECONDARY, flex: "0 0 auto", fontVariantNumeric: "tabular-nums" },
+									children: confidenceText(finding.confidence),
+								}),
+							],
+						}),
+					},
+					`bf-finding:${index}`,
+				);
+			}
+
+			/**
+			 * The crop itself: a clip box the size of the recorded region, with
+			 * the whole page image inside it offset by that region's origin. The
+			 * caption states the page and the region in the page's own pixel
+			 * coordinates, which is what "page and region" means on this project.
+			 * @param finding - the selected finding.
+			 * @param page - its page manifest entry.
+			 */
+			function cropFigure(finding, page) {
+				const geometry = cropGeometry(finding.bbox, page);
+				if (geometry === null) {
+					return jsx("p", {
+						style: SECONDARY,
+						children: "This finding carries no usable region, so there is nothing to crop.",
+					});
+				}
+				const locator = locatorGeometry(finding.bbox, page);
+				const pageSrc = pageImageUrl(finding.page);
+				const alt = `Page ${finding.page} of the ingested report, cropped to the region this finding was read from`;
+
+				return jsxs("div", {
+					style: { display: "flex", alignItems: "flex-start", gap: "16px", flexWrap: "wrap" },
+					children: [
+						jsxs("figure", {
+							style: { display: "flex", flexDirection: "column", gap: "8px", margin: 0 },
+							children: [
+								jsx("div", {
+									// The crop. `overflow: hidden` is the cut; the image
+									// inside is the whole page, moved so the recorded
+									// region is what lands in the opening.
+									style: {
+										position: "relative",
+										overflow: "hidden",
+										width: px(geometry.width),
+										height: px(geometry.height),
+										borderRadius: "12px",
+										border: "1px solid var(--dsw-alias-border-l2)",
+										background: "var(--dsw-alias-bg-layer-2)",
+									},
+									children: jsx("img", {
+										src: pageSrc,
+										alt,
+										draggable: false,
+										style: {
+											position: "absolute",
+											left: px(geometry.left),
+											top: px(geometry.top),
+											width: px(geometry.imageWidth),
+											height: px(geometry.imageHeight),
+											maxWidth: "none",
+										},
+									}),
+								}),
+								jsx("figcaption", {
+									style: { ...SECONDARY, fontVariantNumeric: "tabular-nums" },
+									children: `Page ${finding.page} · region ${finding.bbox.left}, ${finding.bbox.top} · ${finding.bbox.width} × ${finding.bbox.height} px · OCR confidence ${confidenceText(finding.confidence)}`,
+								}),
+							],
+						}),
+						locator === null
+							? null
+							: jsxs("figure", {
+									style: { display: "flex", flexDirection: "column", gap: "8px", margin: 0 },
+									children: [
+										jsxs("div", {
+											style: {
+												position: "relative",
+												width: px(locator.width),
+												height: px(locator.height),
+												borderRadius: "8px",
+												overflow: "hidden",
+												border: "1px solid var(--dsw-alias-border-l2)",
+												background: "var(--dsw-alias-bg-layer-2)",
+											},
+											children: [
+												jsx("img", {
+													src: pageSrc,
+													alt: `Whole of page ${finding.page}, with the cropped region outlined`,
+													draggable: false,
+													style: { display: "block", width: "100%", height: "100%" },
+												}),
+												jsx("span", {
+													style: {
+														position: "absolute",
+														left: px(locator.markLeft),
+														top: px(locator.markTop),
+														width: px(locator.markWidth),
+														height: px(locator.markHeight),
+														border: "1px solid var(--dsw-alias-label-primary)",
+														borderRadius: "2px",
+													},
+												}),
+											],
+										}),
+										jsx("figcaption", { style: SECONDARY, children: "Where it sits on the page" }),
+									],
+								}),
+					],
+				});
+			}
+
+			/**
+			 * The selected finding's detail: the text the engine read, then the
+			 * crop it was read from. Claim first, evidence second — the order the
+			 * panel argues in.
+			 * @param finding - the selected finding.
+			 * @param page - its page manifest entry, or undefined when the report has none.
+			 */
+			function detail(finding, page) {
+				if (page === undefined || page.available !== true) {
+					return jsx("p", {
+						style: SECONDARY,
+						children: `Page ${finding.page} of the report is not available, so this finding's region cannot be shown.`,
+					});
+				}
+				const text = typeof finding.text === "string" && finding.text !== "" ? finding.text : "(no text read)";
+				return jsxs("div", {
+					style: { display: "flex", flexDirection: "column", gap: "12px" },
+					children: [
+						jsx("blockquote", {
+							style: {
+								margin: 0,
+								paddingLeft: "12px",
+								borderLeft: "2px solid var(--dsw-alias-border-l2)",
+								color: "var(--dsw-alias-label-primary)",
+							},
+							children: text,
+						}),
+						cropFigure(finding, page),
+					],
+				});
+			}
+
+			/**
+			 * The crop viewer. Lists every finding the ingestion service returned
+			 * for the report; clicking one shows the region of the real page it
+			 * was read from. Nothing is shown before a finding is clicked — the
+			 * empty pane says what to do rather than pre-selecting a finding
+			 * nobody asked for.
+			 */
+			function ProvenanceView() {
+				const state = useProvenance();
+				const [selectedIndex, setSelectedIndex] = useState(null);
+
+				if (state.status === "loading") {
+					return jsx("div", {
+						style: { padding: "16px", ...SECONDARY },
+						children: "Reading the ingested report's findings…",
+					});
+				}
+				if (state.status === "error") {
+					return jsxs("div", {
+						style: { padding: "16px", display: "flex", alignItems: "center", gap: "8px", ...SECONDARY },
+						children: [
+							jsx(StateDot, { state: "error", size: 8 }),
+							`The ingested report's findings could not be read — ${state.message}.`,
+						],
+					});
+				}
+
+				const payload = state.payload ?? {};
+				const findings = Array.isArray(payload.findings) ? payload.findings : [];
+				const pages = Array.isArray(payload.pages) ? payload.pages : [];
+				const pageOf = (number) => pages.find((entry) => entry.page === number);
+
+				if (findings.length === 0) {
+					return jsx("div", {
+						style: { padding: "16px", ...SECONDARY },
+						children: "No document has been ingested, so there are no findings to show a crop for.",
+					});
+				}
+
+				const selected = selectedIndex === null ? null : (findings[selectedIndex] ?? null);
+
+				// The session body grows with its content and scrolls as a whole
+				// (`ConversationRoot.module.css`, `.root[data-phase='active']
+				// .viewArea { flex: 1 0 auto; min-height: auto }`), so this panel
+				// cannot size itself off the parent's height — a `height: 100%`
+				// here resolves against a `display: contents` wrapper and simply
+				// takes the content's own height. Instead the list is capped and
+				// scrolls itself, and the crop beside it sticks, so the evidence
+				// stays on screen while the 156 findings are scrolled past it.
+				return jsxs("section", {
+					"aria-label": "Provenance crops",
+					style: {
+						display: "flex",
+						alignItems: "flex-start",
+						gap: "16px",
+						padding: "16px",
+						boxSizing: "border-box",
+						color: "var(--dsw-alias-label-primary)",
+					},
+					children: [
+						jsxs("div", {
+							// `minWidth: 0` matters: without it the automatic minimum
+							// size of a row of unwrapped text overrides the 320px
+							// basis and the list eats the whole panel.
+							style: {
+								display: "flex",
+								flexDirection: "column",
+								gap: "8px",
+								flex: "0 0 320px",
+								minWidth: 0,
+								maxHeight: "70vh",
+							},
+							children: [
+								jsx("div", {
+									style: SECONDARY,
+									children: `${findings.length} findings read from ${payload.report ?? "the ingested report"}`,
+								}),
+								jsx("div", {
+									role: "list",
+									"aria-label": "Findings read from the ingested report",
+									style: {
+										display: "flex",
+										flexDirection: "column",
+										gap: "2px",
+										overflowY: "auto",
+										overflowX: "hidden",
+										minHeight: 0,
+										flex: "1 1 auto",
+									},
+									children: findings.map((finding, index) =>
+										findingRow(finding, index, index === selectedIndex, setSelectedIndex),
+									),
+								}),
+							],
+						}),
+						jsx("div", {
+							style: { flex: "1 1 auto", minWidth: 0, position: "sticky", top: "16px" },
+							children:
+								selected === null
+									? jsx("p", {
+											style: SECONDARY,
+											children: "Click a finding to see the crop of the page it was read from.",
+										})
+									: detail(selected, pageOf(selected.page)),
+						}),
+					],
+				});
+			}
+
+			return ProvenanceView;
+		}
+
+		/**
+		 * Client plugin body. Checks the React seam, then takes nine seats.
 		 *
 		 * Story 1.5's mark goes into `conversation.hero.brand.mark` — `single`,
 		 * so occupying it replaces whatever the host registered there (the
@@ -1277,6 +1728,12 @@ window.__ModuleLoader__.load({
 		 * through a registered `bf-egress` conversation view; the chip toggles
 		 * the panel through a module-scoped open store.
 		 *
+		 * Story 4.5's crop viewer takes `conversation.view` (list, session) — a
+		 * whole tab beside Chat and Trajectory. It reads the ingestion capture
+		 * and the real page images from the host's provenance route rather than
+		 * from a session event: the findings are what a document ingested
+		 * through Epic 4 produced, not something a turn recorded.
+		 *
 		 * Story 2.3's canary takes `conversation.input.right` (list, session):
 		 * the button that fires a real outbound attempt through the host's
 		 * loopback `/bf-canary` channel so the denial can be watched happening.
@@ -1284,7 +1741,7 @@ window.__ModuleLoader__.load({
 		 * client with no host transport loses the button and keeps everything
 		 * else.
 		 *
-		 * A broken React seam aborts all eight: every one of them renders
+		 * A broken React seam aborts all nine: every one of them renders
 		 * through the host's `react/jsx-runtime`, so registering into a slot
 		 * without it would trade one loud console error for obscure render
 		 * failures. (The conversation Definitions carry no React and are
@@ -1314,6 +1771,7 @@ window.__ModuleLoader__.load({
 			const RoutingChip = buildRoutingChip(ctx);
 			const EgressChip = buildEgressChip(ctx);
 			const EgressPanel = buildEgressPanel(ctx);
+			const ProvenanceView = buildProvenanceView();
 			const disposeSidebarMark = ctx.slots.inject("sidebar.brand.mark", function* () {
 				yield ctx.slots.register({ name: "sidebar.brand.mark" }, BlindFlangeMark);
 			});
@@ -1389,6 +1847,23 @@ window.__ModuleLoader__.load({
 					return () => { dispose(); };
 				});
 			});
+			// `conversation.view` is a session-scoped `list` slot: each entry is a
+			// tab in the session's view ring, rendered one at a time. `label` is
+			// what the tab reads; ui-conversation falls back to the entry id when
+			// a registration has none, which would put "bf-provenance" on screen.
+			// `order` puts it after Chat (0) and the shipped trajectory tab (10).
+			const disposeProvenanceView = ctx.slots.inject("conversation.view", () => {
+				const dispose = ctx.slots.register(
+					{
+						name: "conversation.view",
+						id: PROVENANCE_VIEW_ID,
+						order: 20,
+						label: "Provenance",
+					},
+					ProvenanceView,
+				);
+				return () => { dispose(); };
+			});
 			// `conversation.input.model` is a session-scoped `single` slot
 			// ui-conversation declares. The stock picker is disabled in the
 			// profile, so this occupies it outright. The `inject` factory hands
@@ -1415,6 +1890,7 @@ window.__ModuleLoader__.load({
 				disposeEgressPanel?.();
 				disposeCanary?.();
 				disposeRoutingChip?.();
+				disposeProvenanceView?.();
 				disposeRoutingView?.();
 				disposeRoutingEvents?.();
 				disposeEgressView?.();

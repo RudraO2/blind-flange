@@ -301,6 +301,8 @@ test("occupies both places the DeepSeek whale used to render, and the hero's tas
 		"conversation.input.right",
 		"conversation.session.header.utilities",
 		"conversation.session.header.utilities",
+		// Story 4.5's crop viewer — a whole tab, not a chip.
+		"conversation.view",
 		"shell.overlay",
 		"sidebar.brand.mark",
 	]);
@@ -919,7 +921,7 @@ test("a client with no host transport loses the canary and keeps every other sea
 	const { ctx, registered } = stubSlots({ connection: false });
 	exports.apply(ctx);
 	assert.equal(findCanary(registered), undefined);
-	assert.equal(registered.length, 7, "the other seats must survive a missing transport");
+	assert.equal(registered.length, 8, "the other seats must survive a missing transport");
 });
 
 test("pressing it posts to the host's loopback canary channel for this session", async () => {

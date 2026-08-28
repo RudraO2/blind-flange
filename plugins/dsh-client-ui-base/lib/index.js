@@ -44,6 +44,12 @@
  * (`session-events/known-types.js`), so a stored session containing them
  * still opens instead of failing with `SessionFormatUnsupportedError`.
  *
+ * Story 4.5 adds the provenance route (`findings/provenance.js`) beside the
+ * favicon route below: the crop viewer in the browser loads the ingestion
+ * capture and the real page images from it, and crops in the browser. Like
+ * the favicon it is served through `webServer.register`, so a profile with no
+ * web server simply does not have it.
+ *
  * Story 3.10 fixes the classifier reading the wrong turn's text (or none).
  * `agent/pre-step` hands the listener `messages: claimed` directly in its
  * payload — `Inbox.claim()` in the harness (`packages/core/agent/src/inbox.ts`)
@@ -67,6 +73,7 @@ import {
 } from "./egress/canary.js";
 import { createApprovalNoteTool } from "./deliverables/tool.js";
 import { createReportFindingsTool } from "./findings/tool.js";
+import { createProvenanceHandler, PROVENANCE_ROUTE_PREFIX } from "./findings/provenance.js";
 import { createLlmAdapter } from "./model-plane/llm-adapter.js";
 import { createModelProvider } from "./model-plane/model-provider.js";
 import { loadFleet } from "./registry/loader.js";
@@ -465,6 +472,20 @@ export function apply(ctx, config) {
 					},
 				}),
 			"blind-flange: favicon route",
+		);
+
+		// Story 4.5: the provenance route. `kind: "prefix"` so one registration
+		// covers `/findings` and `/pages/<n>` — the page count comes from the
+		// capture, not from a route table that would have to be edited when the
+		// sample report gains a page.
+		web.effect(
+			() =>
+				web.webServer.register({
+					kind: "prefix",
+					path: PROVENANCE_ROUTE_PREFIX,
+					handler: createProvenanceHandler(),
+				}),
+			"blind-flange: provenance route",
 		);
 
 		web.effect(

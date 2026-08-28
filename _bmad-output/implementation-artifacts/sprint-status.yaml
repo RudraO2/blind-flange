@@ -64,12 +64,12 @@ development_status:
   3-10-the-first-turn-classifies-on-what-was-actually-asked: done
   epic-3-retrospective: optional
 
-  epic-4: in-progress
+  epic-4: done
   4-1-the-sample-inspection-report-exists: done
   4-2-tesseract-returns-word-boxes-on-this-hardware: done
   4-3-the-ingestion-service-returns-text-with-regions-for-a-scanne: done
   4-4-the-ingestion-service-accepts-a-scanned-pdf: done
-  4-5-clicking-a-finding-shows-the-crop-it-was-read-from: backlog
+  4-5-clicking-a-finding-shows-the-crop-it-was-read-from: done
   epic-4-retrospective: optional
 
   epic-5: in-progress
