@@ -70,6 +70,16 @@ of MRPL until it has. See `licence-policy.md`.
    re-cloning the repository breaks it silently — the plugin simply stops being served. Re-run
    this step after any move, and expect to run it as written on a second machine.
 
+   **Run it from the main checkout.** `$(pwd)` is baked into the profile, so running this from
+   inside a git worktree points the profile at that worktree; deleting the worktree later leaves
+   a dangling symlink and the plugin stops loading with no error anyone would connect to the
+   cause. This happened once, on 28 Aug 2026. Verify with:
+
+   ```bash
+   ls ~/.dsh/profiles/web/node_modules/@blind-flange/dsh-client-ui-base/   # must list lib/
+   dsh --profile web --dump-config | grep bf-base                          # must print the row
+   ```
+
 3. **Mount it.** `~/.dsh/profiles/web/cordis.patch.yml` is the user patch layer, applied after
    every bundle layer. **Append** this array element; keep any entries already there.
 
