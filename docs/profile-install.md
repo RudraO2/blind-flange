@@ -350,6 +350,68 @@ In the running app: the browser tab reads "Blind Flange" and shows our favicon; 
 appears both in the collapsed sidebar rail and in the hero at the top of the conversation; the
 whale appears nowhere.
 
+## Story 3.1: the replay provider answers a turn
+
+`ctx.llm.registerAdapter` (dsh-llm's model seam) was the riskiest unknown in the project
+(epics.md, Epic 3). It works, verified against the installed harness (`0.1.1-rc.2`) on 28
+August 2026, day one of four — no fallback to our own agent loop was needed.
+
+**The registration contract is duck-typed.** `LlmRuntime.registerAdapter` never does an
+`instanceof` check on the adapter it is handed — it only calls `providerInfo`,
+`providerRetryPolicy`, `prepareCall` and `stream` — and this plugin is mounted through a
+`link:` row, i.e. loaded through a symlink. Node resolves a bare specifier from a symlinked
+module's REAL on-disk path, which is this repo, not the profile's `node_modules` the
+harness's own `@deepseek-ai/dsh-llm` lives in — so `import "@deepseek-ai/dsh-llm"` from inside
+`plugins/dsh-client-ui-base` fails with `ERR_MODULE_NOT_FOUND` even though the harness process
+importing the plugin has that package loaded and working. Confirmed both ways directly against
+the installed harness before writing any plugin code:
+
+```sh
+# from the plugin's real path — fails
+node -e "import('@deepseek-ai/dsh-llm').then(()=>console.log('OK')).catch(e=>console.log('FAIL',e.code))"
+# → FAIL ERR_MODULE_NOT_FOUND
+
+# a plain object satisfying providerInfo/providerRetryPolicy/prepareCall/stream, no
+# LlmAdapter subclass, no dsh-llm import — registers and streams a turn to completion
+```
+
+So `plugins/dsh-client-ui-base/lib/model-plane/llm-adapter.js` never imports
+`@deepseek-ai/dsh-llm`; it hands `ctx.llm.registerAdapter` a plain object. This is also just
+what CONTEXT.md's "Plugin contract" already says: the contract is ours, the harness is a
+(duck-typed, it turns out) implementation of it.
+
+**Our own `ModelProvider` contract** (`model-plane/model-provider.js`) sits behind that bridge:
+`replay`, `local`, `remote`, selected by name in one lookup table, never a code path (FR7).
+`replay` is implemented — it answers from `model-plane/replay-cache.json`, authored by hand
+per ADR-0001's 28 August 2026 amendment, in the same shape (an ordered list of blocks per
+turn) a captured cache would use. `local` (llama.cpp on the 1650, ADR-0001's day-4 stretch
+goal) and `remote` (dev-only, never in a demo) are declared but fail loud when selected — there
+is nothing to implement them against yet.
+
+**Which provider a session actually uses is `agent-default-model`**, a shipped Cordis row that
+otherwise points every new session at `deepseek-official` — the adapter Story 1.3 already
+disabled, which is why `dsh --profile headless "say hello"` failed with `NO_ADAPTER` before
+this story. Append to both `~/.dsh/profiles/web/cordis.patch.yml` and
+`~/.dsh/profiles/headless/cordis.patch.yml`:
+
+```yaml
+- id: agent-default-model
+  config:
+    provider: replay
+    model: replay-authored-v1
+```
+
+**Checking it worked**, verified 28 August 2026:
+
+```sh
+dsh --profile headless "say hello"
+```
+
+Before this row: `dsh: NO_ADAPTER: no adapter registered for provider "deepseek-official"`.
+After it: an authored line from `replay-cache.json`, printed to the terminal — a real running
+harness process, a real turn, served from replay. No UI surface is added by this story, so the
+Standing acceptance criteria's screenshot requirement does not apply.
+
 ## The headless profile
 
 `dsh` is a launcher, not an app: it boots a *profile*, and a profile is a stack of plugin

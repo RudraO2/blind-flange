@@ -71,9 +71,11 @@ recorded proof runs), **remote** (rented GPU, development only, never in a demo)
 _Avoid_: backend, inference layer, the LLM
 
 **Replay**:
-Serving stored responses captured from real `local` runs. A demo mode, disclosed out loud,
-never presented as live inference. Not a mock and not a stub — the responses are things the
-system actually produced.
+Serving stored responses. A demo mode, disclosed out loud, never presented as live inference.
+The design is captured responses from real `local` runs — not a mock and not a stub, things
+the system actually produced. **For Phase 0** (ADR-0001, 28 August 2026 amendment) there is no
+`local` run yet to capture from, so the cache is authored by hand instead; the disclosure says
+so rather than implying capture, and an authored entry is a data swap away from a captured one.
 _Avoid_: fake mode, mock, demo data
 
 **Fan-out gauge**:

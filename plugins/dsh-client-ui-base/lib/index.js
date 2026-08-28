@@ -13,11 +13,18 @@
  * `conversation.hero.brand.mark` — the third piece of AC1 — is a client-side
  * slot and is registered in client.js instead; this file only reaches what a
  * server-rendered index.html can reach.
+ *
+ * Story 3.1 adds the model plane: `ctx.llm.registerAdapter` bridges our own
+ * `ModelProvider` contract (`model-plane/model-provider.js`) onto the
+ * harness's model seam, defaulting to `replay`. See `model-plane/llm-adapter.js`
+ * for why that bridge is duck-typed rather than importing `@deepseek-ai/dsh-llm`.
  */
 
 import { readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
+import { createLlmAdapter } from "./model-plane/llm-adapter.js";
+import { createModelProvider } from "./model-plane/model-provider.js";
 
 const FAVICON_PATH = "/blind-flange/favicon.svg";
 const FAVICON_SVG = readFileSync(join(dirname(fileURLToPath(import.meta.url)), "favicon.svg"));
@@ -97,9 +104,18 @@ function describeTarget(rawArguments) {
  * rather than hanging (NFR2) — a hang on stage reads as a crash. It is
  * registered first and unconditionally: every profile that boots this package
  * is sealed, whether or not it renders anything.
+ *
+ * `config.modelPlane.provider` selects the model plane (ADR-0001; FR7):
+ * `replay` (default), `local`, or `remote`. This is the one place that value
+ * is read — `createModelProvider` is the only caller of the provider
+ * constructors, so which one runs is a `cordis.patch.yml` edit, never a code
+ * change. Deferred until `llm` exists, the same way presentation below
+ * defers until `webServer` exists, so a profile with no model seam still
+ * gets the egress denial waterfall.
  * @param ctx - host plugin context.
+ * @param config - this row's resolved config; `modelPlane.provider` defaults to `"replay"`.
  */
-export function apply(ctx) {
+export function apply(ctx, config) {
 	ctx.on("tools/pre-execute", (exec, next) => {
 		if (NETWORK_TOOL_NAMES.has(exec.name)) {
 			return {
@@ -108,6 +124,21 @@ export function apply(ctx) {
 			};
 		}
 		return next();
+	});
+
+	const providerName = config?.modelPlane?.provider ?? "replay";
+	ctx.inject(["llm"], (llmCtx) => {
+		llmCtx.effect(() => {
+			let modelProvider;
+			try {
+				modelProvider = createModelProvider(providerName);
+			} catch (error) {
+				console.warn(`@blind-flange/dsh-client-ui-base: model plane not mounted — ${error.message}`);
+				return undefined;
+			}
+			const adapter = createLlmAdapter(modelProvider, { displayName: `Blind Flange (${providerName})` });
+			return llmCtx.llm.registerAdapter([providerName], adapter);
+		}, "blind-flange: model plane adapter");
 	});
 
 	// Presentation. Deferred until `webServer` exists, and simply never runs in

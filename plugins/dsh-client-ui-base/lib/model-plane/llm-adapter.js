@@ -1,0 +1,83 @@
+/**
+ * Bridges our own `ModelProvider` contract (model-provider.js) onto the
+ * harness's `ctx.llm.registerAdapter(providers, adapter)` seam.
+ *
+ * Deliberately does NOT import `@deepseek-ai/dsh-llm` to get its `LlmAdapter`
+ * base class. Two things were verified directly against the installed
+ * harness (0.1.1-rc.2) on 28 August 2026, the day-one timebox for this seam:
+ *
+ * 1. `registerAdapter` never does an `instanceof` check — every method it
+ *    calls (`providerInfo`, `providerRetryPolicy`, `prepareCall`, `stream`)
+ *    is duck-typed, so a plain object implementing them registers exactly
+ *    like a real `LlmAdapter` subclass would.
+ * 2. This plugin is mounted through a `link:` row in the profile's
+ *    `package.json`, i.e. loaded through a symlink. Node resolves bare
+ *    specifiers from a symlinked module's REAL on-disk path, which is this
+ *    repo — not the profile's `node_modules` the harness's own packages live
+ *    in — so `import "@deepseek-ai/dsh-llm"` from here fails with
+ *    `ERR_MODULE_NOT_FOUND` even though the harness process has that package
+ *    loaded and working.
+ *
+ * Duck-typing sidesteps both: the contract stays ours (CONTEXT.md "Plugin
+ * contract" — "the harness is an implementation of them"), and there is
+ * nothing here for the symlink to break.
+ */
+
+/** Exact model identity this adapter reports; nothing here validates against a catalog (advisory only, per the harness's own contract). */
+async function resolveModel(provider, model) {
+	return { provider, id: model, name: model };
+}
+
+/**
+ * Streams one turn from `modelProvider`, translated into the harness's chunk
+ * vocabulary. Block-start and block-end always come in a matching pair, even
+ * on failure — `modelProvider.answer()` throwing after some text was already
+ * emitted must not leave the block open when the terminal `error` finish
+ * chunk lands.
+ * @param {import("./model-provider.js").ModelProvider} modelProvider
+ * @param {{ messages: unknown[] }} options
+ */
+async function* streamImpl(modelProvider, options) {
+	const index = 0;
+	let text = "";
+	yield { type: "block-start", index, blockType: "text" };
+	try {
+		for await (const piece of modelProvider.answer({ messages: options.messages })) {
+			if (piece.type !== "text" || piece.text.length === 0) continue;
+			text += piece.text;
+			yield { type: "text-delta", index, text: piece.text };
+		}
+		yield { type: "block-end", index, block: { type: "text", text } };
+		yield { type: "finish", reason: { kind: "stop" } };
+	} catch (error) {
+		yield { type: "block-end", index, block: { type: "text", text } };
+		yield {
+			type: "finish",
+			reason: { kind: "error", failure: { message: error instanceof Error ? error.message : String(error), code: "MODEL_PROVIDER_ERROR" } },
+		};
+	}
+}
+
+/**
+ * @param {import("./model-provider.js").ModelProvider} modelProvider - the selected provider this adapter serves turns from.
+ * @param {{ displayName: string }} options
+ */
+export function createLlmAdapter(modelProvider, { displayName }) {
+	const stream = (options) => streamImpl(modelProvider, options);
+	return {
+		providerInfo(provider) {
+			return { id: provider, name: displayName };
+		},
+		providerRetryPolicy() {
+			return undefined;
+		},
+		async listModels() {
+			return [];
+		},
+		resolveModel,
+		async prepareCall(provider, model) {
+			return { model: await resolveModel(provider, model), stream };
+		},
+		stream,
+	};
+}

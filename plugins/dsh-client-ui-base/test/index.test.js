@@ -3,7 +3,8 @@
  * title/favicon swap (Story 1.5), both reached through `ctx.webServer`'s own
  * extension points (`register`, `tapIndex`) rather than any harness file
  * edit, plus the egress denial waterfall (Story 2.1) registered on
- * `tools/pre-execute`.
+ * `tools/pre-execute`, plus the model plane adapter registration (Story 3.1)
+ * on `ctx.llm`.
  *
  *     node --test plugins/dsh-client-ui-base/test/
  */
@@ -25,11 +26,19 @@ const packageDir = dirname(dirname(fileURLToPath(import.meta.url)));
  * `ctx.inject(names, run)` mirrors Cordis: it runs `run` with a context
  * carrying the named services, and does not run it at all when one is
  * missing. Pass `webServer: false` to stand in for the `headless` profile,
- * where there is no web server to wait for.
+ * where there is no web server to wait for; pass `llm: false` for a profile
+ * with no model seam mounted at all.
+ *
+ * `llmService.registerAdapter` mirrors the real (duck-typed) contract closely
+ * enough for these tests: it records the call and returns a disposer, exactly
+ * like `LlmRuntime.registerAdapter` — see `llm-adapter.js` for why the real
+ * adapter object needs no `instanceof` relationship to anything the harness
+ * ships.
  */
-function stubHostCtx({ webServer = true } = {}) {
+function stubHostCtx({ webServer = true, llm = true } = {}) {
 	const routes = [];
 	const taps = [];
+	const registeredAdapters = [];
 	let preExecuteListener;
 	const webServerService = {
 		register: (route) => {
@@ -41,6 +50,12 @@ function stubHostCtx({ webServer = true } = {}) {
 			return () => {};
 		},
 	};
+	const llmService = {
+		registerAdapter: (providers, adapter) => {
+			registeredAdapters.push({ providers, adapter });
+			return () => {};
+		},
+	};
 	const base = {
 		effect: (run) => run(),
 		on: (name, fn) => {
@@ -48,12 +63,14 @@ function stubHostCtx({ webServer = true } = {}) {
 		},
 		inject: (names, run) => {
 			if (names.some((name) => name === "webServer" && !webServer)) return;
-			run({ ...base, webServer: webServerService });
+			if (names.some((name) => name === "llm" && !llm)) return;
+			run({ ...base, webServer: webServerService, llm: llmService });
 		},
 	};
 	return {
 		routes,
 		taps,
+		registeredAdapters,
 		get preExecuteListener() {
 			return preExecuteListener;
 		},
@@ -208,4 +225,39 @@ test("allows a tool that cannot reach the network", async () => {
 	const allow = { kind: "allow" };
 	const decision = await host.preExecuteListener({ name: "read_file", arguments: "{}" }, () => allow);
 	assert.equal(decision, allow);
+});
+
+test("registers the replay adapter under the 'replay' route by default (Story 3.1)", () => {
+	const host = stubHostCtx();
+	apply(host.ctx);
+	assert.equal(host.registeredAdapters.length, 1);
+	assert.deepEqual(host.registeredAdapters[0].providers, ["replay"]);
+	assert.equal(typeof host.registeredAdapters[0].adapter.stream, "function");
+});
+
+test("model plane provider is a config value, not a code path", () => {
+	const host = stubHostCtx();
+	apply(host.ctx, { modelPlane: { provider: "local" } });
+	assert.deepEqual(host.registeredAdapters[0].providers, ["local"]);
+});
+
+test("mounts no model plane adapter in a profile with no llm service", () => {
+	const host = stubHostCtx({ llm: false });
+	apply(host.ctx);
+	assert.deepEqual(host.registeredAdapters, []);
+});
+
+test("warns and skips registration instead of crashing on an unknown modelPlane.provider", () => {
+	const host = stubHostCtx();
+	const originalWarn = console.warn;
+	const warnings = [];
+	console.warn = (...args) => warnings.push(args.join(" "));
+	try {
+		assert.doesNotThrow(() => apply(host.ctx, { modelPlane: { provider: "nonexistent" } }));
+	} finally {
+		console.warn = originalWarn;
+	}
+	assert.deepEqual(host.registeredAdapters, []);
+	assert.equal(warnings.length, 1);
+	assert.match(warnings[0], /model plane not mounted/);
 });

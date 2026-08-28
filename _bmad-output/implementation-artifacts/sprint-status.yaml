@@ -30,7 +30,7 @@
 # - Dev moves story to 'review', then runs code-review (fresh context, different LLM recommended)
 # - Retrospective appends its action items to action_items; the status view surfaces open ones
 generated: 08-28-2026 14:30
-last_updated: 08-28-2026 20:10
+last_updated: 08-28-2026 23:15
 project: Blind Flange
 project_key: NOKEY
 tracking_system: file-system
@@ -51,8 +51,8 @@ development_status:
   2-4-the-audit-log-can-be-read-on-screen: backlog
   epic-2-retrospective: optional
 
-  epic-3: backlog
-  3-1-a-replay-provider-answers-a-turn-through-the-model-plane: backlog
+  epic-3: in-progress
+  3-1-a-replay-provider-answers-a-turn-through-the-model-plane: done
   3-2-the-active-provider-is-always-visible-and-replay-says-replay: backlog
   3-3-the-fleet-is-declared-in-one-registry-file: backlog
   3-4-the-loader-refuses-a-fleet-member-with-a-disallowed-licence: backlog
