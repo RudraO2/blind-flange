@@ -80,12 +80,12 @@ development_status:
   5-5-the-fan-out-gauge-feels-alive-while-agents-work: deferred
   epic-5-retrospective: optional
 
-  epic-6: in-progress
+  epic-6: done
   6-1-one-command-starts-the-workbench-from-a-clean-directory: done
   6-2-the-built-bundle-contains-no-external-url: deferred
   6-3-it-runs-on-the-second-machine: deferred
   6-4-the-licence-claim-is-safe-to-make: done
-  6-5-a-recorded-offline-run-exists: backlog
+  6-5-a-recorded-offline-run-exists: done
   epic-6-retrospective: optional
 
   epic-7: deferred

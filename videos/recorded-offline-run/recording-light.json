@@ -1,0 +1,212 @@
+{
+  "recorded": "2026-08-28T14:30:18.790Z",
+  "workbench": "http://127.0.0.1:3081/",
+  "theme": "light",
+  "viewport": {
+    "width": 1440,
+    "height": 900
+  },
+  "chrome": "Chrome/152.0.7977.64",
+  "durationS": 55.2,
+  "frames": 432,
+  "video": {
+    "path": "videos/recorded-offline-run/blind-flange-offline-run-light.mp4",
+    "duration": "58.933333\r",
+    "size": "1645790"
+  },
+  "beats": [
+    {
+      "id": "00-workbench",
+      "label": "Blind Flange, sealed and idle",
+      "at": 3,
+      "provider": null,
+      "egress": null,
+      "model": null
+    },
+    {
+      "id": "01-egress-zero",
+      "label": "egress monitor at zero — provider: Replay — authored responses",
+      "at": 6.22,
+      "provider": "Replay — authored responses",
+      "egress": "Egress 0",
+      "model": "Qwen2.5-VL-7B-Instruct"
+    },
+    {
+      "id": "02-canary-denied",
+      "label": "canary fired, denied, counted",
+      "at": 8.96,
+      "provider": "Replay — authored responses",
+      "egress": "Egress 1",
+      "model": "Qwen2.5-VL-7B-Instruct"
+    },
+    {
+      "id": "03-audit-log",
+      "label": "the audit line, on screen",
+      "at": 15.06,
+      "provider": "Replay — authored responses",
+      "egress": "Egress 1",
+      "model": "Qwen2.5-VL-7B-Instruct"
+    },
+    {
+      "id": "04-routing-document",
+      "label": "routing chip: Qwen2.5-VL-7B-Instruct",
+      "at": 22.77,
+      "provider": "Replay — authored responses",
+      "egress": "Egress 1",
+      "model": "Qwen2.5-VL-7B-Instruct"
+    },
+    {
+      "id": "05-routing-scores",
+      "label": "the score per fleet member",
+      "at": 28.88,
+      "provider": "Replay — authored responses",
+      "egress": "Egress 1",
+      "model": "Qwen2.5-VL-7B-Instruct"
+    },
+    {
+      "id": "06-routing-code",
+      "label": "routing chip changed by itself: Qwen2.5-Coder-7B-Instruct",
+      "at": 41.75,
+      "provider": "Replay — authored responses",
+      "egress": "Egress 1",
+      "model": "Qwen2.5-Coder-7B-Instruct"
+    },
+    {
+      "id": "07-approval-note",
+      "label": "the approval note, as a signed .docx",
+      "at": 52.1,
+      "provider": "Replay — authored responses",
+      "egress": "Egress 1",
+      "model": "Qwen2.5-VL-7B-Instruct"
+    }
+  ],
+  "observations": [
+    {
+      "at": 3.01,
+      "label": "beat 00-workbench",
+      "provider": null,
+      "egress": null,
+      "model": null
+    },
+    {
+      "at": 6.22,
+      "label": "egress monitor before the canary",
+      "provider": {
+        "label": "Replay — authored responses",
+        "title": "Blind Flange is answering from the replay provider: stored responses authored by hand for this Phase 0 build, served in place of live model inference and disclosed here as the operating mode. Per the 28 August 2026 amendment to ADR-0001 there is no local run to capture from yet, so replacing an authored response with a captured one later is a data change, not a code change."
+      },
+      "egress": "Egress 0",
+      "model": "Qwen2.5-VL-7B-Instruct"
+    },
+    {
+      "at": 6.22,
+      "label": "beat 01-egress-zero",
+      "provider": {
+        "label": "Replay — authored responses",
+        "title": "Blind Flange is answering from the replay provider: stored responses authored by hand for this Phase 0 build, served in place of live model inference and disclosed here as the operating mode. Per the 28 August 2026 amendment to ADR-0001 there is no local run to capture from yet, so replacing an authored response with a captured one later is a data change, not a code change."
+      },
+      "egress": "Egress 0",
+      "model": "Qwen2.5-VL-7B-Instruct"
+    },
+    {
+      "at": 8.96,
+      "label": "after the canary",
+      "provider": {
+        "label": "Replay — authored responses",
+        "title": "Blind Flange is answering from the replay provider: stored responses authored by hand for this Phase 0 build, served in place of live model inference and disclosed here as the operating mode. Per the 28 August 2026 amendment to ADR-0001 there is no local run to capture from yet, so replacing an authored response with a captured one later is a data change, not a code change."
+      },
+      "egress": "Egress 1",
+      "model": "Qwen2.5-VL-7B-Instruct"
+    },
+    {
+      "at": 8.96,
+      "label": "beat 02-canary-denied",
+      "provider": {
+        "label": "Replay — authored responses",
+        "title": "Blind Flange is answering from the replay provider: stored responses authored by hand for this Phase 0 build, served in place of live model inference and disclosed here as the operating mode. Per the 28 August 2026 amendment to ADR-0001 there is no local run to capture from yet, so replacing an authored response with a captured one later is a data change, not a code change."
+      },
+      "egress": "Egress 1",
+      "model": "Qwen2.5-VL-7B-Instruct"
+    },
+    {
+      "at": 15.06,
+      "label": "beat 03-audit-log",
+      "provider": {
+        "label": "Replay — authored responses",
+        "title": "Blind Flange is answering from the replay provider: stored responses authored by hand for this Phase 0 build, served in place of live model inference and disclosed here as the operating mode. Per the 28 August 2026 amendment to ADR-0001 there is no local run to capture from yet, so replacing an authored response with a captured one later is a data change, not a code change."
+      },
+      "egress": "Egress 1",
+      "model": "Qwen2.5-VL-7B-Instruct"
+    },
+    {
+      "at": 22.77,
+      "label": "document task type",
+      "provider": {
+        "label": "Replay — authored responses",
+        "title": "Blind Flange is answering from the replay provider: stored responses authored by hand for this Phase 0 build, served in place of live model inference and disclosed here as the operating mode. Per the 28 August 2026 amendment to ADR-0001 there is no local run to capture from yet, so replacing an authored response with a captured one later is a data change, not a code change."
+      },
+      "egress": "Egress 1",
+      "model": "Qwen2.5-VL-7B-Instruct"
+    },
+    {
+      "at": 22.77,
+      "label": "beat 04-routing-document",
+      "provider": {
+        "label": "Replay — authored responses",
+        "title": "Blind Flange is answering from the replay provider: stored responses authored by hand for this Phase 0 build, served in place of live model inference and disclosed here as the operating mode. Per the 28 August 2026 amendment to ADR-0001 there is no local run to capture from yet, so replacing an authored response with a captured one later is a data change, not a code change."
+      },
+      "egress": "Egress 1",
+      "model": "Qwen2.5-VL-7B-Instruct"
+    },
+    {
+      "at": 28.89,
+      "label": "beat 05-routing-scores",
+      "provider": {
+        "label": "Replay — authored responses",
+        "title": "Blind Flange is answering from the replay provider: stored responses authored by hand for this Phase 0 build, served in place of live model inference and disclosed here as the operating mode. Per the 28 August 2026 amendment to ADR-0001 there is no local run to capture from yet, so replacing an authored response with a captured one later is a data change, not a code change."
+      },
+      "egress": "Egress 1",
+      "model": "Qwen2.5-VL-7B-Instruct"
+    },
+    {
+      "at": 41.75,
+      "label": "code task type",
+      "provider": {
+        "label": "Replay — authored responses",
+        "title": "Blind Flange is answering from the replay provider: stored responses authored by hand for this Phase 0 build, served in place of live model inference and disclosed here as the operating mode. Per the 28 August 2026 amendment to ADR-0001 there is no local run to capture from yet, so replacing an authored response with a captured one later is a data change, not a code change."
+      },
+      "egress": "Egress 1",
+      "model": "Qwen2.5-Coder-7B-Instruct"
+    },
+    {
+      "at": 41.76,
+      "label": "beat 06-routing-code",
+      "provider": {
+        "label": "Replay — authored responses",
+        "title": "Blind Flange is answering from the replay provider: stored responses authored by hand for this Phase 0 build, served in place of live model inference and disclosed here as the operating mode. Per the 28 August 2026 amendment to ADR-0001 there is no local run to capture from yet, so replacing an authored response with a captured one later is a data change, not a code change."
+      },
+      "egress": "Egress 1",
+      "model": "Qwen2.5-Coder-7B-Instruct"
+    },
+    {
+      "at": 52.1,
+      "label": "approval note produced",
+      "provider": {
+        "label": "Replay — authored responses",
+        "title": "Blind Flange is answering from the replay provider: stored responses authored by hand for this Phase 0 build, served in place of live model inference and disclosed here as the operating mode. Per the 28 August 2026 amendment to ADR-0001 there is no local run to capture from yet, so replacing an authored response with a captured one later is a data change, not a code change."
+      },
+      "egress": "Egress 1",
+      "model": "Qwen2.5-VL-7B-Instruct"
+    },
+    {
+      "at": 52.11,
+      "label": "beat 07-approval-note",
+      "provider": {
+        "label": "Replay — authored responses",
+        "title": "Blind Flange is answering from the replay provider: stored responses authored by hand for this Phase 0 build, served in place of live model inference and disclosed here as the operating mode. Per the 28 August 2026 amendment to ADR-0001 there is no local run to capture from yet, so replacing an authored response with a captured one later is a data change, not a code change."
+      },
+      "egress": "Egress 1",
+      "model": "Qwen2.5-VL-7B-Instruct"
+    }
+  ]
+}

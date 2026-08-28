@@ -35,7 +35,7 @@ use.** Two ADRs in one day is that process working, not a reason to stop using i
 
 **Copyleft is never admitted by widening.** No copyleft licence goes on the set, at any
 strength. Each copyleft component is decided one at a time, with the reasoning and the
-evidence recorded against it in `docs/licence-decisions.json`. Six such decisions exist and
+evidence recorded against it in `docs/licence-decisions.json`. Seven such decisions exist and
 they are listed under "Copyleft, decided one at a time" below.
 
 ## Why it is absolute
@@ -113,11 +113,16 @@ The full enumeration — all 490 components, not just the ones a human thought t
 
 ## Copyleft, decided one at a time
 
-No copyleft licence is on the set. Six components carry one anyway — plus GEOS, removed in
+No copyleft licence is on the set. Seven components carry one anyway — plus GEOS, removed in
 a previous story and kept in the table because the pattern it established is what the others
 were measured against. Each is decided individually in `docs/licence-decisions.json` with its
-evidence. Three were removed or are not shipped, one is measured not loaded, and two are
+evidence. Four were removed or are not shipped, one is measured not loaded, and two are
 genuinely linked and therefore disclosed.
+
+Two of the seven are **build-time tooling rather than anything that runs on the box** — the
+fixture generator's fonts and the demo recorder's encoder. Both are named here anyway,
+because "it is only a build tool" is exactly the reasoning this file exists to stop being
+made silently.
 
 | Component | Licence | Reached through | Decision |
 |---|---|---|---|
@@ -125,13 +130,17 @@ genuinely linked and therefore disclosed.
 | `certifi` and `tqdm` | MPL-2.0 | `rapidocr` → `requests`; `rapidocr` | **Removed.** Only reachable from RapidOCR's model downloader and its load-from-URL branch, neither of which runs here. `ocr.py::_seal_out_http` registers raising stubs. Verified: 97 regions at 99.68 mean confidence with `certifi`, `urllib3` and `idna` never loaded. |
 | FFmpeg, inside `opencv-python` | LGPL-2.1-or-later | `rapidocr` | **Mitigated.** A lazily-loaded video-I/O plugin; this service never opens a video. Measured across a full OCR pass: `cv2.pyd` loads, `opencv_videoio_ffmpeg4130_64.dll` does not. Redistributed, not linked. |
 | Eigen, inside `onnxruntime` | MPL-2.0 | `rapidocr` | **Disclosed.** Header-only, compiled in, genuinely linked. MPL-2.0's obligations are file-level and attach only to modified MPL files; we modify none. |
-| DarkGarden fonts, inside `reportlab` | **GPL-2.0-or-later** | the fixture generator | **Not shipped.** The only strong copyleft anywhere in the tree, and the only entry here that is build-time rather than runtime: the generator's output is a committed PNG and PDF and the tool is not run on the box. It draws with the PDF base-14 font names, which are metric-only and substituted at raster time, so no font file is embedded in any output. |
+| DarkGarden fonts, inside `reportlab` | **GPL-2.0-or-later** | the fixture generator | **Not shipped.** Build-time rather than runtime: the generator's output is a committed PNG and PDF and the tool is not run on the box. It draws with the PDF base-14 font names, which are metric-only and substituted at raster time, so no font file is embedded in any output. |
+| FFmpeg, the `ffmpeg` CLI on `PATH` | **GPL-3.0-only** | Story 6.5's demo recorder | **Not shipped.** Build-time rather than runtime, and the only entry here that is not in any of the four audited trees: `scripts/record-demo.mjs` shells out to it as a separate process to mux Chrome's captured screencast frames into the demo MP4. Nothing in the workbench, the profile, our packages or the ingestion service links to it or calls it, and the recording is output rather than a derivative work of the encoder. The build in use is `8.1.1-full_build-www.gyan.dev`, configured `--enable-gpl --enable-version3`; its licence text is committed at `docs/licence-evidence/ffmpeg-8.1.1-LICENSE.txt`. |
 | libvips, inside `sharp` | LGPL-3.0-or-later | the harness's `dsh-attachment-local` | **Disclosed.** Measured loaded in the running workbench process. Cannot be disabled: `attachment-local` is the sole provider of the `attachments` service and the API gateway requires it, so the `disabled: true` row was written, measured, and reverted. NFR5 forbids editing harness source. |
 
 Eight of the audit's 490 rows are copyleft — six distinct components, since libvips and
 FFmpeg each appear twice, once from a package manifest and once as the vendored library
-inside it. **Two of them are linked at runtime**, both inherited rather than chosen, both
-named. Neither places any obligation on our own code. **That is the sentence this
+inside it. The `ffmpeg` CLI is the seventh component and is in none of those rows: the audit
+enumerates the harness, the profile, our packages and the ingestion service, and a tool on
+`PATH` is in no manifest to enumerate — which is precisely why it is declared by hand here
+and in `docs/licence-decisions.json` rather than left to be noticed. **Two components are
+linked at runtime**, both inherited rather than chosen, both named. Neither places any obligation on our own code. **That is the sentence this
 policy can defend, and it is a different sentence from "every component is permissively
 licensed"** — which `blind-flange.html` §Feasibility and `DECK-CONTENT.md` still say, and
 which is no longer true.

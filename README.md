@@ -36,6 +36,7 @@ npm run setup                 # do everything except start the app
 npm start -- --no-open        # start without opening a browser
 npm start -- --port 3081      # any other flag is passed through to the harness
 npm test                      # the plugin package's own tests
+npm run record-demo           # record the three demo beats from a running workbench
 ```
 
 ## What you should see
@@ -82,6 +83,8 @@ the active provider is named on screen at all times.
 | Path | What it is |
 |---|---|
 | `scripts/start.mjs` | The start command. Node builtins only — no dependencies |
+| `scripts/record-demo.mjs` | `npm run record-demo` — drives a running workbench through the three demo beats and records them. Needs `ffmpeg` on `PATH` |
+| `videos/recorded-offline-run/` | The recording itself, and what it shows second by second |
 | `profile/` | The harness profile's configuration, tracked. The source of truth for what `npm start` writes |
 | `plugins/dsh-client-ui-base/` | Blind Flange itself: the egress seal, canary, model plane, router, provenance viewer and deliverable factory, as one out-of-tree harness plugin |
 | `registry/models.yaml` | The fleet, one row per model, each with the licence it was verified under |

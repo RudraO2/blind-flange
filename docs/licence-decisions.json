@@ -246,6 +246,19 @@
       "evidence": [
         "~/AppData/Local/Programs/Python/Python313/Lib/site-packages/pypdfium2-4.30.0.dist-info/LicenseRef-PdfiumThirdParty.txt"
       ]
+    },
+    {
+      "ecosystem": "tool",
+      "component": "FFmpeg (the ffmpeg CLI on PATH)",
+      "licence": "GPL-3.0-only",
+      "decision": "not-shipped",
+      "recorded": "2026-08-28",
+      "version": "8.1.1-full_build-www.gyan.dev, configured --enable-gpl --enable-version3",
+      "reason": "Story 6.5's recorder shells out to the ffmpeg CLI to mux Chrome's captured screencast frames into the demo MP4. It is build-time tooling on a development machine in the same sense as reportlab's fixture generator: nothing in the workbench, the profile, the plugin package or the ingestion service links to it or calls it, it is not redistributed with anything this project ships, and scripts/record-demo.mjs is its only caller. The recording it produces is output, not a derivative work of the encoder, so the GPL places no obligation on this repository's own code. Recorded here rather than waved through because docs/licence-policy.md decides copyleft one component at a time, and a build-time tool is still a component.",
+      "evidence": [
+        "docs/licence-evidence/ffmpeg-8.1.1-LICENSE.txt",
+        "scripts/record-demo.mjs"
+      ]
     }
   ]
 }
