@@ -1,0 +1,37 @@
+# Team overrides for bmad-code-review on Blind Flange.
+#
+# This skill should not be running here at all. `docs/ralph-loop.md` forbids it:
+# `bmad-build`'s one-shot route already reviews the diff, and BMAD's own catalog
+# marks this skill required=false, "optional extra layer after Build's built-in
+# review". On 28 Aug 2026 a chat building Story 3.1 skipped `bmad-build` and
+# invoked this instead, spawning four review subagents where the configured
+# route spawns one.
+#
+# The loop is the primary fix. This file is the backstop: if some future chat
+# reaches for this skill anyway, it costs one subagent rather than four. A
+# rate-limited four-day budget cannot absorb the difference.
+
+[workflow]
+
+# Blind Hunter mandates "find at least ten issues" and "if you have zero
+# findings, re-check and keep thinking; do not stop with an empty list". The
+# same reasoning as _bmad/custom/bmad-build.toml applies: these stories are
+# small, and forcing ten findings on a thirty-line diff manufactures noise that
+# then has to be triaged, paying for the same tokens twice.
+[[workflow.review_layers]]
+id = "blind-hunter"
+name = "Blind Hunter"
+instruction = ""
+
+# Acceptance Auditor re-derives the story's acceptance criteria and checks the
+# diff against them. `docs/ralph-loop.md` step 3 already makes the human-visible
+# gate quote every criterion and say how it was verified, so this layer pays a
+# subagent to repeat a step the loop performs in the main thread.
+[[workflow.review_layers]]
+id = "acceptance-auditor"
+name = "Acceptance Auditor"
+instruction = ""
+
+# Edge Case Hunter and Verification Gap Reviewer stay active. They stop when
+# they have nothing to say, which is the property that makes them affordable on
+# a small diff.

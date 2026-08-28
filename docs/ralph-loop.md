@@ -56,6 +56,10 @@ the story sends you there.
 
 Invoke `bmad-build` and **take the one-shot route**. Say so when you invoke it.
 
+`bmad-build` is the only skill you invoke to build a story. If you find yourself implementing
+without having invoked it, stop and invoke it — the one-shot route is what carries the review,
+the sprint-status sync and the commit, and skipping it means reaching for those separately.
+
 **This is an instruction, not a suggestion, and it overrides the skill's own routing step.**
 `bmad-build` chooses its route by judging blast radius, and it will judge some of these stories
 high — story 1.1 is a package six epics mount into, story 3.1 touches an unproven seam. Ignore
@@ -68,9 +72,21 @@ no planning step, no separate spec file, no implementation subagent — implemen
 acceptance criteria are already written; re-deriving them is the expensive mistake this loop
 exists to avoid.
 
-**Spawn at most one subagent, and only for the review.** If you are about to launch a subagent to
-explore the codebase, stop: the slot table, the plugin format, the extension-point map and the
-install path are all in `docs/deepseek-harness-notes.md`, verified from source.
+**Spawn at most one subagent, and only for the review** — and that one is spawned *by
+`bmad-build`'s one-shot route*, not by you. If you are about to launch a subagent to explore the
+codebase, stop: the slot table, the plugin format, the extension-point map and the install path
+are all in `docs/deepseek-harness-notes.md`, verified from source.
+
+**Never invoke `bmad-code-review`.** Not as the gate, not "to be safe", not because
+`bmad-build` was skipped. It carries **four** review layers of its own — Blind Hunter, Edge Case
+Hunter, Verification Gap and Acceptance Auditor — none of which this project's
+`_bmad/custom/bmad-build.toml` can reach, because that file customises `bmad-build` and nothing
+else. BMAD's own catalog marks it `required=false`, "optional extra layer after Build's built-in
+review". On 28 Aug 2026 a chat building Story 3.1 skipped `bmad-build` entirely and reached for
+this instead: four subagents where the configured route spawns one. The work was fine; the bill
+was four times what it needed to be.
+
+The review for a story is the one `bmad-build`'s one-shot route runs. There is no second review.
 
 **Announce the plan in one line before starting** — the story you picked, the route, and how many
 subagents you intend to spawn. If that number is above one, you have misread this section.
@@ -104,7 +120,9 @@ Do not call the story done until all of these hold. State each one.
    `docs/screenshots/`. A component that works in one theme is unfinished.
 4. No harness source file edited.
 5. Any new dependency licence-checked and recorded.
-6. No unresolved review finding, or one is recorded as accepted with the reason.
+6. No unresolved review finding from **`bmad-build`'s own review**, or one is recorded as
+   accepted with the reason. If you did not reach that review, the fix is to run `bmad-build`
+   one-shot — never to invoke a separate review skill.
 7. The work is on `origin/main` — not on a branch, not in a worktree.
 
 **Gate fails:** set the story to `review` in the tracker, write what is blocking it, stop. Do not
