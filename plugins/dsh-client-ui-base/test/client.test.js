@@ -57,24 +57,45 @@ const healthyJsxRuntime = {
 	Fragment: Symbol("Fragment"),
 };
 
+/** Every module `buildAgentPresetPicker` resolves, once the React seam is healthy. */
+const healthyHostModules = {
+	"react/jsx-runtime": healthyJsxRuntime,
+	react: { useEffect: () => {}, useState: (initial) => [initial, () => {}] },
+	"@deepseek-ai/dsh-client-ui-primitives": {
+		Button: () => {},
+		Menu: () => {},
+		IconAgentPresetOutline16: () => {},
+		IconChevronDownOutline14: () => {},
+	},
+};
+
 /**
- * A stub `ctx` shaped like the client root context: `slots.inject` runs its
- * generator immediately (no real dependency wait, since this test only checks
- * what got registered) and `slots.register` records the call.
+ * A stub `ctx.slots` recording every `inject` name and every `register` call.
+ *
+ * `slots.inject` takes either a generator that yields its register calls
+ * (Story 1.5's brand marks) or a plain factory that returns a dispose
+ * (Story 1.4's task-type picker). Both shapes are in `apply`, so the stub
+ * drains a generator and passes a plain return through.
  */
-function stubSlotsCtx() {
+function stubSlots() {
+	const injectedNames = [];
 	const registered = [];
-	return {
-		registered,
-		ctx: {
-			slots: {
-				inject: (name, generator) => {
-					for (const call of generator()) registered.push(call);
-				},
-				register: (options, Component) => ({ options, Component }),
-			},
+	const slots = {
+		inject: (name, factory) => {
+			injectedNames.push(name);
+			const result = factory();
+			if (result && typeof result[Symbol.iterator] === "function") {
+				for (const _ of result);
+				return () => {};
+			}
+			return typeof result === "function" ? result : () => {};
+		},
+		register: (options, component) => {
+			registered.push({ options, component });
+			return () => {};
 		},
 	};
+	return { ctx: { slots }, injectedNames, registered };
 }
 
 test("registers under the package name so the served bundle and the manifest agree", () => {
@@ -88,11 +109,8 @@ test("declares the slots service so the host supplies ctx.slots to apply", () =>
 });
 
 test("says nothing when the host supplies a complete react/jsx-runtime", () => {
-	const { exports, errors } = loadClientHalf((specifier) => {
-		assert.equal(specifier, "react/jsx-runtime");
-		return healthyJsxRuntime;
-	});
-	exports.apply(stubSlotsCtx().ctx);
+	const { exports, errors } = loadClientHalf((specifier) => healthyHostModules[specifier]);
+	exports.apply(stubSlots().ctx);
 	assert.deepEqual(errors, []);
 });
 
@@ -100,7 +118,7 @@ test("names the package and the module when the host cannot resolve react/jsx-ru
 	const { exports, errors } = loadClientHalf(() => {
 		throw new Error("missed the module table");
 	});
-	exports.apply(stubSlotsCtx().ctx);
+	exports.apply(stubSlots().ctx);
 	assert.equal(errors.length, 1);
 	assert.match(errors[0], /@blind-flange\/dsh-client-ui-base/);
 	assert.match(errors[0], /react\/jsx-runtime/);
@@ -108,31 +126,55 @@ test("names the package and the module when the host cannot resolve react/jsx-ru
 
 test("names every missing export when the host's react/jsx-runtime is incomplete", () => {
 	const { exports, errors } = loadClientHalf(() => ({ jsx: () => {} }));
-	exports.apply(stubSlotsCtx().ctx);
+	exports.apply(stubSlots().ctx);
 	assert.equal(errors.length, 1);
 	assert.match(errors[0], /jsxs/);
 	assert.match(errors[0], /Fragment/);
 });
 
-test("occupies both places the DeepSeek whale used to render: the hero and the sidebar rail", () => {
-	const { exports } = loadClientHalf(() => healthyJsxRuntime);
-	const { ctx, registered } = stubSlotsCtx();
+test("occupies both places the DeepSeek whale used to render, and the hero's task-type seat", () => {
+	const { exports } = loadClientHalf((specifier) => healthyHostModules[specifier]);
+	const { ctx, registered } = stubSlots();
 	exports.apply(ctx);
 	const names = registered.map((call) => call.options.name).sort();
-	assert.deepEqual(names, ["conversation.hero.brand.mark", "sidebar.brand.mark"]);
+	assert.deepEqual(names, [
+		"conversation.hero.agentPreset",
+		"conversation.hero.brand.mark",
+		"sidebar.brand.mark",
+	]);
 });
 
 test("the registered mark renders an svg path with fill=currentColor, not a hand-rolled hex", () => {
-	const { exports } = loadClientHalf((specifier) => (specifier === "react/jsx-runtime" ? healthyJsxRuntime : undefined));
-	const { ctx, registered } = stubSlotsCtx();
+	const { exports } = loadClientHalf((specifier) => healthyHostModules[specifier]);
+	const { ctx, registered } = stubSlots();
 	exports.apply(ctx);
 	const hero = registered.find((call) => call.options.name === "conversation.hero.brand.mark");
-	const svg = hero.Component({ size: 20, className: "hero-mark" });
+	const svg = hero.component({ size: 20, className: "hero-mark" });
 	assert.equal(svg.type, "svg");
 	assert.equal(svg.props.width, 20);
 	assert.equal(svg.props.className, "hero-mark");
 	assert.equal(svg.props.children.type, "path");
 	assert.equal(svg.props.children.props.fill, "currentColor");
+});
+
+test("registers the task-type picker into conversation.hero.agentPreset once the slot is declared", () => {
+	const { exports } = loadClientHalf((specifier) => healthyHostModules[specifier]);
+	const { ctx, injectedNames, registered } = stubSlots();
+	exports.apply(ctx);
+	assert.ok(injectedNames.includes("conversation.hero.agentPreset"));
+	const picker = registered.find((call) => call.options.name === "conversation.hero.agentPreset");
+	assert.equal(picker.options.id, "bf-agent-preset-picker");
+	assert.equal(typeof picker.component, "function");
+});
+
+test("registers nothing when the host's react seam is broken", () => {
+	const { exports } = loadClientHalf(() => {
+		throw new Error("missed the module table");
+	});
+	const { ctx, injectedNames, registered } = stubSlots();
+	exports.apply(ctx);
+	assert.deepEqual(injectedNames, []);
+	assert.deepEqual(registered, []);
 });
 
 test("the install document names the package and the insert row it tells you to add", () => {

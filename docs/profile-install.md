@@ -141,6 +141,64 @@ of MRPL until it has. See `licence-policy.md`.
      Sovereignty holds in behaviour; it does not hold in a filesystem grep of the global
      install, and no in-profile change can make it hold there.
 
+7. **Introduce the workbench as Blind Flange.** Story 1.4. Three parts, none of them a
+   harness-source edit:
+
+   - **Four task-type presets**, authored (not shipped) at
+     `~/.dsh/.agent-presets/{document,drawing,calculation,code-task}/`, each an
+     `agent.cordis.yml` + `preset.yml` pair. `document`, `drawing` and `calculation` are the
+     sealed `standard` composition (Story 1.2's copy, tool-web disabled) under a new persona;
+     `code-task` is the sealed `code`/PTC composition under the same treatment. **The fourth
+     directory is `code-task`, not `code`** — `code` is a shipped preset id
+     (`dsh-agent-presets` scans its own shipped root first and a same-id authored preset is
+     always shadowed by it, never the other way around), so an authored preset named `code`
+     is invisible from `agentPreset.list`. Only the `preset.yml` **name** needs to read "Code";
+     the directory name is never shown. Each `agent.cordis.yml`'s `persona` row reads:
+
+     ```yaml
+     - id: persona
+       name: '@deepseek-ai/dsh-persona'
+       config:
+         text: >-
+           You are Blind Flange, a sovereign industrial knowledge-work workbench running
+           entirely offline on the {{model}} model within the DeepSeek Harness. Your working
+           directory is {{cwd}}. This session handles <task-type clause>.
+     ```
+
+   - **The deployment default.** Merge into `~/.dsh/settings.yaml` (same file Step 4 already
+     touches — do not overwrite):
+
+     ```yaml
+     agent-presets:
+       default: document
+     ```
+
+   - **The host-level persona**, appended to `cordis.patch.yml`, so a rosterless session and
+     `dsh --profile web --dump-config` both stop reading "You are a coding agent powered by the
+     {{model}} model":
+
+     ```yaml
+     - id: system-prompt
+       config:
+         persona: >-
+           You are Blind Flange, a sovereign industrial knowledge-work workbench running
+           entirely offline on the {{model}} model within the DeepSeek Harness. Your working
+           directory is {{cwd}}.
+     ```
+
+   **What this cannot reach.** `dsh-agent-presets` hard-codes its shipped preset root into
+   every deployment's resolved config (`apps/cli/src/profile-boot.ts`'s `composeProfile`
+   overwrites the `agent-presets` row's `roots` with the shipped path on every boot, patch or
+   no patch) — verified against a running `dsh web`, 28 August 2026: `agentPreset.list` names
+   `standard`/`code`/`minimal`/`cordis` (their shipped Chinese display names) no matter what
+   this profile configures. No profile-level change removes them. `plugins/dsh-client-ui-base`'s
+   client half works around this for the one surface that matters most — it takes the
+   `conversation.hero.agentPreset` slot and shows only `trust: 'user'` presets, so the
+   new-session picker reads as four Blind Flange task types with nothing else in the list.
+   Settings → Agent presets (the management section) still lists all eight — the four shipped
+   plus the four Blind Flange ones — unavoidably, since it is the host's own component reading
+   the same unfiltered roster.
+
 ## Checking it worked
 
 ```sh
