@@ -16,6 +16,26 @@ Thumbs.db
 models/
 .cache/
 
+# The BMAD tool installation itself is NOT tracked — removed 28 Aug 2026.
+#
+# `.claude/skills/` is 49 third-party skill packages and `_bmad/` is the
+# framework install: 265 files and about 3 MB of somebody else's code, shipping
+# with no licence text of its own. This repository's central claim is that
+# every component's licence is enumerated and checked, and `npm run licence-audit`
+# covers npm, Python, the models and vendored binaries — it never looked at
+# either of these trees. Publishing un-audited third-party code beside that
+# claim is the one inconsistency this project cannot afford, and the tooling is
+# reinstallable in a command, so it goes.
+#
+# Install BMAD separately if you want to run its workflows; nothing the
+# workbench does at runtime depends on it.
+#
+# `_bmad/custom/` IS kept: those overrides are ours, they explain themselves,
+# and docs/ralph-loop.md refers to them.
+.claude/skills/
+_bmad/*
+!_bmad/custom/
+
 # BMAD working output — tracked in full since 28 Aug 2026.
 #
 # It used to be that only the planning artifacts and the sprint tracker were

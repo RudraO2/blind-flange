@@ -31,6 +31,13 @@ default an agent reaches for unprompted, and `pypdfium2` is the substitute.
 **BMAD is the development method for this project, start to end.** BMad Method v6.11.0,
 module `bmm`, installed to `_bmad/` with 49 skills in `.claude/skills/`.
 
+**That installation is not in the repository** (28 Aug 2026). It is 265 files of third-party
+code carrying no licence text, and this project claims every component's licence is
+enumerated while `npm run licence-audit` never looked at it — a contradiction not worth
+publishing. Install BMAD yourself if you need its workflows; nothing the workbench does at
+runtime depends on it. **`_bmad/custom/` is tracked** — those overrides are ours.
+**`_bmad-output/` is tracked in full** — the plan and the build's record of itself.
+
 The current phase is building the Phase 0 prototype for the IITM BS internal hackathon
 round, solo. **Four days, deadline 31 August 2026.**
 
@@ -67,10 +74,12 @@ because `/wayfinder` may still be useful for a genuinely foggy effort in a later
   ADR-0001 carries a 28 Aug 2026 amendment — read the amendment, not just the original.
 - `.scratch/` holds the pre-BMAD Phase 0 spec. Treat it as input, not authority — BMAD's
   own planning artifacts supersede it.
-- `_bmad-output/` is BMAD's working output. `planning-artifacts/` is tracked (the brief and
-  the stories are the plan), and so are `implementation-artifacts/sprint-status.yaml` and the
-  story files beside it — that tracker is the build's memory of where it got to. Everything
-  else there is gitignored.
+- `_bmad-output/` is BMAD's working output and is **tracked in full** as of 28 Aug 2026:
+  `planning-artifacts/` (the brief and the stories are the plan), `sprint-status.yaml` (the
+  build's memory of where it got to), and the specs, epic contexts and `deferred-work.md`
+  beside it. Those were build scratch while this was a solo effort; they became the answer to
+  "why is this like this?" the moment the repository was handed to a teammate. Only
+  `party-mode/` is still ignored.
 - If `bmad-project-context` offers to write an `AGENTS.md` block: fine, but this file
   (`CLAUDE.md`) is what Claude Code auto-loads. Keep them consistent rather than divergent.
 - This folder is inside OneDrive. Expect sync churn once `node_modules` and a Python venv
