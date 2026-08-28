@@ -16,20 +16,22 @@ Thumbs.db
 models/
 .cache/
 
-# BMAD working output — scratch is ignored, planning artifacts are KEPT.
-# The brief and the epics/stories are the plan; losing them to a machine failure
-# would cost more than the repo weight of a few markdown files.
-_bmad-output/*
-!_bmad-output/planning-artifacts/
-
-# The sprint tracker is KEPT — it is the issue tracker and the build loop's memory
-# of where it got to, not throwaway. Everything else under implementation-artifacts
-# is build scratch and stays ignored: the loop takes the one-shot route and writes
-# no spec or epic-context files, so an un-ignored `*.md` here only ever surfaced
-# leftovers from the earlier full route as permanently untracked noise.
-!_bmad-output/implementation-artifacts/
-_bmad-output/implementation-artifacts/*
-!_bmad-output/implementation-artifacts/sprint-status.yaml
+# BMAD working output — tracked in full since 28 Aug 2026.
+#
+# It used to be that only the planning artifacts and the sprint tracker were
+# kept, and everything under implementation-artifacts was treated as build
+# scratch. That was right while this was a solo build: the specs were a record
+# of work only one person would ever read.
+#
+# It stopped being right when the repository was handed to a teammate. The
+# specs say why each story was built the way it was, deferred-work.md is the
+# standing list of known problems and the reasoning behind each, and the epic
+# contexts carry the constraints. Someone picking this up cold needs all of it,
+# and 116 KB of markdown is a cheap price for not having to ask.
+#
+# `party-mode/` stays out: it is a scratch directory for an interactive
+# brainstorming mode, not a record of anything the build depends on.
+_bmad-output/party-mode/
 
 # Claude Code worktrees — Lane B works in one; never commit a worktree tree.
 .claude/worktrees/
