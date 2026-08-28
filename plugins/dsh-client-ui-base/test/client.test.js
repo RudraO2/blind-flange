@@ -29,11 +29,23 @@ const manifest = JSON.parse(readFileSync(join(packageDir, "package.json"), "utf8
  * along with everything it wrote to `console.error`.
  * @param hostRequire - stands in for the host's module table.
  */
-function loadClientHalf(hostRequire) {
+function loadClientHalf(hostRequire, { initialTitle = "DeepSeek Harness" } = {}) {
 	const errors = [];
+	const warnings = [];
 	let registered;
+	// A `<title>` stand-in the tab-title observer can watch. MutationObserver is
+	// deliberately absent unless a test supplies one, so the warning arm is the default.
+	const titleElement = { nodeName: "TITLE" };
+	const document = {
+		title: initialTitle,
+		querySelector: (selector) => (selector === "title" ? titleElement : null),
+	};
 	const context = {
-		console: { error: (...args) => errors.push(args.map(String).join(" ")) },
+		document,
+		console: {
+			error: (...args) => errors.push(args.map(String).join(" ")),
+			warn: (...args) => warnings.push(args.map(String).join(" ")),
+		},
 		window: {
 			__ModuleLoader__: {
 				load: (entry) => {
@@ -47,7 +59,7 @@ function loadClientHalf(hostRequire) {
 	});
 	assert.ok(registered, "the browser half registered nothing with the loader");
 	const exports = registered.factory(hostRequire);
-	return { id: registered.id, exports, errors };
+	return { id: registered.id, exports, errors, warnings, document };
 }
 
 /** A host React seam with everything a panel needs. `jsx` returns an inspectable plain object. */
@@ -62,10 +74,7 @@ const healthyHostModules = {
 	"react/jsx-runtime": healthyJsxRuntime,
 	react: { useEffect: () => {}, useState: (initial) => [initial, () => {}] },
 	"@deepseek-ai/dsh-client-ui-primitives": {
-		Button: () => {},
-		Menu: () => {},
 		IconAgentPresetOutline16: () => {},
-		IconChevronDownOutline14: () => {},
 	},
 };
 
@@ -157,14 +166,52 @@ test("the registered mark renders an svg path with fill=currentColor, not a hand
 	assert.equal(svg.props.children.props.fill, "currentColor");
 });
 
-test("registers the task-type picker into conversation.hero.agentPreset once the slot is declared", () => {
+test("registers the task-type indicator into conversation.hero.agentPreset once the slot is declared", () => {
 	const { exports } = loadClientHalf((specifier) => healthyHostModules[specifier]);
 	const { ctx, injectedNames, registered } = stubSlots();
 	exports.apply(ctx);
 	assert.ok(injectedNames.includes("conversation.hero.agentPreset"));
-	const picker = registered.find((call) => call.options.name === "conversation.hero.agentPreset");
-	assert.equal(picker.options.id, "bf-agent-preset-picker");
-	assert.equal(typeof picker.component, "function");
+	const indicator = registered.find((call) => call.options.name === "conversation.hero.agentPreset");
+	assert.equal(indicator.options.id, "bf-task-type-indicator");
+	assert.equal(typeof indicator.component, "function");
+});
+
+test("the hero seat holds an indicator, not a control the operator can operate", () => {
+	// SIH26117 requires the system to pick the task type automatically. A dropdown here
+	// is the human doing the router's job, and it collides with Story 3.7's routing chip.
+	// This asserts against the source: the component must not reach for a Menu, and must
+	// not write the deployment default back.
+	const source = readFileSync(join(packageDir, "lib", "client.js"), "utf8");
+	assert.doesNotMatch(source, /Menu/, "the hero seat must not render a Menu");
+	assert.doesNotMatch(source, /settings\.update/, "the hero seat must not set the task type");
+	assert.doesNotMatch(source, /onSelect|onClick/, "the hero seat must not be interactive");
+});
+
+test("puts the tab title back when the harness rewrites it after hydration", () => {
+	// dsh-client-ui-renderer renders DocumentTitle with a hard-coded productTitle and
+	// sets document.title from a useEffect, so the host-side tapIndex swap loses to
+	// hydration. There is no row to disable and no config key.
+	const { exports, document } = loadClientHalf((specifier) => healthyHostModules[specifier], {
+		initialTitle: "DeepSeek Harness",
+	});
+	exports.apply(stubSlots().ctx);
+	assert.equal(document.title, "Blind Flange");
+});
+
+test("keeps the session title and replaces only the product half", () => {
+	const { exports, document } = loadClientHalf((specifier) => healthyHostModules[specifier], {
+		initialTitle: "Inspection report — DeepSeek Harness",
+	});
+	exports.apply(stubSlots().ctx);
+	assert.equal(document.title, "Inspection report — Blind Flange");
+});
+
+test("warns rather than failing silently when there is no MutationObserver to watch with", () => {
+	const { exports, warnings } = loadClientHalf((specifier) => healthyHostModules[specifier]);
+	exports.apply(stubSlots().ctx);
+	assert.equal(warnings.length, 1);
+	assert.match(warnings[0], /MutationObserver/);
+	assert.match(warnings[0], /@blind-flange\/dsh-client-ui-base/);
 });
 
 test("registers nothing when the host's react seam is broken", () => {

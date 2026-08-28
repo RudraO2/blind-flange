@@ -175,7 +175,30 @@ Seven epics. **Build order is 1 → 7. Demo order is different and starts at Epi
 are two lists and merging them for tidiness was a mistake caught in review. See "Build order
 is not demo order" below.
 
-### Epic 1: The sealed workbench
+### Build order — set 28 August 2026
+
+Epics are not built in numerical order. The remaining sequence is:
+
+**3 → 2 → 5 → 4.5 → 6**
+
+Epic 3 first because it is eight stories and carries the demonstrable the problem statement names
+twice — "automatically pick the right one for a given task" and "shows model auto selection across
+at least two different task types". A large epic started late cannot be recovered; three small
+stories can be squeezed. Epic 2's remaining three carry the sovereignty proof. Epic 5 carries the
+agentic run and the Word deliverable, which is the problem statement's own worked example. Story
+4.5 is the crop viewer, the last of Epic 4. Epic 6 is delivery, and Story 6.4 closes the licence
+question the RapidOCR swap left open.
+
+Epic 7 is deferred, with one acceptance criterion rescued into Story 6.1. Epic 6 is trimmed to
+6.1, 6.4 and 6.5. Reasons are recorded at each story and in
+`sprint-change-proposal-2026-08-28.md`.
+
+**No story in any epic may add a control that lets the operator pick a task type or a model.**
+The system classifies and selects; that is the claim being judged.
+
+---
+
+## Epic 1: The sealed workbench
 
 Someone opens Blind Flange and gets an industrial workbench that is visibly ours and visibly
 sealed. No web search tool. No cloud model providers. No API-key prompt. Our mark at the top
@@ -416,10 +439,19 @@ So that it does not read as a general coding agent wearing a different hat.
 **Then** it describes Blind Flange as a sovereign industrial knowledge-work workbench
 **And** it no longer contains "You are a coding agent powered by the {{model}} model"
 
-**Given** the agent preset picker
-**When** it is opened
+**Given** the agent preset roster
+**When** it is read
 **Then** the presets are the four task types — document, drawing, calculation, code
 **And** "Standard mode" and the other shipped presets are gone
+
+**Given** the hero seat `conversation.hero.agentPreset`
+**When** it renders
+**Then** it *displays* the active task type and offers no way to change it
+**And** it is not a dropdown, a menu, or any other control the operator can operate
+
+**Given** the problem statement's requirement that the system pick the model automatically
+**When** any surface is reviewed for a task-type or model control
+**Then** no such control exists anywhere in the application
 
 **Given** any shipped UI surface carrying terminology we own
 **When** its copy is read
@@ -537,6 +569,14 @@ So that the evidence does not require a terminal.
 
 The system classifies the task, scores the fleet, picks a member, shows its working, refuses a
 badly-licensed member, and always says which provider is live.
+
+Two surfaces show the router's work and neither is a control. `conversation.input.model` carries
+the routing chip — the fleet member that answered, and the scores behind it (Story 3.7).
+`conversation.hero.agentPreset` carries the classified task type, seated there by Story 1.4 and
+corrected on 28 Aug 2026 from a chooser to an indicator (see
+`sprint-change-proposal-2026-08-28.md`). Story 3.8 is what makes both move on their own.
+**Nothing in this epic may add a control that lets the operator pick a task type or a model** —
+that is the claim the entry is judged on.
 
 ### Story 3.1: A replay provider answers a turn through the model plane
 
@@ -951,7 +991,23 @@ pressable
 **When** it runs
 **Then** no component downloads a model or a font at first use (NFR2)
 
-### Story 6.2: The built bundle contains no external URL
+**Given** a fresh profile on a machine that has never run this
+**When** the workbench is opened for the first time
+**Then** no DeepSeek API-key modal appears
+**And** the Internal Testing Notice is already dismissed by the
+`ui-onboarding.welcomeNoticeVersion` key in the profile's `settings.yaml`
+
+> Rescued from Story 7.1 on 28 Aug 2026 when Epic 7 was deferred. This criterion is
+> load-bearing for the air-gap claim — an API-key modal on a judge's fresh install contradicts
+> the entire entry — and is not part of the identity polish that was cut.
+
+### Story 6.2: The built bundle contains no external URL — DEFERRED 28 Aug 2026
+
+> **Deferred, not cancelled.** A static scan for external URLs in the built output is real
+> evidence, but the problem statement asks for the proof "through logs or a visible network
+> monitor", and Epic 2's runtime egress monitor and audit log deliver exactly that — a measured
+> zero is stronger than a grep. Revisit if Epic 5 lands early.
+
 
 As an evaluator with the egress monitor open on a projector,
 I want certainty that no asset request will leave the machine,
@@ -968,7 +1024,13 @@ So that the demo cannot be undone by a font CDN.
 **When** their origin is checked
 **Then** all are self-hosted (UX-DR10)
 
-### Story 6.3: It runs on the second machine
+### Story 6.3: It runs on the second machine — DEFERRED 28 Aug 2026
+
+> **Deferred, not cancelled.** The problem statement asks for a deployment "demonstrable on a
+> single workstation or server"; a second machine is not required. Setup risk on borrowed
+> hardware inside three days outweighs the evidence gained, and Story 6.1's cold-start criterion
+> carries most of the value. Revisit if the schedule recovers.
+
 
 As the person whose laptop might fail on the day,
 I want the workbench proven on hardware that is not the build machine,
@@ -1017,9 +1079,20 @@ So that a video submission, a projector failure and a live demo are all covered.
 
 ---
 
-## Epic 7: The identity pass — P1
+## Epic 7: The identity pass — P1 — DEFERRED 28 Aug 2026
 
 The remainder of the rebrand, and onboarding that fits an air-gapped product.
+
+> **Deferred, not cancelled.** This epic produces none of the five demonstrables the problem
+> statement's Expected Solution names, and 10 of 33 stories were done with three days left.
+> Epic 1 already delivered the mark, the tab title, the favicon and the persona; what remains
+> here is completeness of rebrand, which no evaluation criterion rewards inside this budget.
+>
+> **Story 7.1's first acceptance criterion was rescued into Story 6.1** — suppressing the
+> DeepSeek API-key modal on a fresh profile is load-bearing for the air-gap claim, not polish.
+> The rest of 7.1 and all of 7.2 are deferred.
+>
+> See `sprint-change-proposal-2026-08-28.md`.
 
 ### Story 7.1: Local and replay provider onboarding replaces the API-key modal
 

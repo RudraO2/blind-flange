@@ -27,14 +27,16 @@
  * hard-codes its shipped root into every deployment's resolved config, so a
  * profile patch cannot remove them (verified against a running `dsh web`,
  * 28 Aug 2026: `agentPreset.list` names all four no matter what this profile's
- * `cordis.patch.yml` configures). This component is a task-type picker rather
- * than a wrapper around the host's own hero chip: it reads the same roster
- * over the same host RPCs and shows only the presets Blind Flange authored
+ * `cordis.patch.yml` configures). This component is an indicator rather than a
+ * wrapper around the host's own hero chip: it reads the same roster over the
+ * same host RPCs and shows only the presets Blind Flange authored
  * (`trust: 'user'`), so "Standard mode" and its shipped siblings never appear
  * here even though the host still lists them elsewhere (Settings > Agent
- * presets, unavoidably, for the same reason). Picking one sets the deployment
- * default via `settings.update`, the same write the host's own Settings row
- * makes — a real host mutation, not a local-only toggle.
+ * presets, unavoidably, for the same reason).
+ *
+ * It shipped as a dropdown and was corrected to a read-only indicator on
+ * 28 Aug 2026: SIH26117 requires the system to pick automatically, so a control
+ * asking the operator to classify the task contradicts the entry's own claim.
  */
 window.__ModuleLoader__.load({
 	id: "@blind-flange/dsh-client-ui-base",
@@ -113,9 +115,6 @@ window.__ModuleLoader__.load({
 			return true;
 		}
 
-		/** The settings namespace `dsh-agent-presets` reads its `default` field from. */
-		const AGENT_PRESET_SETTINGS_NS = "agent-presets";
-
 		let rpcCounter = 0;
 
 		/**
@@ -144,100 +143,113 @@ window.__ModuleLoader__.load({
 		 * once, at mount time, alongside the React seam check.
 		 * @returns the component.
 		 */
-		function buildAgentPresetPicker() {
+		function buildTaskTypeIndicator() {
 			const { useEffect, useState } = require("react");
-			const { jsx, jsxs, Fragment } = require("react/jsx-runtime");
-			const { Button, Menu, IconAgentPresetOutline16, IconChevronDownOutline14 } = require(
-				"@deepseek-ai/dsh-client-ui-primitives",
-			);
+			const { jsx, jsxs } = require("react/jsx-runtime");
+			const { IconAgentPresetOutline16 } = require("@deepseek-ai/dsh-client-ui-primitives");
 
-			const INITIAL = { status: "loading", options: [], current: "", open: false, busy: false, error: null };
+			const INITIAL = { status: "loading", label: "" };
 
 			/**
-			 * The new-session task-type chip: Blind Flange's own agent presets only.
-			 * @returns the chip, or null while loading or once the deployment
+			 * The hero's task-type indicator: shows which task type is active, and
+			 * offers no way to change it.
+			 *
+			 * Story 1.4 originally shipped this seat as a dropdown the operator picked
+			 * from. That was corrected on 28 Aug 2026: SIH26117 asks for a system that
+			 * "automatically picks the right one for a given task", and a control that
+			 * asks the operator to classify the task is the human doing the router's
+			 * job. It also collided with Story 3.7's routing chip at
+			 * `conversation.input.model` — a different seat — so the two would have
+			 * shipped side by side making opposite claims about the same decision.
+			 *
+			 * The read path below is kept deliberately: Story 3.8 makes the router set
+			 * the active preset when it reclassifies, and this is the surface that
+			 * shows it moving.
+			 *
+			 * Rendered as a bare inherited element rather than a `Button`. There is no
+			 * tag or badge primitive in the harness, a `Button` with no handler still
+			 * reads as clickable, and a disabled one reads as broken. An unstyled
+			 * element inherits the hero's own typography and density, which is what the
+			 * design rule asks for and costs no hand-rolled colour, radius or spacing.
+			 * @returns the indicator, or null while loading and when the deployment
 			 * authors no Blind Flange preset.
 			 */
-			function AgentPresetPicker() {
+			function TaskTypeIndicator() {
 				const [state, setState] = useState(INITIAL);
 
 				useEffect(() => {
 					let cancelled = false;
 					callApi("agentPreset.list", {}).then((result) => {
-						if (cancelled) return;
-						if (!result.ok) {
-							setState((s) => ({ ...s, status: "error", error: result.error?.message ?? "failed to load task types" }));
-							return;
-						}
-						const options = result.value.presets.filter(
+						if (cancelled || !result.ok) return;
+						const ours = result.value.presets.filter(
 							(preset) => preset.trust === "user" && preset.broken === undefined,
 						);
-						const current = result.value.presets.find((preset) => preset.isDefault)?.id ?? options[0]?.id ?? "";
-						setState((s) => ({ ...s, status: "ready", options, current, error: null }));
+						if (ours.length === 0) return;
+						const active = ours.find((preset) => preset.isDefault) ?? ours[0];
+						setState({ status: "ready", label: active.name ?? active.id });
 					});
 					return () => {
 						cancelled = true;
 					};
 				}, []);
 
-				if (state.status !== "ready" || state.options.length === 0) return null;
+				if (state.status !== "ready") return null;
 
-				/**
-				 * Persist a picked task type as the deployment default. Running
-				 * sessions keep the preset they started on; this only changes what
-				 * the NEXT new session gets.
-				 * @param id - the preset id chosen.
-				 */
-				function select(id) {
-					if (state.busy || id === state.current) {
-						setState((s) => ({ ...s, open: false }));
-						return;
-					}
-					setState((s) => ({ ...s, busy: true, open: false }));
-					callApi("settings.update", { ns: AGENT_PRESET_SETTINGS_NS, patch: { default: id } }).then((result) => {
-						if (!result.ok) {
-							setState((s) => ({ ...s, busy: false, error: result.error?.message ?? "failed to set task type" }));
-							return;
-						}
-						setState((s) => ({ ...s, busy: false, current: id, error: null }));
-					});
-				}
-
-				const chosen = state.options.find((option) => option.id === state.current);
-				const label = chosen?.name ?? state.current;
-
-				return jsx(Menu, {
-					open: state.open,
-					onClose: () => { setState((s) => ({ ...s, open: false })); },
-					items: state.options.map((option) => ({
-						id: option.id,
-						// Two block-level rows, stacked by default document flow — no
-						// hand-rolled flex/gap styling for what plain block stacking
-						// already gives for free.
-						label: jsxs(Fragment, {
-							children: [
-								jsx("div", { children: option.name ?? option.id }),
-								jsx("div", { children: option.description ?? "" }),
-							],
-						}),
-					})),
-					selectedId: state.current,
-					onSelect: select,
-					align: "start",
-					portal: true,
-					anchor: jsxs(Button, {
-						variant: "ghost",
-						size: "sm",
-						icon: jsx(IconAgentPresetOutline16, {}),
-						title: state.error ?? "Blind Flange task type",
-						disabled: state.busy,
-						onClick: () => { setState((s) => ({ ...s, open: !s.open })); },
-						children: [label, jsx(IconChevronDownOutline14, {})],
-					}),
+				return jsxs("span", {
+					title: "Task type, selected by the router. Blind Flange classifies the request; there is nothing here to set.",
+					children: [jsx(IconAgentPresetOutline16, {}), " ", state.label],
 				});
 			}
 
-			return AgentPresetPicker;
+			return TaskTypeIndicator;
+		}
+
+		/**
+		 * Hold the tab title against the harness, which rewrites it after hydration.
+		 *
+		 * `@deepseek-ai/dsh-client-ui-renderer` renders a `DocumentTitle` component
+		 * beside `renderSlot("root")` with a hard-coded `const productTitle =
+		 * "DeepSeek Harness"`, and sets `document.title` from a `useEffect`. The
+		 * host-side `tapIndex` swap in `index.js` wins the first paint and loses to
+		 * that effect, so the tab read "DeepSeek Harness" from hydration onward.
+		 *
+		 * There is no row to disable — `DocumentTitle` is rendered directly, not
+		 * registered into a slot — and no config key to override, so the only
+		 * out-of-tree fix is to watch the title node and put ours back. Editing
+		 * harness source is forbidden (NFR5).
+		 *
+		 * The harness writes either `productTitle` alone or `${sessionTitle} — ${productTitle}`,
+		 * so the session title is preserved and only the product half is replaced.
+		 * @returns a dispose function that stops observing.
+		 */
+		function holdTabTitle() {
+			const HOST_PRODUCT_TITLE = "DeepSeek Harness";
+			const OUR_PRODUCT_TITLE = "Blind Flange";
+
+			function correct() {
+				const current = document.title;
+				if (!current.includes(HOST_PRODUCT_TITLE)) return;
+				const corrected = current.split(HOST_PRODUCT_TITLE).join(OUR_PRODUCT_TITLE);
+				if (corrected !== current) document.title = corrected;
+			}
+
+			correct();
+
+			const titleElement = document.querySelector("title");
+			if (titleElement === null || typeof MutationObserver !== "function") {
+				console.warn(
+					"@blind-flange/dsh-client-ui-base: no <title> element or no MutationObserver — the tab title will revert to the harness's once the client renders",
+				);
+				return () => {};
+			}
+
+			// childList catches the text node swap React makes; characterData with
+			// subtree catches an in-place edit of the existing text node.
+			const observer = new MutationObserver(correct);
+			observer.observe(titleElement, { childList: true, characterData: true, subtree: true });
+			return () => {
+				observer.disconnect();
+			};
 		}
 
 		/**
@@ -259,8 +271,9 @@ window.__ModuleLoader__.load({
 		 * (`docs/screenshots/1-5-brand-mark-*.png`): re-verify by source if a
 		 * harness upgrade ever changes ui-layout's rail rendering.
 		 *
-		 * Story 1.4's task-type picker goes into `conversation.hero.agentPreset`,
-		 * replacing the host's own chip for this deployment.
+		 * Story 1.4's task-type indicator goes into `conversation.hero.agentPreset`,
+		 * replacing the host's own chip for this deployment. It displays; it does not
+		 * choose (corrected 28 Aug 2026 — see `buildTaskTypeIndicator`).
 		 *
 		 * A broken React seam aborts all three: every one of them renders
 		 * through the host's `react/jsx-runtime`, so registering into a slot
@@ -271,7 +284,8 @@ window.__ModuleLoader__.load({
 		 */
 		function apply(ctx) {
 			if (!checkHostReactSeam()) return;
-			const AgentPresetPicker = buildAgentPresetPicker();
+			const disposeTabTitle = holdTabTitle();
+			const TaskTypeIndicator = buildTaskTypeIndicator();
 			const disposeSidebarMark = ctx.slots.inject("sidebar.brand.mark", function* () {
 				yield ctx.slots.register({ name: "sidebar.brand.mark" }, BlindFlangeMark);
 			});
@@ -282,17 +296,18 @@ window.__ModuleLoader__.load({
 			// it renders, not a standing seam: registering before that declaration
 			// exists fails loud ("slot ... is not declared"). `ctx.slots.inject`
 			// defers the register/dispose pair until the parent has declared it.
-			const disposePresetPicker = ctx.slots.inject("conversation.hero.agentPreset", () => {
+			const disposeIndicator = ctx.slots.inject("conversation.hero.agentPreset", () => {
 				const dispose = ctx.slots.register(
-					{ name: "conversation.hero.agentPreset", id: "bf-agent-preset-picker" },
-					AgentPresetPicker,
+					{ name: "conversation.hero.agentPreset", id: "bf-task-type-indicator" },
+					TaskTypeIndicator,
 				);
 				return () => { dispose(); };
 			});
 			return () => {
+				disposeTabTitle();
 				disposeSidebarMark();
 				disposeHeroMark();
-				disposePresetPicker?.();
+				disposeIndicator?.();
 			};
 		}
 

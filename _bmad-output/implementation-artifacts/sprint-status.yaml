@@ -11,6 +11,7 @@
 #   - in-progress: Developer actively working on implementation
 #   - review: Implementation complete, ready for review
 #   - done: Story completed
+#   - deferred: Cut from this phase with the reason recorded in epics.md
 
 # Retrospective Status:
 #   - optional: Can be completed but not required
@@ -29,7 +30,7 @@
 # - Dev moves story to 'review', then runs code-review (fresh context, different LLM recommended)
 # - Retrospective appends its action items to action_items; the status view surfaces open ones
 generated: 08-28-2026 14:30
-last_updated: 08-28-2026 18:45
+last_updated: 08-28-2026 20:10
 project: Blind Flange
 project_key: NOKEY
 tracking_system: file-system
@@ -78,13 +79,13 @@ development_status:
 
   epic-6: backlog
   6-1-one-command-starts-the-workbench-from-a-clean-directory: backlog
-  6-2-the-built-bundle-contains-no-external-url: backlog
-  6-3-it-runs-on-the-second-machine: backlog
+  6-2-the-built-bundle-contains-no-external-url: deferred
+  6-3-it-runs-on-the-second-machine: deferred
   6-4-the-licence-claim-is-safe-to-make: backlog
   6-5-a-recorded-offline-run-exists: backlog
   epic-6-retrospective: optional
 
-  epic-7: backlog
-  7-1-local-and-replay-provider-onboarding-replaces-the-api-key-mo: backlog
-  7-2-the-remainder-of-the-identity-pass: backlog
+  epic-7: deferred
+  7-1-local-and-replay-provider-onboarding-replaces-the-api-key-mo: deferred
+  7-2-the-remainder-of-the-identity-pass: deferred
   epic-7-retrospective: optional
