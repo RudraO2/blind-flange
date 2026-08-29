@@ -18,8 +18,8 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from PIL import UnidentifiedImageError
 from pypdfium2 import PdfiumError
 
-from ocr import image_to_findings
-from pdf import pdf_to_findings
+from ocr import image_to_findings, warm_up
+from pdf import pdf_to_findings, RENDER_DPI
 
 HOST = "127.0.0.1"
 DEFAULT_PORT = 8642
@@ -42,7 +42,10 @@ class IngestionHandler(BaseHTTPRequestHandler):
 
     def do_GET(self) -> None:  # noqa: N802 - stdlib method name
         if self.path == "/health":
-            self._send_json(200, {"status": "ok"})
+            # `warm` tells the caller whether the first real request will pay the engine's
+            # shape-specialisation cost. The harness can use it to decide whether to show a
+            # "still starting" state rather than letting a judge's upload look like a hang.
+            self._send_json(200, {"status": "ok", "warm": _WARM, "renderDpi": RENDER_DPI})
             return
         self._send_json(404, {"error": "not found"})
 
@@ -86,7 +89,14 @@ class IngestionHandler(BaseHTTPRequestHandler):
             self._send_json(400, {"error": "body is not a decodable image"})
             return
 
-        self._send_json(200, {"findings": findings})
+        # `page: 1` added 30 August 2026, making this endpoint's findings the same shape as the
+        # PDF endpoint's. Story 4.3 left `page` out because a single image had no pages to
+        # number, and that was fine while the only ingested document was the fixture PDF. The
+        # upload control changes that: a judge can hand us a photograph, and every consumer
+        # downstream — the findings table, the provenance crop, the approval note's clauses —
+        # requires a page to cite. One shape for both endpoints is cheaper than a defaulting
+        # rule each caller has to remember.
+        self._send_json(200, {"findings": [{**finding, "page": 1} for finding in findings]})
 
     def _handle_ingest_pdf(self) -> None:
         content_type = self.headers.get("Content-Type", "")
@@ -106,8 +116,23 @@ class IngestionHandler(BaseHTTPRequestHandler):
         self._send_json(200, {"findings": findings})
 
 
+# Whether the OCR engine has already run a page of the production size. Read by /health.
+_WARM = False
+
+
 def main() -> None:
+    global _WARM
     port = int(os.environ.get("INGESTION_PORT", DEFAULT_PORT))
+
+    # Warm the engine before the socket opens, so the shape-specialisation cost is paid while
+    # the service is starting rather than by whoever uploads the first document. Measured on
+    # 30 August 2026 this is the difference between the fixture reading in 15s and in 6.7s,
+    # and it is the largest single latency win in the ingestion path.
+    print("warming the OCR engine (ONNX Runtime specialises per input shape)...")
+    seconds = warm_up()
+    _WARM = True
+    print(f"engine warm in {seconds:.1f}s, rendering at {RENDER_DPI} dpi")
+
     httpd = ThreadingHTTPServer((HOST, port), IngestionHandler)
     print(f"ingestion service listening on http://{HOST}:{port}")
     try:

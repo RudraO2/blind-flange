@@ -24,6 +24,7 @@ from __future__ import annotations
 import io
 import sys
 import threading
+import time
 import types
 from typing import TypedDict
 
@@ -144,6 +145,27 @@ def _seal_out_http() -> None:
 _engine = None
 _engine_lock = threading.Lock()
 
+# Tuning measured on this hardware, 30 August 2026 — proof/ocr_tuning_proof.py.
+#
+# `Global.use_cls: False` disables the PP-OCRv4 angle classifier, a whole extra model pass
+# over every detected line. It exists to spot a page scanned 180 degrees round; an
+# inspection report is not upside down, and the fixture's *skew* is handled by the
+# detector's polygon output, not by this model. Costs ~5% for byte-identical output.
+#
+# Deliberately NOT set: `Rec.rec_batch_num` and `EngineConfig.onnxruntime.
+# intra_op_num_threads`. Both were swept and both made it worse — ONNX Runtime already
+# saturates the six cores for intra-op work, so forcing more concurrency only causes
+# contention. Batch 32 cost 74% more wall clock *and* dropped two lines including a
+# reviewer's name. Leaving a knob alone is a decision here, not an omission.
+_ENGINE_PARAMS = {"Global.use_cls": False}
+
+# The page size `warm_up` builds its throwaway image at. ONNX Runtime specialises its graph
+# per input shape, so the shape that matters is the one production actually sends: an A4 page
+# at pdf.py's RENDER_DPI, which is 300 — 8.27in x 11.69in at 300 dpi. Kept as a literal
+# rather than imported to avoid a cycle, since pdf.py imports this module; if RENDER_DPI ever
+# moves, this moves with it or the warm-up warms the wrong shape and buys nothing.
+_WARM_UP_SIZE = (2480, 3508)
+
 
 class Finding(TypedDict):
     text: str
@@ -167,8 +189,30 @@ def _get_engine():
                 _seal_out_http()
                 from rapidocr import RapidOCR
 
-                _engine = RapidOCR()
+                _engine = RapidOCR(params=_ENGINE_PARAMS)
     return _engine
+
+
+def warm_up() -> float:
+    """Build the engine and run one throwaway page through it. Returns seconds taken.
+
+    This is the largest latency win available to the ingestion path, and it is not a tuning
+    knob. Measured 30 August 2026: the same fixture that took 15s when each render
+    resolution was met for the first time took 6.7s once the engine had already seen a page
+    of that size. ONNX Runtime re-optimises its graph per input shape, so **the first request
+    at a new page size pays several seconds of shape specialisation** — and without this, the
+    party paying it is whoever uploads the first document, live, in front of an audience.
+
+    Called from server.py at startup rather than lazily, so the cost lands while the service
+    is booting and nobody is waiting on it.
+
+    The image is synthetic and blank: the point is the shape, not the content. Blank input
+    still runs detection, which is where the specialisation happens.
+    """
+    started = time.perf_counter()
+    engine = _get_engine()
+    engine(Image.new("RGB", _WARM_UP_SIZE, "white"))
+    return time.perf_counter() - started
 
 
 def image_to_findings(image_bytes: bytes) -> list[Finding]:

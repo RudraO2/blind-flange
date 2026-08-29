@@ -51,7 +51,20 @@ class IngestionServiceTest(unittest.TestCase):
         conn.request("GET", "/health")
         resp = conn.getresponse()
         self.assertEqual(resp.status, 200)
-        self.assertEqual(json.loads(resp.read()), {"status": "ok"})
+        payload = json.loads(resp.read())
+        self.assertEqual(payload["status"], "ok")
+
+        # `warm` and `renderDpi` were added on 30 August 2026 for the upload path. `warm`
+        # tells the caller whether the first real request will pay ONNX Runtime's
+        # shape-specialisation cost, which is several seconds and looks like a hang to
+        # someone watching a demo; `renderDpi` means a caller never has to assume the
+        # resolution its bounding boxes are in.
+        #
+        # False here is correct: this test starts the handler directly, so `main()`'s
+        # startup warm-up never runs. Asserting field-by-field rather than on the whole
+        # dict, so adding another advisory field to /health does not fail this test.
+        self.assertIs(payload["warm"], False)
+        self.assertEqual(payload["renderDpi"], 300)
 
     def test_ingest_image_returns_findings_with_bbox_and_confidence(self) -> None:
         image_bytes = FIXTURE.read_bytes()

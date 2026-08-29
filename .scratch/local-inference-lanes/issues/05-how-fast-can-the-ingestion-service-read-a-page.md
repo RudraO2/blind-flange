@@ -41,11 +41,32 @@ cls off + batch 16 + 6 threads        7.93s    4.61s    156    99.57%   98.1%
 cls off + batch 32 + 6 threads       12.24s    6.20s    156    99.43%   96.8%
 ```
 
+### Correction, same day — decision 1 below was wrong and is reverted
+
+Rendering stayed at **300 dpi**. The 200 dpi change was implemented, measured again, and
+reverted within the hour, for two reasons found only by building it:
+
+1. **It buys nothing.** The measurements below were taken cold, so the DPI column was
+   really measuring per-input-shape warm-up. Warm, the fixture reads in 7.20s and 6.45s at
+   200 dpi against 7.77s and 6.29s at 300 — noise. The entire saving was the pre-warm
+   (decision 4), which is the finding that actually mattered.
+2. **It costs coordinate compatibility, silently.** `bbox` is in source-image pixels at
+   whatever dpi rendered the page. The committed capture and the pre-rendered page images
+   `provenance.js` crops against are both 300 dpi. Serving 200 dpi boxes would have cropped
+   the wrong region of the right page — and an offset crop still looks like a crop, so
+   nothing would have complained.
+
+At 300 dpi warm the fixture reads in 7.19s with **138 of 138 lines byte-identical to the
+capture**, against 135 of 138 at 200 dpi. So the reverted option is both faster to nothing
+and strictly more accurate. Revisit only once the provenance route renders pages on demand
+at the same constant, coupling the two numbers in code rather than in a comment.
+
 ### The decisions
 
-1. **Render at 200 dpi, not 300.** 2000px on the long side is roughly 170 dpi for A4, so 200
-   is the first value that stops discarding pixels with a margin. Identical accuracy on every
-   tag; cheaper to rasterise.
+1. ~~**Render at 200 dpi, not 300.**~~ **Reverted — see the correction above.** The reasoning
+   was sound and the conclusion was wrong: 2000px on the long side is roughly 170 dpi for A4,
+   so 300 dpi genuinely does rasterise pixels the engine discards. It just costs nothing to
+   do so, and stopping breaks the bounding-box contract with the provenance crops.
 2. **Turn `Global.use_cls` off.** ~5% saved for byte-identical output. The classifier detects
    180° rotation, which a scanned inspection report does not have. The fixture's *skew* is
    handled by the detector's polygon output, not by this model.

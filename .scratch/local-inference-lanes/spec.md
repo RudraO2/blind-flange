@@ -279,12 +279,13 @@ gains a live call over the service's existing HTTP contract, keeping the capture
 when the service is not running. The tool's interface does not change, so the agent, the findings
 table and the provenance route all keep working.
 
-**Ingestion latency is already measured and the changes are known.** Render at 200 dpi rather than
-300 — the OCR engine caps its own working image at 2000px, so 300 dpi rasterises pixels it then
-discards, and every equipment tag and reference number survives the drop. Turn the angle
-classifier off: it costs ~5% for byte-identical output and it detects a 180° rotation a scanned
-report does not have. **Leave batch size and thread count alone** — both measured worse, because
-the runtime already saturates six cores.
+**Ingestion latency is measured, and the render resolution stays at 300 dpi.** Lowering it to
+200 was implemented and reverted the same day: warm, the two resolutions cost the same, and
+`bbox` is in source-image pixels — so 200 dpi boxes would have cropped the wrong region of the
+right page against the 300 dpi images the provenance route uses, silently, because an offset crop
+still looks like a crop. Turn the angle classifier off: ~5% for byte-identical output, and it
+detects a 180° rotation a scanned report does not have. **Leave batch size and thread count
+alone** — both measured worse, because the runtime already saturates six cores.
 
 The largest win is not a tuning knob: **pre-warm the OCR engine at service startup** with a
 throwaway page at the production render size. The runtime re-optimises per input shape, and that

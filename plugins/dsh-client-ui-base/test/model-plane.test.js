@@ -278,7 +278,10 @@ test("the shipped 'key findings' replay entry walks create_goal -> bf_report_fin
 	// Step 1: bf_report_findings — dispatch the REAL tool, exactly as the harness would.
 	const findingsCall = await runStep();
 	assert.equal(findingsCall.name, "bf_report_findings");
-	const findingsResult = await createReportFindingsTool().execute();
+	// Pointed at a dead endpoint so the capture answers deterministically. This
+	// test is about the replay cache's step sequence, not about ingestion, and it
+	// must not change its result because a Python service happens to be running.
+	const findingsResult = await createReportFindingsTool({ endpoint: "http://127.0.0.1:1" }).execute();
 	assert.ok(findingsResult.findings.length > 100);
 	messages = [...messages, toolResult(findingsCall.id, findingsResult)];
 
