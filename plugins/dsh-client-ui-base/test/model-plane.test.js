@@ -28,8 +28,11 @@ test("createModelProvider selects by name — the only place ADR-0001's config s
 	assert.throws(() => createModelProvider("nonexistent"), ModelProviderError);
 });
 
-test("local and remote are declared but fail loud instead of answering nothing (day-4 stretch / dev-only)", async () => {
-	await assert.rejects(() => collect(createModelProvider("local").answer({ messages: [] })), ModelProviderError);
+test("remote is declared but fails loud instead of answering nothing (dev-only, ADR-0001)", async () => {
+	// `local` used to be asserted here as a throwing stub. It is now a real
+	// implementation and is covered by `local-provider.test.js`, which drives it
+	// against a loopback stub server rather than whatever happens to be on
+	// 127.0.0.1:8080 — a unit test must not reach a live llama-swap.
 	await assert.rejects(() => collect(createModelProvider("remote").answer({ messages: [] })), ModelProviderError);
 });
 
