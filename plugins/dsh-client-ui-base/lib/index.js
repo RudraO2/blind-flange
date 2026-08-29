@@ -496,5 +496,42 @@ export function apply(ctx, config) {
 				}),
 			"blind-flange: index title and favicon",
 		);
+
+		// Pre-hydration theme: inject critical CSS into the HTML <head> so the
+		// dark navy sidebar and light blue-grey workspace are correct on the very
+		// first paint, before the client module loads and `injectThemeStyle()`
+		// takes over. Uses the same CSS token overrides as the client-side injection.
+		web.effect(
+			() =>
+				web.webServer.tapIndex((html) => {
+					const criticalCss = `<style id="bf-theme-ssr">
+/* Blind Flange pre-hydration theme */
+html, body { font-family: 'Inter','Segoe UI',system-ui,-apple-system,sans-serif !important; }
+body { background: #E3E6EB !important; }
+#root { background: #E3E6EB !important; }
+[class*="sidebar_"],[class*="_sidebar"],[class*="_rail"],[class*="rail_"] {
+  background-color: #030A24 !important;
+  color: #fff !important;
+  border-right: 1px solid rgba(255,255,255,0.10) !important;
+  --dsw-alias-label-primary: #fff !important;
+  --dsw-alias-label-secondary: rgba(255,255,255,0.65) !important;
+  --dsw-alias-bg-base: #030A24 !important;
+  --dsw-alias-bg-layer-1: rgba(255,255,255,0.06) !important;
+  --dsw-alias-bg-layer-2: rgba(255,255,255,0.09) !important;
+  --dsw-alias-interactive-bg-hover: rgba(255,255,255,0.07) !important;
+  --dsw-alias-border-l2: rgba(255,255,255,0.10) !important;
+}
+section[aria-label="Egress monitor"] {
+  background: #fff !important;
+  border: 1px solid rgba(13,17,23,0.12) !important;
+  border-radius: 12px !important;
+  color: #0D1117 !important;
+}
+</style>`;
+					if (!html.includes("</head>")) return html;
+					return html.replace("</head>", `${criticalCss}</head>`);
+				}),
+			"blind-flange: pre-hydration theme css",
+		);
 	});
 }

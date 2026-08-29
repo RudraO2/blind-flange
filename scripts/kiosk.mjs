@@ -12,7 +12,7 @@
 //
 // Three details that matter:
 //
-//   1. **It waits for the port to answer** before opening anything. Launching
+//   1. **It waits for both ports to answer** before opening anything. Launching
 //      the browser first gives a judge an error page for a second, which is
 //      exactly the wrong first frame.
 //   2. **A dedicated browser profile.** Chrome and Edge hand a new window to an
@@ -23,7 +23,14 @@
 //      whole thing down rather than leaving a fullscreen window with nothing
 //      behind it, which cannot easily be escaped from.
 //
-// Exit the kiosk window with Alt+F4, or stop the server here with Ctrl+C.
+// Start sequence:
+//   landing-server.mjs (port landingPort) ─┐
+//   start.mjs → dsh web  (port workPort)  ─┴─ both ready → browser opens landingUrl
+//
+// The browser navigates to the workbench (workUrl) when the user clicks
+// "Launch Workbench" — no modification to the dsh/harness internals.
+//
+// Exit the kiosk window with Alt+F4, or stop everything here with Ctrl+C.
 //
 // Node builtins only, by policy.
 
@@ -49,43 +56,61 @@ const BROWSER_PROFILE = join(homedir(), '.blind-flange', 'kiosk-browser-profile'
 
 const args = process.argv.slice(2)
 const portIndex = args.indexOf('--port')
-const port = portIndex === -1 ? '3080' : args[portIndex + 1]
-const url = `http://127.0.0.1:${port}/`
+/** The workbench (dsh) port — default 3080. */
+const workPort = portIndex === -1 ? '3080' : args[portIndex + 1]
+/** The landing page port — always one below the workbench port. */
+const landingPort = String(Number(workPort) - 1)
+const workUrl    = `http://127.0.0.1:${workPort}/`
+const landingUrl = `http://127.0.0.1:${landingPort}/`
 /** Everything except our own `--port` pair, forwarded to the harness untouched. */
 const passthrough = args.filter((_, index) => portIndex === -1 || (index !== portIndex && index !== portIndex + 1))
 
 const say = (message) => console.log(message)
 const sleep = (ms) => new Promise((done) => setTimeout(done, ms))
 
-/** Poll the workbench until it answers, so the first frame is never an error page. */
-async function waitForWorkbench(deadlineMs = 120_000) {
+/**
+ * Poll a URL until it answers with an OK response.
+ * @param {string} targetUrl - URL to poll.
+ * @param {ChildProcess|null} watchProcess - If this process exits, stop polling.
+ * @param {number} deadlineMs - Maximum wait time.
+ */
+async function waitForUrl(targetUrl, watchProcess, deadlineMs = 120_000) {
   const deadline = Date.now() + deadlineMs
   while (Date.now() < deadline) {
     try {
-      const response = await fetch(url, { signal: AbortSignal.timeout(1500) })
+      const response = await fetch(targetUrl, { signal: AbortSignal.timeout(1500) })
       if (response.ok) return true
     } catch {
       /* not up yet */
     }
-    if (server.exitCode !== null) return false
+    if (watchProcess && watchProcess.exitCode !== null) return false
     await sleep(400)
   }
   return false
 }
 
-// ── the server ──────────────────────────────────────────────────────────────
+// ── servers ──────────────────────────────────────────────────────────────────
 
-say('\n  Starting Blind Flange. The workbench will open fullscreen when it is ready.')
-say('  Close it with Alt+F4, or stop everything here with Ctrl+C.\n')
+say('\n  Starting Blind Flange. The landing page will open fullscreen when both servers are ready.')
+say('  Close the window with Alt+F4, or stop everything here with Ctrl+C.\n')
 
+/** DSH workbench — unchanged from before. */
 const server = spawn(
   process.execPath,
-  [join(repoRoot, 'scripts', 'start.mjs'), '--no-open', '--port', port, ...passthrough],
+  [join(repoRoot, 'scripts', 'start.mjs'), '--no-open', '--port', workPort, ...passthrough],
+  { stdio: 'inherit' },
+)
+
+/** Landing page static server — completely separate from dsh. */
+const landingServer = spawn(
+  process.execPath,
+  [join(repoRoot, 'scripts', 'landing-server.mjs'), '--port', landingPort],
   { stdio: 'inherit' },
 )
 
 let browser = null
 let shuttingDown = false
+
 
 /**
  * Kill a process and everything it started.
@@ -117,11 +142,12 @@ function killTree(child) {
   }
 }
 
-/** Take down both halves, in either order, exactly once. */
+/** Take down all three halves (landing server + dsh server + browser), exactly once. */
 function shutdown(code) {
   if (shuttingDown) return
   shuttingDown = true
   killTree(browser)
+  killTree(landingServer)
   killTree(server)
   process.exit(code ?? 0)
 }
@@ -129,24 +155,46 @@ function shutdown(code) {
 process.on('SIGINT', () => shutdown(0))
 process.on('SIGTERM', () => shutdown(0))
 server.on('exit', (code) => shutdown(code ?? 0))
+landingServer.on('exit', (code) => {
+  // Landing server crash is non-fatal if the workbench itself is still up —
+  // the operator can navigate to workUrl directly.
+  if (code !== 0 && !shuttingDown) {
+    say(`\n  [landing] Landing server exited (code ${code}). The workbench is still at ${workUrl}\n`)
+  }
+})
 
 // ── the kiosk window ────────────────────────────────────────────────────────
 
-const ready = await waitForWorkbench()
-if (!ready) {
+// Wait for both servers concurrently — no point holding up the browser for the
+// slower one if the other is already answering.
+say('  Waiting for both servers to be ready…')
+const [workbenchReady, landingReady] = await Promise.all([
+  waitForUrl(workUrl, server, 120_000),
+  waitForUrl(landingUrl, landingServer, 30_000),
+])
+
+if (!workbenchReady) {
   console.error('\n  The workbench did not start, so there is nothing to open.')
   console.error('  The messages above say why. `npm run doctor` checks the install.\n')
   shutdown(1)
 }
 
+if (!landingReady) {
+  // Non-fatal: fall back to opening the workbench directly.
+  say('\n  [landing] Landing server did not answer in time; opening the workbench directly.')
+}
+
+// Open the landing page when it is up; fall back to the workbench URL.
+const openUrl = landingReady ? landingUrl : workUrl
+
 const found = BROWSERS.find(([, path]) => existsSync(path))
 if (!found) {
   say('\n  No Chrome or Edge found, so the kiosk window cannot be opened.')
-  say(`  The workbench is running — open ${url} in any browser, and press F11`)
-  say('  for fullscreen. Stop it here with Ctrl+C.\n')
+  say(`  Both servers are running — open ${landingUrl} in any browser, and press F11`)
+  say('  for fullscreen. Stop everything here with Ctrl+C.\n')
 } else {
   const [name, path] = found
-  say(`\n  Opening the workbench fullscreen in ${name}.\n`)
+  say(`\n  Opening the landing page fullscreen in ${name}.\n`)
   browser = spawn(
     path,
     [
@@ -157,20 +205,20 @@ if (!found) {
       // The workbench is the whole screen; none of this belongs on it.
       '--disable-features=Translate,AutofillServerCommunication',
       '--disable-background-networking',
-      url,
+      openUrl,
     ],
     { stdio: 'ignore', detached: false },
   )
   browser.on('exit', () => {
     // Closing the window is the operator saying they are done.
     if (!shuttingDown) {
-      say('\n  Kiosk window closed. Stopping the workbench.\n')
+      say('\n  Kiosk window closed. Stopping all servers.\n')
       shutdown(0)
     }
   })
   browser.on('error', (error) => {
     say(`\n  Could not open ${name} (${error.message}).`)
-    say(`  The workbench is running — open ${url} in any browser.\n`)
+    say(`  Servers are running — open ${landingUrl} in any browser.\n`)
     browser = null
   })
 }

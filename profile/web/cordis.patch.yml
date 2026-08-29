@@ -80,6 +80,17 @@
 - id: ui-model-selection
   disabled: true
 
+# Story 1.4: our task-type indicator occupies conversation.hero.agentPreset,
+# a single slot. The harness ships ui-agent-preset
+# (@deepseek-ai/dsh-client-ui-agent-preset, dsh-web-app/cordis.patch.yml
+# line 279) into the same seat at a higher priority; disabling it clears the
+# seat for bf-task-type-indicator — same pattern as ui-brand-official above.
+# Side-effect: the "default preset" row in Settings > General disappears.
+# That is safe here: Blind Flange routes automatically and the operator never
+# picks a preset manually.
+- id: ui-agent-preset
+  disabled: true
+
 # Story 5.2: helper agents are visible while they work. ui-jobs and ui-subagent
 # are already mounted and reading real session/subagent state (see
 # docs/profile-install.md); only the model-facing tools that drive them were

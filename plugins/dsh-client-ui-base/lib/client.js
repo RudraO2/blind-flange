@@ -1194,6 +1194,533 @@ window.__ModuleLoader__.load({
 		}
 
 		/**
+		 * Inject the Blind Flange visual theme: dark navy sidebar/navbar (#030A24)
+		 * and light blue-grey main workspace (#E3E6EB). Works by:
+		 *   1. Overriding the harness's --dsw-alias-* CSS custom properties on :root
+		 *      for the dark sidebar zone and keeping them as-is for the light zone.
+		 *   2. Directly targeting structural harness elements by their data-slot
+		 *      attributes and hashed class-name patterns visible in the running DOM.
+		 *   3. Applying the Jenga alternating-offset effect to session list items.
+		 *
+		 * The injected <style> element has id="bf-theme" so it is idempotent and
+		 * can be removed cleanly by the dispose function.
+		 * @returns a dispose function that removes the style element.
+		 */
+		function injectThemeStyle() {
+			const STYLE_ID = "bf-theme";
+			const existing = document.getElementById(STYLE_ID);
+			if (existing) existing.remove();
+
+			const NAVY = "#030A24";
+			const NAVY_BORDER = "rgba(255,255,255,0.10)";
+			const NAVY_HOVER = "rgba(255,255,255,0.07)";
+			const NAVY_ACTIVE = "rgba(255,255,255,0.12)";
+			const LIGHT_BG = "#E3E6EB";
+			const LIGHT_CARD = "#EAECF0";
+			const WHITE = "#FFFFFF";
+			const WHITE_SEC = "rgba(255,255,255,0.65)";
+			const WHITE_TER = "rgba(255,255,255,0.40)";
+			const DARK_TEXT = "#0D1117";
+			const DARK_SEC = "rgba(13,17,23,0.60)";
+
+			const css = `
+/* ═══════════════════════════════════════════════════════════════════════
+   Blind Flange Visual Theme — real class selectors from live DOM inspection
+   Sidebar hash: hHd-Xa | Session list: qDHVXG | Cards: YDXeBa
+   Main area: wSkVaW | Composer: uV2eYG
+   ═══════════════════════════════════════════════════════════════════════ */
+
+/* ── Global font: Inter from system stack (no network fetch) ── */
+html, body, #root {
+  font-family: 'Inter', 'Segoe UI', system-ui, -apple-system, BlinkMacSystemFont,
+               'Helvetica Neue', Arial, sans-serif !important;
+}
+
+/* ── Page-level background: light blue-grey ── */
+body, #root {
+  background: ${LIGHT_BG} !important;
+}
+
+/* ══════════════════════════════════════════════════════════════════
+   SIDEBAR — hHd-Xa hash — dark navy panel, white text/icons
+   ══════════════════════════════════════════════════════════════════ */
+
+/* Sidebar root container */
+[class^="hHd-Xa_"], [class*=" hHd-Xa_"] {
+  --dsw-alias-label-primary: ${WHITE} !important;
+  --dsw-alias-label-secondary: ${WHITE_SEC} !important;
+  --dsw-alias-label-tertiary: ${WHITE_TER} !important;
+  --dsw-alias-label-dimmed: ${WHITE_TER} !important;
+  --dsw-alias-bg-base: ${NAVY} !important;
+  --dsw-alias-bg-layer-1: rgba(255,255,255,0.06) !important;
+  --dsw-alias-bg-layer-2: rgba(255,255,255,0.09) !important;
+  --dsw-alias-interactive-bg-hover: ${NAVY_HOVER} !important;
+  --dsw-alias-interactive-bg-active: ${NAVY_ACTIVE} !important;
+  --dsw-alias-border-l1: ${NAVY_BORDER} !important;
+  --dsw-alias-border-l2: ${NAVY_BORDER} !important;
+  --dsw-alias-border-l3: rgba(255,255,255,0.18) !important;
+  --dsw-alias-button-primary-fill: rgba(255,255,255,0.15) !important;
+  --dsw-alias-button-primary-hover: rgba(255,255,255,0.22) !important;
+  background-color: ${NAVY} !important;
+  color: ${WHITE} !important;
+}
+
+/* The main sidebar panel: add right border */
+.hHd-Xa_sidebar {
+  border-right: 1px solid ${NAVY_BORDER} !important;
+}
+
+/* Brand/header row inside sidebar */
+.hHd-Xa_brand {
+  background-color: ${NAVY} !important;
+  border-bottom: 1px solid ${NAVY_BORDER} !important;
+  color: ${WHITE} !important;
+}
+
+/* New Session button */
+.hHd-Xa_newSession {
+  color: ${WHITE} !important;
+  border-color: ${NAVY_BORDER} !important;
+  background: rgba(255,255,255,0.10) !important;
+}
+.hHd-Xa_newSession:hover {
+  background: rgba(255,255,255,0.16) !important;
+}
+
+/* All icon buttons in the sidebar header */
+.hHd-Xa_iconButton, .hHd-Xa_toggle {
+  color: ${WHITE_SEC} !important;
+}
+.hHd-Xa_iconButton:hover, .hHd-Xa_toggle:hover {
+  color: ${WHITE} !important;
+  background: ${NAVY_HOVER} !important;
+}
+
+/* ══════════════════════════════════════════════════════════════════
+   SESSION LIST CONTAINER — qDHVXG hash
+   ══════════════════════════════════════════════════════════════════ */
+
+[class^="qDHVXG_"], [class*=" qDHVXG_"] {
+  --dsw-alias-label-primary: ${WHITE} !important;
+  --dsw-alias-label-secondary: ${WHITE_SEC} !important;
+  --dsw-alias-label-tertiary: ${WHITE_TER} !important;
+  --dsw-alias-interactive-bg-hover: ${NAVY_HOVER} !important;
+  --dsw-alias-border-l2: ${NAVY_BORDER} !important;
+  color: ${WHITE} !important;
+}
+
+.qDHVXG_searchButton, .qDHVXG_iconButton {
+  color: ${WHITE_SEC} !important;
+}
+.qDHVXG_searchButton:hover, .qDHVXG_iconButton:hover {
+  color: ${WHITE} !important;
+  background: ${NAVY_HOVER} !important;
+}
+
+/* ══════════════════════════════════════════════════════════════════
+   SESSION / CHAT HISTORY CARDS — YDXeBa hash
+   Jenga: odd cards left-aligned, even cards right-aligned.
+   ══════════════════════════════════════════════════════════════════ */
+
+/* Card base style */
+.YDXeBa_sessionRow, .YDXeBa_projectRow {
+  background: rgba(255,255,255,0.07) !important;
+  border: 1px solid transparent !important;
+  border-radius: 8px !important;
+  color: ${WHITE} !important;
+  transition: background 0.15s ease, border-color 0.15s ease !important;
+}
+
+.YDXeBa_sessionRow:hover, .YDXeBa_projectRow:hover {
+  background: rgba(255,255,255,0.13) !important;
+  border-color: ${NAVY_BORDER} !important;
+}
+
+/* Selected/active card */
+.YDXeBa_selected {
+  background: rgba(255,255,255,0.14) !important;
+  border-color: rgba(255,255,255,0.20) !important;
+}
+
+/* Session card alternating Jenga colors — clearly differentiated */
+/* Card wrapper: alternating padding to create stagger effect */
+.qDHVXG_list > *:nth-child(odd) {
+  padding-right: 12px !important;
+  padding-left: 0 !important;
+}
+.qDHVXG_list > *:nth-child(even) {
+  padding-left: 12px !important;
+  padding-right: 0 !important;
+}
+/* Odd card: lighter shade */
+.qDHVXG_list > *:nth-child(odd) .YDXeBa_sessionRow,
+.qDHVXG_list > *:nth-child(odd) .YDXeBa_projectRow {
+  background: rgba(255,255,255,0.14) !important;
+  border-color: rgba(255,255,255,0.10) !important;
+}
+/* Even card: darker shade */
+.qDHVXG_list > *:nth-child(even) .YDXeBa_sessionRow,
+.qDHVXG_list > *:nth-child(even) .YDXeBa_projectRow {
+  background: rgba(255,255,255,0.03) !important;
+  border-color: rgba(255,255,255,0.06) !important;
+}
+
+
+/* ══════════════════════════════════════════════════════════════════
+   TOP NAVBAR / SESSION HEADER — tagged with [data-bf-navbar="true"] by JS.
+   CSS variables only — no direct color: white on descendant elements
+   so navbar's own pill-chips keep their own text styling.
+   ══════════════════════════════════════════════════════════════════ */
+
+[data-bf-navbar="true"] {
+  background-color: ${NAVY} !important;
+  border-bottom: 1px solid ${NAVY_BORDER} !important;
+  --dsw-alias-label-primary: ${WHITE} !important;
+  --dsw-alias-label-secondary: ${WHITE_SEC} !important;
+  --dsw-alias-label-tertiary: ${WHITE_TER} !important;
+  --dsw-alias-interactive-bg-hover: ${NAVY_HOVER} !important;
+  --dsw-alias-bg-layer-1: rgba(255,255,255,0.06) !important;
+  --dsw-alias-bg-layer-2: rgba(255,255,255,0.09) !important;
+  --dsw-alias-border-l2: ${NAVY_BORDER} !important;
+  color: ${WHITE} !important;
+}
+/* Session title text (e.g. "This is an authored replay res...") */
+[data-bf-navbar="true"] > * { color: ${WHITE} !important; }
+
+/* Session log button — white border/text on navy */
+[data-bf-navbar="true"] [class*="nL4_yW_sessionLogButton"],
+[data-bf-navbar="true"] [class*="nL4_yW_"][class*="Button"],
+[data-bf-navbar="true"] [class*="nL4_yW_"][class*="btn"] {
+  color: ${WHITE} !important;
+  border-color: rgba(255,255,255,0.35) !important;
+  background: transparent !important;
+}
+
+/* Navbar Pills (Replay, Egress, etc.) 
+   Instead of forcing them to be light with dark text, we provide them 
+   with translucent dark-mode background overrides so they blend into the navy topbar. */
+[data-bf-navbar="true"] [class^="VOzbGW_"], 
+[data-bf-navbar="true"] [class*=" VOzbGW_"],
+[data-bf-navbar="true"] button,
+[data-bf-navbar="true"] [role="button"] {
+  background: rgba(255,255,255,0.10) !important;
+  border: 1px solid rgba(255,255,255,0.20) !important;
+  color: ${WHITE} !important;
+}
+[data-bf-navbar="true"] [class^="VOzbGW_"] *, 
+[data-bf-navbar="true"] [class*=" VOzbGW_"] *,
+[data-bf-navbar="true"] button *,
+[data-bf-navbar="true"] [role="button"] * {
+  color: ${WHITE} !important;
+}
+
+/* TAB BAR ROW (Chat | Trajectory | Provenance) — tagged [data-bf-tabrow] by JS */
+[data-bf-tabrow="true"] {
+  background-color: ${NAVY} !important;
+  border-bottom: 1px solid ${NAVY_BORDER} !important;
+}
+[data-bf-tabrow="true"] [class*="wSkVaW_tabActive"],
+[data-bf-tabrow="true"] [class*="tabActive"] {
+  color: ${WHITE} !important;
+  border-bottom-color: ${WHITE} !important;
+  font-weight: 600 !important;
+}
+[data-bf-tabrow="true"] [class*="wSkVaW_tab"],
+[data-bf-tabrow="true"] [role="tab"] {
+  color: ${WHITE_SEC} !important;
+}
+
+/* nL4_yW_ elements inside the navbar inherit white */
+[data-bf-navbar="true"] [class^="nL4_yW_"], 
+[data-bf-navbar="true"] [class*=" nL4_yW_"] {
+  --dsw-alias-label-primary: ${WHITE} !important;
+  --dsw-alias-label-secondary: ${WHITE_SEC} !important;
+}
+
+
+/* ══════════════════════════════════════════════════════════════════
+   MAIN WORKSPACE — wSkVaW hash — light blue-grey area
+   ══════════════════════════════════════════════════════════════════ */
+
+.wSkVaW_workspace {
+  background: ${LIGHT_BG} !important;
+  --dsw-alias-bg-base: ${LIGHT_BG} !important;
+  --dsw-alias-bg-layer-1: ${LIGHT_BG} !important;
+  --dsw-alias-bg-layer-2: ${LIGHT_CARD} !important;
+  --dsw-alias-label-primary: ${DARK_TEXT} !important;
+  --dsw-alias-label-secondary: ${DARK_SEC} !important;
+  --dsw-alias-border-l2: rgba(13,17,23,0.12) !important;
+}
+
+.wSkVaW_chat, .wSkVaW_scrollBody {
+  background: ${LIGHT_BG} !important;
+}
+
+/* Tab bar */
+.wSkVaW_tab {
+  color: ${DARK_SEC} !important;
+}
+.wSkVaW_tabActive {
+  color: ${DARK_TEXT} !important;
+  font-weight: 500 !important;
+}
+
+/* ══════════════════════════════════════════════════════════════════
+   COMPOSER — uV2eYG hash — clean white card at the bottom
+   ══════════════════════════════════════════════════════════════════ */
+
+[class^="uV2eYG_"], [class*=" uV2eYG_"] {
+  --dsw-alias-label-primary: ${DARK_TEXT} !important;
+  --dsw-alias-label-secondary: ${DARK_SEC} !important;
+  --dsw-alias-bg-base: #FFFFFF !important;
+  --dsw-alias-bg-layer-1: #FFFFFF !important;
+  --dsw-alias-border-l2: rgba(13,17,23,0.15) !important;
+}
+
+.uV2eYG_input,
+textarea.uV2eYG_input {
+  background: #FFFFFF !important;
+  border: 1px solid rgba(13,17,23,0.15) !important;
+  border-radius: 14px !important;
+  color: ${DARK_TEXT} !important;
+  /* webkit-text-fill-color wins over inherited color in Chrome/Electron */
+  -webkit-text-fill-color: ${DARK_TEXT} !important;
+}
+textarea.uV2eYG_input::placeholder {
+  color: rgba(13,17,23,0.40) !important;
+  -webkit-text-fill-color: rgba(13,17,23,0.40) !important;
+}
+
+/* ═══════════════════════════════════════════════════════════════════════
+   EGRESS MONITOR PANEL — solid white card, DARK text
+   ═══════════════════════════════════════════════════════════════════════ */
+
+section[aria-label="Egress monitor"] {
+  background: #FFFFFF !important;
+  border: 1px solid rgba(13,17,23,0.15) !important;
+  border-radius: 12px !important;
+  box-shadow: 0 8px 24px rgba(0,0,0,0.18) !important;
+  color: ${DARK_TEXT} !important;
+  /* Override CSS vars so components inside render dark text */
+  --dsw-alias-label-primary: ${DARK_TEXT} !important;
+  --dsw-alias-label-secondary: ${DARK_SEC} !important;
+  --dsw-alias-bg-base: #FFFFFF !important;
+  --dsw-alias-bg-layer-1: #FFFFFF !important;
+}
+/* All text inside egress panel = dark. NO wildcard on nested react trees. */
+section[aria-label="Egress monitor"] > *,
+section[aria-label="Egress monitor"] p,
+section[aria-label="Egress monitor"] span,
+section[aria-label="Egress monitor"] strong,
+section[aria-label="Egress monitor"] li,
+section[aria-label="Egress monitor"] h1,
+section[aria-label="Egress monitor"] h2,
+section[aria-label="Egress monitor"] h3,
+section[aria-label="Egress monitor"] h4,
+section[aria-label="Egress monitor"] label,
+section[aria-label="Egress monitor"] a {
+  color: ${DARK_TEXT} !important;
+}
+section[aria-label="Egress monitor"] a { color: #0057B8 !important; }
+section[aria-label="Egress monitor"] button { color: ${DARK_TEXT} !important; }
+
+/* ═══════════════════════════════════════════════════════════════════════
+   SETTINGS MODAL — solid white card, dark text
+   ═══════════════════════════════════════════════════════════════════════ */
+
+/* Target the settings overlay ONLY when it has role="dialog" or sits inside it
+   so we don't accidentally turn the sidebar Settings button white */
+[role="dialog"][aria-label="Settings"],
+[role="dialog"] [class*="settingsPanel"],
+[role="dialog"] [class*="SettingsPanel"],
+[role="dialog"] [class*="settingsModal"],
+[role="dialog"] [class*="SettingsModal"] {
+  background: #FFFFFF !important;
+  --dsw-alias-bg-base: #FFFFFF !important;
+  --dsw-alias-bg-layer-1: #FFFFFF !important;
+  --dsw-alias-bg-layer-2: #F5F6F8 !important;
+  --dsw-alias-label-primary: ${DARK_TEXT} !important;
+  --dsw-alias-label-secondary: ${DARK_SEC} !important;
+  --dsw-alias-label-tertiary: rgba(13,17,23,0.40) !important;
+  --dsw-alias-label-dimmed: rgba(13,17,23,0.25) !important;
+}
+/* The settings dialog that opens when you click Settings icon.
+   It has role=dialog but we only override background, NOT all child colors
+   because that breaks dark subcomponents like the Appearance picker. */
+[role="dialog"] {
+  background: #FFFFFF !important;
+  --dsw-alias-bg-base: #FFFFFF !important;
+  --dsw-alias-bg-layer-1: #FFFFFF !important;
+  --dsw-alias-bg-layer-2: #F5F6F8 !important;
+  --dsw-alias-label-primary: ${DARK_TEXT} !important;
+  --dsw-alias-label-secondary: ${DARK_SEC} !important;
+  --dsw-alias-label-tertiary: rgba(13,17,23,0.40) !important;
+  --dsw-alias-label-dimmed: rgba(13,17,23,0.25) !important;
+}
+
+/* ═══════════════════════════════════════════════════════════════════════
+   DARK MODE OVERRIDES — apply when body[data-ds-dark-theme] is active
+   ═══════════════════════════════════════════════════════════════════════ */
+
+/* 1. Main Workspace & Chat */
+body[data-ds-dark-theme] .wSkVaW_workspace,
+body[data-ds-dark-theme] .wSkVaW_chat,
+body[data-ds-dark-theme] .wSkVaW_scrollBody {
+  background: #0d1117 !important;
+  --dsw-alias-bg-base: #0d1117 !important;
+  --dsw-alias-bg-layer-1: #0d1117 !important;
+  --dsw-alias-bg-layer-2: #161b22 !important;
+  --dsw-alias-label-primary: ${WHITE} !important;
+  --dsw-alias-label-secondary: ${WHITE_SEC} !important;
+  --dsw-alias-border-l2: rgba(255,255,255,0.15) !important;
+  color: ${WHITE} !important;
+}
+
+body[data-ds-dark-theme] .wSkVaW_tab {
+  color: ${WHITE_SEC} !important;
+}
+body[data-ds-dark-theme] .wSkVaW_tabActive {
+  color: ${WHITE} !important;
+}
+
+/* 2. Composer / Input */
+body[data-ds-dark-theme] [class^="uV2eYG_"], 
+body[data-ds-dark-theme] [class*=" uV2eYG_"] {
+  --dsw-alias-bg-base: #161b22 !important;
+  --dsw-alias-bg-layer-1: #161b22 !important;
+  --dsw-alias-label-primary: ${WHITE} !important;
+  --dsw-alias-label-secondary: ${WHITE_SEC} !important;
+  --dsw-alias-border-l2: rgba(255,255,255,0.15) !important;
+}
+
+body[data-ds-dark-theme] .uV2eYG_input {
+  background: #161b22 !important;
+  border-color: rgba(255,255,255,0.15) !important;
+  color: ${WHITE} !important;
+}
+/* Dark mode — textarea IS the .uV2eYG_input, override with full specificity */
+body[data-ds-dark-theme] textarea.uV2eYG_input,
+body[data-ds-dark-theme] .uV2eYG_input {
+  color: ${WHITE} !important;
+  -webkit-text-fill-color: ${WHITE} !important;
+}
+body[data-ds-dark-theme] textarea.uV2eYG_input::placeholder {
+  color: rgba(255,255,255,0.40) !important;
+  -webkit-text-fill-color: rgba(255,255,255,0.40) !important;
+}
+
+/* 3. Settings Modal */
+body[data-ds-dark-theme] [role="dialog"],
+body[data-ds-dark-theme] [role="dialog"][aria-label="Settings"],
+body[data-ds-dark-theme] [role="dialog"] [class*="settingsPanel"],
+body[data-ds-dark-theme] [role="dialog"] [class*="SettingsPanel"],
+body[data-ds-dark-theme] [role="dialog"] [class*="settingsModal"],
+body[data-ds-dark-theme] [role="dialog"] [class*="SettingsModal"] {
+  background: #161b22 !important;
+  --dsw-alias-bg-base: #161b22 !important;
+  --dsw-alias-bg-layer-1: #161b22 !important;
+  --dsw-alias-bg-layer-2: #0d1117 !important;
+  --dsw-alias-label-primary: ${WHITE} !important;
+  --dsw-alias-label-secondary: ${WHITE_SEC} !important;
+  --dsw-alias-label-tertiary: rgba(255,255,255,0.40) !important;
+  --dsw-alias-label-dimmed: rgba(255,255,255,0.25) !important;
+  --dsw-alias-border-l2: rgba(255,255,255,0.15) !important;
+  color: ${WHITE} !important;
+}
+
+/* 4. Egress Panel */
+body[data-ds-dark-theme] section[aria-label="Egress monitor"] {
+  background: #161b22 !important;
+  border-color: rgba(255,255,255,0.15) !important;
+  color: ${WHITE} !important;
+  --dsw-alias-bg-base: #161b22 !important;
+  --dsw-alias-bg-layer-1: #161b22 !important;
+  --dsw-alias-label-primary: ${WHITE} !important;
+  --dsw-alias-label-secondary: ${WHITE_SEC} !important;
+}
+body[data-ds-dark-theme] section[aria-label="Egress monitor"] *,
+body[data-ds-dark-theme] section[aria-label="Egress monitor"] p,
+body[data-ds-dark-theme] section[aria-label="Egress monitor"] span,
+body[data-ds-dark-theme] section[aria-label="Egress monitor"] button {
+  color: ${WHITE} !important;
+}
+body[data-ds-dark-theme] section[aria-label="Egress monitor"] a {
+  color: #58a6ff !important;
+}
+
+`;
+
+			const styleEl = document.createElement("style");
+			styleEl.id = STYLE_ID;
+			styleEl.textContent = css;
+			document.head.appendChild(styleEl);
+
+			// ── JS navbar tagger ────────────────────────────────────────────────
+			// CSS can't target a parent element, so we walk up from a known child
+			// (.wSkVaW_tab) to find the session-header container and stamp it with
+			// [data-bf-navbar="true"] so the CSS rule above applies navy bg + white text.
+			function tagNavbar() {
+				// Anchor: the tab element (Chat / Trajectory / Provenance tabs)
+				const tab = document.querySelector(".wSkVaW_tab, .wSkVaW_tabActive");
+				if (!tab) return;
+
+				// The tab's direct parent IS the tab bar row — tag it [data-bf-tabrow]
+				const tabRow = tab.parentElement;
+				if (tabRow && !tabRow.hasAttribute("data-bf-tabrow")) {
+					tabRow.setAttribute("data-bf-tabrow", "true");
+				}
+
+				// Walk up from the tabRow to find the workspace container,
+				// then tag its FIRST child (the session title header) as [data-bf-navbar].
+				let el = tabRow || tab;
+				while (el && el !== document.body) {
+					const parent = el.parentElement;
+					if (!parent) break;
+					const pc = parent.className || "";
+					if (pc.includes("wSkVaW_workspace")) {
+						// Tag the first child of workspace as the navbar
+						const firstChild = parent.firstElementChild;
+						if (firstChild && firstChild !== el && !firstChild.hasAttribute("data-bf-navbar")) {
+							firstChild.setAttribute("data-bf-navbar", "true");
+						}
+						break;
+					}
+					el = parent;
+				}
+
+				// Fallback: tag any element holding nL4_yW_ buttons as navbar
+				const logBtn = document.querySelector("[class*='nL4_yW_']");
+				if (logBtn) {
+					let actionEl = logBtn.parentElement;
+					for (let i = 0; i < 5 && actionEl && actionEl !== document.body; i++) {
+						const rect = actionEl.getBoundingClientRect();
+						if (rect.top < 80 && rect.width > 400 && rect.height < 120) {
+							if (!actionEl.hasAttribute("data-bf-navbar")) {
+								actionEl.setAttribute("data-bf-navbar", "true");
+							}
+							break;
+						}
+						actionEl = actionEl.parentElement;
+					}
+				}
+			}
+
+			// Run once immediately (in case React already rendered)
+			tagNavbar();
+			// Re-run on DOM mutations (React re-renders on route changes)
+			const navObserver = new MutationObserver(() => tagNavbar());
+			navObserver.observe(document.body, { childList: true, subtree: true });
+			// ── end navbar tagger ────────────────────────────────────────────────
+
+			return () => {
+				styleEl.remove();
+				navObserver.disconnect();
+				// Clean up data-bf-navbar attributes
+				document.querySelectorAll("[data-bf-navbar],[data-bf-tabrow]").forEach(el => { el.removeAttribute("data-bf-navbar"); el.removeAttribute("data-bf-tabrow"); });
+			};
+		}
+
+		/**
 		 * Hold the tab title against the harness, which rewrites it after hydration.
 		 *
 		 * `@deepseek-ai/dsh-client-ui-renderer` renders a `DocumentTitle` component
@@ -1765,6 +2292,7 @@ window.__ModuleLoader__.load({
 					disposeEgressEvents?.();
 				};
 			}
+			const disposeTheme = injectThemeStyle();
 			const disposeTabTitle = holdTabTitle();
 			const TaskTypeIndicator = buildTaskTypeIndicator();
 			const ProviderDisclosure = buildProviderDisclosure();
@@ -1881,6 +2409,7 @@ window.__ModuleLoader__.load({
 				return () => { dispose(); };
 			});
 			return () => {
+				disposeTheme();
 				disposeTabTitle();
 				disposeSidebarMark();
 				disposeHeroMark();
