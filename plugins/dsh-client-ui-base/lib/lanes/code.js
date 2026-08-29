@@ -83,6 +83,16 @@ export const CODE_LANE_SYSTEM_PROMPT = [
 	"the bare answer with no label, no units and no surrounding words.",
 	"`expected` is exactly that final value, as a string.",
 	"",
+	// Each of these three exists because the model got it wrong in a measured run
+	// (`npm run evaluate`, 30 August 2026), and each is a general reading rule
+	// rather than an answer. Nothing here tells it a conversion factor or a
+	// formula — that would be teaching to the fixtures instead of to the task.
+	"Read the task exactly before writing anything:",
+	"- If it says count, count the items. If it says sum, add them. These are different.",
+	"- Get the direction of a difference right: loss or reduction from a nominal value is",
+	"  nominal minus measured, and a loss is reported as a positive number.",
+	"- If the task asks for rounding or a number of decimal places, apply it in the code.",
+	"",
 	"Example, for the task 'sum the integers from 1 to 100':",
 	'{"code": "print(sum(range(1, 101)))", "description": "Sums the integers from 1 to 100.", "expected": "5050"}',
 ].join("\n");
