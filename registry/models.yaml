@@ -1,68 +1,101 @@
 # The fleet — one file declares every model Blind Flange knows about.
 #
-# CONTEXT.md "Fleet": the set of open-weight models installed on the box.
+# CONTEXT.md "Fleet": the set of open-weight models **installed on the box**.
 # Story 3.3 makes this the single source the UI model list, the router
 # (Stories 3.5-3.6) and the licence loader (Story 3.4) all read from, so
 # "how do you add a model?" is answered by editing this file and nothing else.
 #
-# Phase 0 runs on the `replay` provider and downloads no weights. These
-# entries are still real models with real licences: the declaration drives
-# the UI list, the router score and the licence gate whether or not a
-# weight file is ever fetched (Story 3.3, third acceptance block).
+# The three 7B members declared here through 29 August 2026 were removed on the
+# 30th, when the model plane stopped being replayed. They were honest
+# declarations under `replay`, which downloads no weights — but the only GPU is
+# a GTX 1650 Ti with about 3.7 GB free, and a 7B model at Q4 needs more than
+# that for its weights alone. Declaring a model the box cannot run made the
+# router's decision fiction. The fleet now names what is actually on disk.
 #
-# LICENCE POLICY (docs/licence-policy.md): only Apache-2.0, MIT,
-# BSD-2-Clause and BSD-3-Clause ship. `Qwen/Qwen2.5-3B-Instruct` is
-# declared here *specifically so the loader can refuse it* (Story 3.4) —
-# it is the same family, publisher and release as the 7B, under a
-# different licence, so the refusal is checkable in ten seconds.
+# LICENCE POLICY (docs/licence-policy.md): eleven enumerated names, widened
+# from four by ADR-0006 — Apache-2.0, MIT, BSD-2-Clause, BSD-3-Clause, ISC,
+# 0BSD, Python-2.0, MIT-CMU, BSL-1.0, Zlib, CC0-1.0. Widening the list again is
+# an ADR-level decision, never a judgement call at the point of use.
 #
-# Each `licence` below was re-verified on 28 August 2026 by reading the
-# licence text in the model repository at the exact `revision` pinned here
-# (NFR1) — not from a blog post, not from this project's own tables:
-#   - Qwen2.5-7B-Instruct       LICENSE file  -> "Apache License, Version 2.0"
-#   - Qwen2.5-Coder-7B-Instruct LICENSE file  -> "Apache License, Version 2.0"
-#   - Qwen2.5-3B-Instruct       LICENSE file  -> "Qwen RESEARCH LICENSE AGREEMENT"
-#   - Qwen2.5-VL-7B-Instruct    no LICENSE file exists at any revision; the
-#     `license: apache-2.0` field in README.md YAML frontmatter at the
-#     pinned revision is the repository's primary licence declaration
-#     (recorded decision, 28 August 2026 — see docs/licence-policy.md).
+# Two members are declared *specifically so the loader refuses them* (Story
+# 3.4). Both are the same publisher and release as a permitted member under a
+# different licence, so each refusal is checkable in ten seconds.
 #
-# No embedder or reranker is declared: retrieval is past the Phase 0 cut
-# line, and declaring unused members would mean verifying licences we do
-# not need (Story 3.3).
+# `runtime_id` is the key under `models:` in llama-swap's own config. It is what
+# lets the router's decision reach an actual model: the router selects a fleet
+# member by `name`, dispatch resolves that to a `runtime_id`, and llama-swap
+# loads it — evicting whatever else was resident, because one model at a time is
+# its default and 3.7 GB does not hold two. A refused member has no
+# `runtime_id`, because it never runs.
+#
+# Each `licence` below was verified by reading the licence text or the model
+# card in the model repository at the exact `revision` pinned here (NFR1) — not
+# from a blog post, not from this project's own tables. Verified 30 August 2026:
+#   - Qwen2.5-Coder-1.5B-Instruct  LICENSE file -> "Apache License, Version 2.0"
+#   - Qwen3-VL-2B-Instruct         no LICENSE file exists at the pinned revision
+#     (HTTP 404); `license: apache-2.0` in README.md YAML frontmatter is the
+#     repository's primary declaration. This is the same situation as the
+#     removed Qwen2.5-VL-7B entry and rides the same recorded decision of
+#     28 August 2026 — see docs/licence-policy.md.
+#   - Qwen2.5-3B-Instruct          LICENSE file -> "Qwen RESEARCH LICENSE AGREEMENT"
+#   - Qwen2.5-Coder-3B-Instruct    LICENSE file -> "Qwen RESEARCH LICENSE AGREEMENT",
+#     same document, same 19 September 2024 release date as the 3B above.
+#
+# No embedder or reranker is declared: retrieval is past the Phase 0 cut line,
+# and declaring unused members would mean verifying licences we do not need.
+#
+# NOTE ON SHAPE: `lib/registry/fleet.js` parses the subset of YAML this file
+# uses — one `fleet:` sequence of maps whose values are quoted strings, inline
+# `[a, b]` arrays, or bare scalars. Block scalars (`>` and `|`) are NOT
+# supported, so prose belongs in comments like this one, not in a value.
 
 fleet:
-  - name: Qwen/Qwen2.5-7B-Instruct
-    role: general reasoner
-    licence: Apache-2.0
-    licence_source: LICENSE file at the pinned revision
-    revision: a09a35458c702b33eeacc393d103063234e8bc28
-    size: 7B
-    context: 32768
-    modalities: [text]
-    capabilities: [general-reasoning, instruction-following, tool-use]
-
-  - name: Qwen/Qwen2.5-Coder-7B-Instruct
+  # Serves the `code` and `calculation` task types.
+  #
+  # 1.04 GiB on disk at Q4_K_M. Text-only, and that is a feature rather than a
+  # shortcoming: it makes the router's modality gate produce a real exclusion
+  # reason for the drawing lane instead of a decorative one.
+  #
+  # It writes Python, not PowerShell — measured 6/9 runnable against 0/9, see
+  # .scratch/local-inference-lanes/issues/08. 1.5B is the smallest Apache-2.0
+  # member of the Coder family; the 3B is research-licensed and is declared
+  # further down as a refusal case.
+  - name: Qwen/Qwen2.5-Coder-1.5B-Instruct
     role: coder
+    runtime_id: bf-coder
     licence: Apache-2.0
     licence_source: LICENSE file at the pinned revision
-    revision: c03e6d358207e414f1eca0bb1891e29f1db0e242
-    size: 7B
+    revision: 2e1fd397ee46e1388853d2af2c993145b0f1098a
+    size: 1.5B
+    quantisation: Q4_K_M
     context: 32768
+    runtime_context: 8192
     modalities: [text]
-    capabilities: [code-generation, code-reasoning, tool-use]
-    note: serves the sandboxed coding task
+    capabilities: [code-generation, code-reasoning, tool-use, general-reasoning, instruction-following]
 
-  - name: Qwen/Qwen2.5-VL-7B-Instruct
+  # Serves the `document` and `drawing` task types.
+  #
+  # 1.03 GiB at Q4_K_M plus a 424 MiB Q8_0 vision projector. The document lane
+  # feeds it OCR text rather than a page image, so it usually runs as a text
+  # model and pays no vision-encoder cost at all; the image path stays
+  # available for drawings.
+  #
+  # `context` is the model's native window. `runtime_context` is what
+  # llama-swap actually starts it with, because a KV cache for 262144 tokens
+  # does not fit in this card — the UI must not offer the larger number as if
+  # it were available.
+  - name: Qwen/Qwen3-VL-2B-Instruct
     role: vision-document
+    runtime_id: bf-vision
     licence: Apache-2.0
     licence_source: README.md YAML frontmatter at the pinned revision (no LICENSE file in repo)
-    revision: cc594898137f460bfe9f0759e9844b3ce807cfb5
-    size: 7B
-    context: 128000
+    revision: 89644892e4d85e24eaac8bacfd4f463576704203
+    size: 2B
+    quantisation: Q4_K_M
+    context: 262144
+    runtime_context: 8192
     modalities: [text, image]
-    capabilities: [document-understanding, drawing-understanding, visual-grounding]
-    note: serves the document and drawing task types
+    capabilities: [document-understanding, drawing-understanding, visual-grounding, general-reasoning, instruction-following, tool-use]
 
   - name: Qwen/Qwen2.5-3B-Instruct
     role: none
@@ -74,3 +107,19 @@ fleet:
     modalities: [text]
     capabilities: [general-reasoning]
     note: "declared so the loader can refuse it (Story 3.4) — the Qwen Research Licence is outside the allow-list"
+
+  # The sharper refusal case, added 30 August 2026. The Coder family is
+  # Apache-2.0 at 0.5B, 1.5B, 7B, 14B and 32B — and 3B alone is not. So the size
+  # an engineer reaches for when 1.5B feels too small is the one banned member of
+  # the family, and the gate catches it by name rather than by anyone
+  # remembering.
+  - name: Qwen/Qwen2.5-Coder-3B-Instruct
+    role: none
+    licence: Qwen Research Licence
+    licence_source: LICENSE file at the pinned revision
+    revision: 488639f1ff808d1d3d0ba301aef8c11461451ec5
+    size: 3B
+    context: 32768
+    modalities: [text]
+    capabilities: [code-generation, code-reasoning]
+    note: "declared so the loader can refuse it — the one non-Apache member of the Coder family"

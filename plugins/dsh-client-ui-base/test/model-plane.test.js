@@ -361,12 +361,12 @@ test("createLlmAdapter satisfies the duck-typed registerAdapter contract without
 	assert.equal(adapter.providerRetryPolicy("replay"), undefined);
 
 	// listModels now reads the fleet from registry/models.yaml (Story 3.3): the
-	// three allowed members, attributed to the provider, with the Qwen Research
-	// member filtered out.
+	// allowed members, attributed to the provider, with both Qwen Research
+	// members filtered out.
 	const listed = await adapter.listModels("replay");
 	assert.deepEqual(
 		listed.map((m) => m.id),
-		["Qwen/Qwen2.5-7B-Instruct", "Qwen/Qwen2.5-Coder-7B-Instruct", "Qwen/Qwen2.5-VL-7B-Instruct"],
+		["Qwen/Qwen2.5-Coder-1.5B-Instruct", "Qwen/Qwen3-VL-2B-Instruct"],
 	);
 	assert.ok(listed.every((m) => m.provider === "replay"));
 

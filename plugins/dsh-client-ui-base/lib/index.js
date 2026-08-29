@@ -78,6 +78,7 @@ import { createLlmAdapter } from "./model-plane/llm-adapter.js";
 import { createModelProvider } from "./model-plane/model-provider.js";
 import { loadFleet } from "./registry/loader.js";
 import { classifyRequest, lastUserText } from "./router/classify.js";
+import { recordRoutingDecision } from "./router/dispatch.js";
 import { scoreFleet } from "./router/score.js";
 import { registerKnownSessionEventTypes } from "./session-events/known-types.js";
 
@@ -243,6 +244,12 @@ function classifyAndRoute(agent, turn, step, messages) {
 	try {
 		const routing = scoreFleet(classification.taskType, loadFleet().loaded);
 		agent.session.append(ROUTED_EVENT, { turn, step, ...routing });
+		// The decision has to reach the model call, which happens later in the
+		// harness's LLM adapter with no session in scope. Recording it here is
+		// what makes Story 3.8's "the model changes by itself" true of the
+		// inference path and not only of the chip — see `router/dispatch.js` for
+		// why this is a memo rather than a read-back off the session log.
+		recordRoutingDecision(routing, turn);
 	} catch (error) {
 		console.warn(`@blind-flange/dsh-client-ui-base: fleet not scored — ${error instanceof Error ? error.message : String(error)}`);
 	}

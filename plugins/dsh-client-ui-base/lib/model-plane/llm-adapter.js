@@ -24,6 +24,7 @@
  */
 
 import { announceRefusals, loadFleet } from "../registry/loader.js";
+import { runtimeModelForCurrentTurn } from "../router/dispatch.js";
 
 /** Exact model identity this adapter reports; nothing here validates against a catalog (advisory only, per the harness's own contract). */
 async function resolveModel(provider, model) {
@@ -76,13 +77,47 @@ function fleetModels(provider) {
  * @param {import("./model-provider.js").ModelProvider} modelProvider
  * @param {{ messages: unknown[] }} options
  */
+/**
+ * The runtime model this turn should be answered by, from the router's decision.
+ *
+ * Resolved here because this is the last point before the provider is called and
+ * the first point where the decision and the fleet are both reachable. Never
+ * throws and never blocks a turn: a dispatch that cannot resolve leaves `model`
+ * undefined, and the provider falls back to its configured default. The reason
+ * is logged rather than swallowed, because a silent fallback looks exactly like
+ * a routing decision.
+ *
+ * `replay` ignores `model` entirely, so this is inert under the replay provider
+ * and its tests are unaffected.
+ */
+function dispatchForTurn() {
+	try {
+		const dispatch = runtimeModelForCurrentTurn(loadFleet().loaded);
+		if (dispatch.runtimeId === null && dispatch.reason !== "no-routing-decision") {
+			console.warn(
+				`@blind-flange/dsh-client-ui-base: routing decision not dispatched (${dispatch.reason}` +
+					`${dispatch.member ? `, member "${dispatch.member}"` : ""}) — falling back to the provider's default model`,
+			);
+		}
+		return dispatch;
+	} catch (error) {
+		console.warn(`@blind-flange/dsh-client-ui-base: dispatch not resolved — ${error instanceof Error ? error.message : String(error)}`);
+		return { runtimeId: null, member: null, reason: "dispatch-failed" };
+	}
+}
+
 async function* streamImpl(modelProvider, options) {
+	const dispatch = dispatchForTurn();
 	let index = -1;
 	let openTextIndex = -1;
 	let openText = "";
 	let sawToolCall = false;
 	try {
-		for await (const piece of modelProvider.answer({ messages: options.messages })) {
+		// The widened request (ADR-0001's seam): `model` is what makes the
+		// router's decision reach an actual model. `undefined` means "use the
+		// provider's default", which is what an unroutable turn and every replay
+		// turn both want.
+		for await (const piece of modelProvider.answer({ messages: options.messages, model: dispatch.runtimeId ?? undefined })) {
 			if (piece.type === "text") {
 				if (piece.text.length === 0) continue;
 				if (openTextIndex === -1) {

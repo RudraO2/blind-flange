@@ -109,15 +109,19 @@ test("allowedFleet drops the disallowed-licence member", () => {
 	});
 });
 
-test("the shipped registry/models.yaml declares exactly the Phase 0 fleet with the story's licences", () => {
+test("the shipped registry/models.yaml declares exactly the fleet on this box, with its licences", () => {
 	const fleet = readFleet();
+	// Changed 30 August 2026: the three 7B members were removed when the model
+	// plane stopped being replayed. They were honest under `replay`, which
+	// downloads no weights, but a 7B at Q4 does not fit in 3.7 GB of VRAM, so
+	// declaring them made the router's decision fiction.
 	assert.deepEqual(
 		fleet.map((m) => [m.name, m.licence]),
 		[
-			["Qwen/Qwen2.5-7B-Instruct", "Apache-2.0"],
-			["Qwen/Qwen2.5-Coder-7B-Instruct", "Apache-2.0"],
-			["Qwen/Qwen2.5-VL-7B-Instruct", "Apache-2.0"],
+			["Qwen/Qwen2.5-Coder-1.5B-Instruct", "Apache-2.0"],
+			["Qwen/Qwen3-VL-2B-Instruct", "Apache-2.0"],
 			["Qwen/Qwen2.5-3B-Instruct", "Qwen Research Licence"],
+			["Qwen/Qwen2.5-Coder-3B-Instruct", "Qwen Research Licence"],
 		],
 	);
 	for (const member of fleet) {
@@ -128,9 +132,23 @@ test("the shipped registry/models.yaml declares exactly the Phase 0 fleet with t
 	}
 });
 
-test("the shipped registry omits the disallowed member from the model list, keeps the three that load", () => {
+test("a member that runs declares what it actually runs as, so the UI cannot overstate its context", () => {
+	// `context` is the model's native window; `runtime_context` is what llama-swap
+	// starts it with. The vision member's native window is 262144 tokens and a KV
+	// cache that size does not fit on this card, so the two numbers must differ
+	// and both must be present rather than the larger one standing alone.
+	const runnable = readFleet().filter((m) => m.runtime_id !== undefined);
+	assert.equal(runnable.length, 2);
+	for (const member of runnable) {
+		assert.equal(typeof member.quantisation, "string", `${member.name} declares its quantisation`);
+		assert.ok(member.runtime_context > 0, `${member.name} declares the context it is actually started with`);
+		assert.ok(member.runtime_context <= member.context, `${member.name} cannot be run with more context than it has`);
+	}
+});
+
+test("the shipped registry omits both disallowed members from the model list", () => {
 	assert.deepEqual(
 		allowedFleet().map((m) => m.name),
-		["Qwen/Qwen2.5-7B-Instruct", "Qwen/Qwen2.5-Coder-7B-Instruct", "Qwen/Qwen2.5-VL-7B-Instruct"],
+		["Qwen/Qwen2.5-Coder-1.5B-Instruct", "Qwen/Qwen3-VL-2B-Instruct"],
 	);
 });

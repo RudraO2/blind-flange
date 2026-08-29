@@ -146,6 +146,18 @@
       ]
     },
     {
+      "ecosystem": "model",
+      "component": "Qwen/Qwen2.5-Coder-3B-Instruct",
+      "licence": "Qwen Research Licence",
+      "decision": "refused",
+      "recorded": "2026-08-30",
+      "reason": "The second deliberate refusal case, and a sharper one than Qwen2.5-3B. The Coder family is Apache-2.0 at 0.5B, 1.5B, 7B, 14B and 32B — 3B alone is not. So the size an engineer reaches for when the shipped 1.5B feels too small is the one banned member of its own family, and the gate has to catch it by name rather than by anyone remembering. Read from the LICENSE file at revision 488639f1ff808d1d3d0ba301aef8c11461451ec5: 'Qwen RESEARCH LICENSE AGREEMENT, Release Date: September 19, 2024', granting rights for non-commercial purposes only, where non-commercial means research or evaluation. Same document and release date as the Qwen2.5-3B refusal above. Hub metadata agrees rather than claiming Apache-2.0: license is 'other' and license_name is 'qwen-research'. It never loads, and the refusal is the evidence.",
+      "evidence": [
+        "plugins/dsh-client-ui-base/lib/registry/loader.js",
+        "plugins/dsh-client-ui-base/test/loader.test.js"
+      ]
+    },
+    {
       "ecosystem": "bundled",
       "component": "libvips",
       "licence": "LGPL-3.0-or-later",
