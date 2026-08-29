@@ -30,7 +30,7 @@
 # - Dev moves story to 'review', then runs code-review (fresh context, different LLM recommended)
 # - Retrospective appends its action items to action_items; the status view surfaces open ones
 generated: 08-28-2026 14:30
-last_updated: 2026-08-28
+last_updated: 2026-08-29
 project: Blind Flange
 project_key: NOKEY
 tracking_system: file-system
@@ -87,6 +87,11 @@ development_status:
   6-4-the-licence-claim-is-safe-to-make: done
   6-5-a-recorded-offline-run-exists: done
   epic-6-retrospective: optional
+
+  epic-8: backlog
+  8-1-the-agents-findings-render-as-something-you-can-read-at: backlog
+  8-2-a-workspace-file-is-attached-by-naming-it: backlog
+  epic-8-retrospective: optional
 
   epic-7: deferred
   7-1-local-and-replay-provider-onboarding-replaces-the-api-key-mo: deferred

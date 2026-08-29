@@ -52,6 +52,8 @@ rather than guessing.
   acceptance criteria** section, which applies to every story
 - `docs/deepseek-harness-notes.md` — only if the story touches the harness. It is verified from
   source, so trust it instead of exploring
+- **If your story is in Epic 8:** that epic's **adoption gate** section, and its **Rejected**
+  table. The table exists so nobody re-researches a plugin that was already turned down
 
 That is the whole reading list. Do not read the ADRs, `HANDOFF.md` or `blind-flange.html` unless
 the story sends you there.
@@ -99,8 +101,12 @@ Rules while building:
 
 - **Extend, do not fork.** Harness changes are `cordis.patch.yml` rows and out-of-tree plugin
   packages. Never edit harness source.
-- **Licences:** Apache-2.0, MIT, BSD-2-Clause, BSD-3-Clause. Nothing else. **`PyMuPDF` is
-  AGPL-3.0 — never use it**; use `pypdfium2`.
+- **Licences:** the eleven names enumerated in `docs/licence-policy.md`. Read that file — do
+  not recite the list from memory. It went from two names to four and then to eleven on
+  28 Aug 2026 (ADR-0005, then ADR-0006), so anything you remember is probably stale. Widening
+  it again is an ADR-level decision, never a judgement call made at the point of use, and
+  **copyleft is never admitted by widening**. Run `npm run licence-audit` before you add
+  anything. **`PyMuPDF` is AGPL-3.0 — never use it**; use `pypdfium2`.
 - **No fake panels.** A panel that animates with no real event behind it is a bug. Only token
   generation is replayed.
 - **UI from the primitives** — `@deepseek-ai/dsh-client-ui-primitives` and `ui-theme` tokens. No
@@ -111,6 +117,31 @@ Rules while building:
 the recorded fallback or escalate. Do not grind. (4.2, the OCR proof, is already done and
 passed twice: `services/ingestion/proof/PROOF.md` for Tesseract and `PROOF-RAPIDOCR.md` for
 the engine that replaced it.)
+
+### Epic 8 stories work differently — read this before building one
+
+Epic 8 adopts plugins we did not write. Its stories are not "build a component"; they are "put
+someone else's component through four gates". The gates live in the **adoption gate** section at
+the top of Epic 8 in `epics.md` and are not repeated in each story — treat them as acceptance
+criteria that every Epic 8 story carries silently.
+
+The parts that are cheap to skip and expensive to have skipped:
+
+- **`npm run licence-audit` is the evidence.** Not the repo's licence badge, not a GitHub API
+  response — those cover one package and the audit walks the whole transitive tree. Every new
+  component lands in `docs/licence-decisions.json` with its evidence, and
+  `THIRD_PARTY_NOTICES.md` is updated in the same commit.
+- **Pin an exact version** — a tag or a commit, never a branch and never a range. This ecosystem
+  is two weeks old and ships daily.
+- **Install through the profile bundle channel:** `dsh plugin --profile web add <pkg>@<version>`.
+  No vendored copy of a third-party plugin enters this repo, and no harness source is edited.
+- **Fire the canary afterwards.** An adopted plugin that reaches the network fails the gate
+  outright, and the egress monitor must still read a counted zero once it is mounted.
+- **Both themes, as always** — but here it is the likeliest failure. A third-party component that
+  ships its own palette fails the gate however good it looks in dark.
+- **The escape hatches in Epic 8 stories are real instructions.** Every one of them is polish on
+  a demonstrable that already works without it. If a gate fails, take the hatch, record why, and
+  stop. Do not patch a third-party plugin to get it through a gate.
 
 **If the story needs a decision nothing in the repo records, stop and ask.** Do not invent one.
 

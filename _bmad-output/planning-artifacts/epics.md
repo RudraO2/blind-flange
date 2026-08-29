@@ -175,16 +175,25 @@ Seven epics. **Build order is 1 → 7. Demo order is different and starts at Epi
 are two lists and merging them for tidiness was a mistake caught in review. See "Build order
 is not demo order" below.
 
-### Build order — set 28 August 2026
+**Epic 8 was added on 29 Aug 2026** and is not part of that count or that build order. It is
+a P1 epic for adopting plugins from the DSH ecosystem, deliberately left open so a later
+adoption is a new story there rather than a reopened plan. It sits behind Epic 6 — nothing
+in it is worth a P0 requirement going unbuilt.
+
+### Build order — set 28 August 2026, updated 29 August 2026
 
 Epics are not built in numerical order. The remaining sequence is:
 
-**3.9 → 3.10 → 4.5 → 6**
+**6.3 → 8.1 → 8.2**
 
-Updated 28 Aug 2026. Epics 2, 3 and 5 are otherwise complete. Stories 3.9 and 3.10 come first
-because they are correctness defects on work already accepted: without 3.9 a reloaded session is
-dead and Story 6.5's recorded run cannot be reopened; without 3.10 the first prompt of the demo
-routes wrong. Both were found during Epic 5 verification and wrongly filed as deferred work.
+Updated 29 Aug 2026. Stories 3.9, 3.10 and 4.5 are done, and Epic 6 is complete but for 6.3.
+Story 6.3 stays first because it is the last unbuilt P0 — FR20, the cold clone on a second
+machine — and because an adopted plugin changes what a second machine has to install, so
+proving the machine before adopting is cheaper than proving it after. Epic 8 follows in
+numerical order.
+
+The 28 Aug sequence read **3.9 → 3.10 → 4.5 → 6**, with 3.9 and 3.10 first because they were
+correctness defects on work already accepted. All three are now done.
 
 Outstanding but not a story: **Story 5.4 is held at `review`**, not `done`, until the generated
 `.docx` is confirmed to open in LibreOffice. Word is verified twice over. See
@@ -1376,3 +1385,157 @@ So that nothing reads as a shell someone else built.
 **Then** the wordmark, hero text, package scope, config paths and shipped copy are ours
 **And** no residual DeepSeek Harness branding appears outside the retained MIT copyright notice
 **And** the terminology matches `CONTEXT.md` throughout
+
+---
+
+## Epic 8: Adopted panels — P1 — ADDED 29 Aug 2026
+
+Surfaces we did not write, taken from the DSH plugin ecosystem because they make work
+already done read better, and for no other reason.
+
+> **This epic is open.** Epics 1–7 were planned on 28 Aug 2026 and are closed. Epic 8 is the
+> one place a later adoption gets added without reopening the plan: write a new story here,
+> put it through the adoption gate below, and leave the rest of the file alone.
+
+**These stories trace to no FR.** The requirements inventory above was frozen on 28 Aug 2026
+and is not renumbered for them. They serve NFR9 (the demo hook lands inside thirty seconds)
+and NFR10 (all four delivery formats), and nothing else. If an adoption cannot be justified
+against one of those two, it does not belong in this epic.
+
+### The adoption gate
+
+No story in this epic is done until its plugin has passed all four. They are ordered by how
+expensive the failure is to discover late.
+
+1. **Licence — the whole tree, not the repo badge.** The repo's SPDX identifier is necessary
+   and nowhere near sufficient. `npm run licence-audit` walks the transitive graph and fails
+   on an undecided licence; that run is the evidence, not a GitHub API response. Every new
+   component lands in `docs/licence-decisions.json` with its evidence, and
+   `THIRD_PARTY_NOTICES.md` is updated in the same commit (NFR1, NFR11).
+2. **Egress.** The plugin's source is grepped for absolute URLs and the built surface is
+   loaded with the network capture running. Any runtime fetch that is not loopback fails the
+   gate outright. The canary must still deny, and the monitor must still read a counted zero
+   (NFR2, FR15, FR16).
+3. **Design language.** It is built from `dsh-client-ui-primitives` and `ui-theme` tokens, it
+   renders correctly in light *and* dark, and it takes a declared slot (UX-DR1, UX-DR2,
+   UX-DR3). A plugin that ships its own palette is rejected, however good it looks in one
+   theme.
+4. **Cold start.** Story 6.1's documented command still brings the workbench up from a clean
+   clone, and Story 6.3's second machine still works. An adoption that needs a manual click
+   before the demo is a regression, not a feature — profile state ships in the profile.
+
+**Pinning (NFR6).** Every adopted plugin is pinned to an exact version — a tag or a commit,
+never a branch or a range. The ecosystem is two weeks old and moving daily.
+
+**Installation (NFR5).** Adoption is a `dsh plugin --profile web add <pkg>@<version>` against
+the profile bundle channel. No harness source is edited and no vendored copy enters this
+repo.
+
+### Rejected on 29 Aug 2026 — do not re-research
+
+Surveyed from the `dsh-plugin` GitHub topic (12,536 repos) and four community directories.
+Star counts were read live from `api.github.com`, because the directories inflate them —
+`awesome-dsh-plugin.com` lists `DSH-better-sidebar` at 189,027 stars against an actual 3,085.
+
+| Candidate | Why not |
+|---|---|
+| `elysia395/dsh-wallpaper-engine` | No `LICENSE` file at all — all rights reserved. Also iframes remote wallpapers. Two independent failures. |
+| `volcengine/OpenViking` · `Nagi-ovo/voyager` | AGPL-3.0 and GPL-3.0. Copyleft is never admitted by widening (ADR-0006). |
+| `Devin-AXIS/iPolloWork` · `nocobase` · `yao` | `NOASSERTION` — a custom licence the audit cannot resolve. |
+| `liustack/modsearch` · `DDDMUC/dsh-free-search` | Web search bridges. Directly contradict FR15/FR16 and the canary. |
+| `@liustack/modlens` · `@anionex/dsh-vision-toolkit` | Vision and OCR. Duplicate Epic 4, which is done on RapidOCR (ADR-0005 amendment). Reopening a closed decision. |
+| `dsh-genie` · `dsh-plugin-skills` | Let the model write and install a plugin into the running harness. A workbench that rewrites itself at runtime contradicts the sovereignty claim, and it cannot coexist with Story 3.4, where our loader *refuses* a component on licence grounds. |
+| `nexu-io/open-design` | Highest-starred UI plugin in the ecosystem and Apache-2.0, but it is a design tool that produces mockups. Wrong axis. |
+| `ruvnet/ruflo` | A second agent meta-harness. Fights ADR-0003. |
+| `ccch1mneyyy/dsh-TUI` | A terminal UI. We demo the web app. |
+| `dshmarket` | An in-app plugin marketplace; fetches a remote index. Fails gate 2. |
+| `omdsh-dev/DSH-better-sidebar` | **Deferred, not rejected.** MIT, and all 30 direct dependencies pass (28 MIT, `rxjs` Apache-2.0, `dompurify` dual MPL-2.0/Apache-2.0 — elect Apache-2.0). It is a *right* sidebar and does not contest the `sidebar` slot, so the brand mark is safe. But its seven tabs default on and five of them (`git`, `terminal`, `sidechat`, `browser`, `editor`) either read as an IDE or open an egress path, `node-pty` builds natively whether or not the terminal tab is shown, and the per-tab switches need seeding into the profile's `settings.yaml` for a cold clone. 15 MB and a native build to keep two panels. Revisit after 31 Aug 2026 with Story 6.3 closed. |
+
+### Story 8.1: The agent's findings render as something you can read at a glance
+
+As an evaluator watching a scanned report get processed,
+I want the key findings to arrive as a table or a chart rather than a wall of prose,
+So that the output reads as an industrial instrument rather than a chat log.
+
+Adopts `omdsh-dev/dsh-genui` — MIT, verified from `api.github.com` on 29 Aug 2026, 364 stars.
+It teaches the model a `dsh-ui` fence and renders the fenced payload inline in the reply.
+**It is not published on npm under that name**; the install is
+`git+https://github.com/omdsh-dev/dsh-genui.git`, so the pin is a tag or a commit and the
+adoption gate's pinning rule binds harder than usual.
+
+**Acceptance Criteria:**
+
+**Given** the key findings produced by Story 5.1
+**When** they are returned to the conversation
+**Then** they render as a structured component — a table or a chart — inline in the reply
+**And** each finding stays clickable through to its crop, as Story 4.5 requires; the new
+rendering does not sever provenance
+
+**Given** the permitted component set
+**When** it is decided
+**Then** it is written down and enforced — tables, charts and plots only. **No 3D scenes, no
+quizzes, no forms.** Restraint over decoration still applies (UX-DR2), and a component type
+nobody demos is a component type nobody audited
+
+**Given** any component the plugin renders
+**When** it is shown in light and in dark
+**Then** it takes its colours from `ui-theme` tokens
+**And** if a permitted component type cannot be themed without hand-authoring a colour, that
+type is removed from the permitted set rather than patched
+
+**Given** the model plane is running `replay` (ADR-0001, and its 28 Aug amendment — the cache
+is hand-authored)
+**When** a rendered component appears
+**Then** the provider chip still reads `replay` (Story 3.2) while it is on screen
+**And** nothing in the component's copy implies the figures were computed live. A replayed
+chart presented as live inference is the one way this story can damage the pitch
+
+**Given** the plugin's action event loop, which lets a rendered component send events back to
+the model
+**When** the adoption is configured
+**Then** it is disabled unless a story explicitly needs it — an inbound path from a rendered
+surface into the agent is new attack surface, and no demonstrable requires it
+
+> **Escape hatch.** If the fence cannot be driven from the hand-authored replay cache, or if
+> the rendered output cannot meet the theme criterion, stop and say so. Findings stay as text
+> and Story 5.1 is unaffected. This story is polish on a demonstrable that already works.
+
+### Story 8.2: A workspace file is attached by naming it
+
+As someone demonstrating ingestion,
+I want to type `@` and pick the inspection report,
+So that attaching the evidence looks like part of the sentence rather than a trip through a
+file dialog.
+
+Adopts `FSMargoo/dsh-at-file` — MIT, 493 stars, npm `dsh-at-file@0.6.3`, **zero
+dependencies**, which makes it the cheapest thing in this epic to audit. Note the repository
+moved from `omdsh-dev/dsh-at-file`; resolve the redirect before recording evidence.
+
+**Acceptance Criteria:**
+
+**Given** the composer
+**When** `@` is typed
+**Then** a searchable list of workspace files and folders appears
+**And** the control matches the density, typography and border conventions of the controls
+already in that row (UX-DR1) — a mention picker that looks bolted on is worse than the file
+dialog it replaces
+
+**Given** a mention is resolved
+**When** the path is read
+**Then** it is inside the workspace root
+**And** a path that escapes the workspace is refused, not silently resolved. MRPL's work is
+confidential by premise; a file picker that reaches the whole filesystem is a finding against
+us, not a convenience
+
+**Given** the harness's own attachment and command menus, which already occupy the composer
+**When** this plugin is mounted
+**Then** neither is displaced or duplicated
+**And** the existing attachment path still works
+
+**Given** the demo script
+**When** the ingestion beat is reached
+**Then** the sample inspection report from Story 4.1 is attachable by mention
+**And** the recorded run of Story 6.5 is re-recorded if this changes what the beat looks like
+
+> **Escape hatch.** If it contests the composer with the shipped attachment menu, drop it.
+> Zero dependencies means zero sunk cost.
