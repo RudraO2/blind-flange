@@ -717,12 +717,20 @@ test("registers the approval-note tool (Story 5.4), unconditionally like the can
 	assert.equal(typeof approvalNoteTool.presentCall, "function");
 });
 
-test("registers the canary channel loopback-only", () => {
+test("registers the canary and upload channels, both loopback-only", () => {
 	const host = stubHostCtx();
 	apply(host.ctx);
-	assert.equal(host.rpcChannels.length, 1);
-	assert.equal(host.rpcChannels[0].channel, "/bf-canary");
-	assert.equal(host.rpcChannels[0].options.authority, "loopback");
+	// Both are reachable from a browser on this machine and from nothing that can
+	// merely reach the port. The upload channel carries a document the user chose;
+	// a non-loopback authority on it would be a way to push a file into someone
+	// else's session, so this is asserted rather than assumed.
+	assert.deepEqual(
+		host.rpcChannels.map((entry) => [entry.channel, entry.options.authority]).sort(),
+		[
+			["/bf-canary", "loopback"],
+			["/bf-upload", "loopback"],
+		],
+	);
 });
 
 test("the canary is denied by the same waterfall that denies any other attempt", async () => {
@@ -788,7 +796,14 @@ test("a profile with no tool registry still gets the egress denial waterfall", a
 	const host = stubHostCtx({ tools: false });
 	apply(host.ctx);
 	assert.deepEqual(host.registeredTools, []);
-	assert.deepEqual(host.rpcChannels, []);
+	// The canary's channel needs the tool registry and so does not mount here. The
+	// upload channel needs only `connection`, because it attaches the document and
+	// calls the ingestion service directly rather than dispatching a tool — so it
+	// is present even in a profile with no tools, which is correct.
+	assert.deepEqual(
+		host.rpcChannels.map((entry) => entry.channel),
+		["/bf-upload"],
+	);
 	const decision = await host.preExecuteListener({ name: "web_fetch", arguments: { url: "https://example.com" } }, () => {
 		throw new Error("next() must not be called for a denied tool");
 	});

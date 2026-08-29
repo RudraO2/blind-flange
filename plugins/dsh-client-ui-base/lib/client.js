@@ -1109,6 +1109,152 @@ window.__ModuleLoader__.load({
 		 * what keeps the panel driven by a real event (NFR8).
 		 * ------------------------------------------------------------------- */
 
+		/* ---------------------------------------------------------------------
+		 * Upload (30 August 2026)
+		 *
+		 * Story 8.2 established that the harness already ships an `@` mention
+		 * picker and that nothing needed installing for it. That is still true, and
+		 * attaching by naming a path is still a real feature. It is just not the
+		 * same thing as a judge watching a file *arrive* — which is the thirty
+		 * seconds this product has to earn — so this adds the arrival beside the
+		 * mention rather than replacing it.
+		 *
+		 * Same seat and same shape as the canary below it: `conversation.input.right`
+		 * (list, session), a `Pill`, and one loopback RPC channel. Nothing here sets
+		 * a colour; `Pill` and `StateDot` carry the whole look through the theme's
+		 * own tokens, which is what keeps it looking like it shipped with the
+		 * harness in both light and dark.
+		 *
+		 * The file is read in the browser and posted as base64. The host attaches
+		 * it and OCRs it immediately, then answers with the finding count and the
+		 * time it took — a number the user can sanity-check, rather than a tick.
+		 * ------------------------------------------------------------------- */
+
+		const UPLOAD_CHANNEL = "/bf-upload";
+		const UPLOAD_ENDPOINT = "attach";
+		const UPLOAD_ACCEPT = ".pdf,.png,.jpg,.jpeg,.tif,.tiff,.bmp,.webp";
+
+		/**
+		 * Build the upload control for `conversation.input.right`.
+		 * @param connection - the host transport (`ctx.connection`), carrying `rpc.call`.
+		 * @returns the component.
+		 */
+		function buildUploadButton(connection) {
+			const { useRef, useState } = require("react");
+			const { jsx, jsxs } = require("react/jsx-runtime");
+			const { Pill, StateDot } = require("@deepseek-ai/dsh-client-ui-primitives");
+
+			/** Read a File as base64 without loading a second copy as a string first. */
+			function readAsBase64(file) {
+				return new Promise((resolve, reject) => {
+					const reader = new FileReader();
+					reader.onerror = () => reject(reader.error ?? new Error("the file could not be read"));
+					reader.onload = () => {
+						// A data URL is `data:<type>;base64,<payload>`; we want the payload.
+						const text = String(reader.result ?? "");
+						const comma = text.indexOf(",");
+						resolve(comma === -1 ? "" : text.slice(comma + 1));
+					};
+					reader.readAsDataURL(file);
+				});
+			}
+
+			function UploadButton() {
+				// idle -> reading -> ingesting -> ready | failed
+				const [phase, setPhase] = useState("idle");
+				const [detail, setDetail] = useState("");
+				const inputRef = useRef(null);
+
+				async function onPicked(event) {
+					const file = event.target?.files?.[0];
+					// Reset the input so picking the same file twice still fires a change.
+					if (event.target) event.target.value = "";
+					if (!file) return;
+
+					setPhase("reading");
+					setDetail(file.name);
+					let base64;
+					try {
+						base64 = await readAsBase64(file);
+					} catch (error) {
+						setPhase("failed");
+						setDetail(error instanceof Error ? error.message : String(error));
+						return;
+					}
+
+					// The OCR pass is several seconds of real work. Saying which stage we
+					// are in matters more here than anywhere else in the UI: a spinner
+					// that means "reading a 3 MB file" and one that means "running OCR on
+					// two pages" have very different expected durations, and a judge
+					// watching an undifferentiated spinner assumes the second is a hang.
+					setPhase("ingesting");
+					try {
+						const result = await connection.rpc.call(UPLOAD_CHANNEL, UPLOAD_ENDPOINT, { filename: file.name, base64 });
+						if (result?.ok !== true) {
+							setPhase("failed");
+							setDetail(result?.error?.message ?? "the host refused the upload");
+							return;
+						}
+						const value = result.value ?? {};
+						setPhase("ready");
+						setDetail(
+							`${value.filename}: ${value.findings} findings across ${value.pages} page(s), read in ${Number(value.seconds ?? 0).toFixed(1)}s`,
+						);
+					} catch (error) {
+						setPhase("failed");
+						setDetail(error instanceof Error ? error.message : String(error));
+					}
+				}
+
+				const busy = phase === "reading" || phase === "ingesting";
+				const LABEL = {
+					idle: "Upload a document",
+					reading: "Reading…",
+					ingesting: "Running OCR…",
+					ready: "Document read",
+					failed: "Upload failed",
+				};
+				const TONE = { idle: "neutral", reading: "info", ingesting: "info", ready: "success", failed: "danger" };
+				const TITLE = {
+					idle: "Attach a scanned PDF or image. It is read on this machine by the local OCR service — nothing leaves the box.",
+					reading: `Reading ${detail} in the browser.`,
+					ingesting: `Running local OCR over ${detail}. Nothing leaves this machine.`,
+					ready: detail,
+					failed: detail,
+				};
+
+				return jsxs(Pill, {
+					as: "button",
+					type: "button",
+					onClick: () => {
+						if (!busy) inputRef.current?.click();
+					},
+					disabled: busy,
+					title: TITLE[phase],
+					"aria-label": LABEL[phase],
+					"aria-busy": busy ? "true" : undefined,
+					children: [
+						jsx(StateDot, { tone: TONE[phase] }),
+						LABEL[phase],
+						// Kept in the tree rather than created on demand, so the click
+						// handler above always has something to open. Hidden from
+						// assistive technology because the Pill is the control.
+						jsx("input", {
+							ref: inputRef,
+							type: "file",
+							accept: UPLOAD_ACCEPT,
+							onChange: onPicked,
+							style: { display: "none" },
+							tabIndex: -1,
+							"aria-hidden": "true",
+						}),
+					],
+				});
+			}
+
+			return UploadButton;
+		}
+
 		const CANARY_CHANNEL = "/bf-canary";
 		const CANARY_ENDPOINT = "fire";
 
@@ -1832,6 +1978,7 @@ window.__ModuleLoader__.load({
 			// reason to provide would take the other seven seats down with it, and
 			// the monitor is worth more than the button that calibrates it.
 			let disposeCanary;
+			let disposeUpload;
 			ctx.inject(["connection"], (canaryCtx) => {
 				const CanaryButton = buildCanaryButton(canaryCtx.connection);
 				disposeCanary = canaryCtx.slots.inject("conversation.input.right", () => {
@@ -1843,6 +1990,25 @@ window.__ModuleLoader__.load({
 							inject: (sessionId) => ({ sessionId }),
 						},
 						CanaryButton,
+					);
+					return () => { dispose(); };
+				});
+
+				// The upload control takes the same seat, deferred behind the same
+				// `connection` gate and for the same reason. `order` puts it before the
+				// canary: the natural left-to-right reading of the row is "give it a
+				// document, then prove nothing left the box", which is also the order
+				// the demo does them in.
+				const UploadButton = buildUploadButton(canaryCtx.connection);
+				disposeUpload = canaryCtx.slots.inject("conversation.input.right", () => {
+					const dispose = canaryCtx.slots.register(
+						{
+							name: "conversation.input.right",
+							id: "bf-upload",
+							label: "Upload",
+							order: -10,
+						},
+						UploadButton,
 					);
 					return () => { dispose(); };
 				});
@@ -1889,6 +2055,7 @@ window.__ModuleLoader__.load({
 				disposeEgressChip?.();
 				disposeEgressPanel?.();
 				disposeCanary?.();
+				disposeUpload?.();
 				disposeRoutingChip?.();
 				disposeProvenanceView?.();
 				disposeRoutingView?.();

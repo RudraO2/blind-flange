@@ -298,6 +298,10 @@ test("occupies both places the DeepSeek whale used to render, and the hero's tas
 		"conversation.hero.agentPreset",
 		"conversation.hero.brand.mark",
 		"conversation.input.model",
+		// Two seats in the composer tool row: the upload control and the canary.
+		// Left to right they read "give it a document, then prove nothing left the
+		// box", which is also the order the demo does them in.
+		"conversation.input.right",
 		"conversation.input.right",
 		"conversation.session.header.utilities",
 		"conversation.session.header.utilities",
@@ -983,4 +987,65 @@ test("it sets no colour of its own — the state dot carries it through theme to
 	const canarySection = source.slice(source.indexOf("function buildCanaryButton"), source.indexOf("function holdTabTitle"));
 	assert.doesNotMatch(canarySection, /#[0-9a-fA-F]{3,8}\b/, "the canary must not hand-roll a hex colour");
 	assert.doesNotMatch(canarySection, /rgba?\(/, "the canary must not hand-roll a colour");
+});
+
+/* ---------------------------------------------------------------------------
+ * The upload control (30 August 2026)
+ *
+ * Story 8.2 established that the `@` mention picker already exists and that
+ * nothing needed installing for it. This does not replace it — it adds the
+ * moment a judge watches a file arrive, which naming a path already on disk does
+ * not give you.
+ * ------------------------------------------------------------------------- */
+
+/** The upload seat, by id, so a reordering of the row does not break these. */
+function findUpload(registered) {
+	return registered.find((call) => call.options.name === "conversation.input.right" && call.options.id === "bf-upload");
+}
+
+test("the upload control takes the composer tool row, before the canary", () => {
+	const { exports } = loadClientHalf((specifier) => healthyHostModules[specifier]);
+	const { ctx, registered } = stubSlots();
+	exports.apply(ctx);
+
+	const upload = findUpload(registered);
+	assert.ok(upload, "no bf-upload registration");
+	assert.equal(upload.options.label, "Upload");
+	// Left to right the row reads "give it a document, then prove nothing left the
+	// box", which is also the order the demo does them in.
+	assert.ok(upload.options.order < 0, "the upload control should sort before the canary");
+});
+
+test("it is a shipped Pill like the controls beside it, and says which stage it is in", () => {
+	const { exports } = loadClientHalf((specifier) => healthyHostModules[specifier]);
+	const { ctx, registered } = stubSlots();
+	exports.apply(ctx);
+
+	const element = findUpload(registered).component({});
+	assert.equal(element.type, PRIMITIVES.Pill, "the upload control must be a shipped primitive, not a hand-rolled one");
+	const flat = JSON.stringify(element.props.children);
+	assert.match(flat, /Upload a document/);
+	// The file input lives in the tree rather than being created on demand, so the
+	// Pill's click handler always has something to open, and it is hidden from
+	// assistive technology because the Pill is the control.
+	assert.match(flat, /"type":"file"/);
+	assert.match(flat, /"aria-hidden":"true"/);
+	// Every accepted extension is offered, so the picker does not let a user
+	// choose something the OCR path will refuse a second later.
+	assert.match(flat, /\.pdf/);
+	assert.match(flat, /\.png/);
+	assert.match(element.props.title, /nothing leaves the box/i);
+});
+
+test("it sets no colour of its own either — the state dot carries it through theme tokens", () => {
+	// Same rule as the canary, and the same reason: a hand-rolled colour is what
+	// made the 27 Aug egress monitor read as pasted on. Verified in the source
+	// because a component test cannot see what a token resolves to.
+	const source = readFileSync(join(packageDir, "lib", "client.js"), "utf8");
+	const section = source.slice(source.indexOf("function buildUploadButton"), source.indexOf("const CANARY_CHANNEL"));
+	assert.ok(section.length > 500, "the upload section was not found — this test is asserting nothing");
+	assert.doesNotMatch(section, /#[0-9a-fA-F]{3,8}\b/, "the upload control must not hand-roll a hex colour");
+	assert.doesNotMatch(section, /rgba?\(/, "the upload control must not hand-roll a colour");
+	// One exception, and it is layout rather than colour: the file input is hidden.
+	assert.match(section, /display: "none"/);
 });

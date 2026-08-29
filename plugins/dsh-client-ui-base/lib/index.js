@@ -81,6 +81,7 @@ import { classifyRequest, lastUserText } from "./router/classify.js";
 import { recordRoutingDecision } from "./router/dispatch.js";
 import { scoreFleet } from "./router/score.js";
 import { registerKnownSessionEventTypes } from "./session-events/known-types.js";
+import { createUploadRpcHandler, UPLOAD_CHANNEL } from "./upload/rpc.js";
 
 const FAVICON_PATH = "/blind-flange/favicon.svg";
 const FAVICON_SVG = readFileSync(join(dirname(fileURLToPath(import.meta.url)), "favicon.svg"));
@@ -515,6 +516,20 @@ export function apply(ctx, config) {
 				void dispose();
 			};
 		}, "blind-flange: canary rpc channel");
+	});
+
+	// The upload channel the composer's upload control posts to. Same shape and
+	// same `authority: "loopback"` as the canary above — reachable from a browser
+	// on this machine, not from anything that can merely reach the port. It needs
+	// only `connection`, not the tool registry, because it attaches the document
+	// and calls the ingestion service directly rather than dispatching a tool.
+	ctx.inject(["connection"], (uploadCtx) => {
+		uploadCtx.effect(() => {
+			const dispose = uploadCtx.connection.rpc.handle(UPLOAD_CHANNEL, createUploadRpcHandler(), { authority: "loopback" });
+			return () => {
+				void dispose();
+			};
+		}, "blind-flange: upload rpc channel");
 	});
 
 	const providerName = config?.modelPlane?.provider ?? "replay";
