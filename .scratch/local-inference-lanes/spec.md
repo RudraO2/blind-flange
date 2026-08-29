@@ -439,12 +439,18 @@ whose expected answer is known to be wrong, proving the harness can fail.
 
 ## Further Notes
 
-**The deadline is tomorrow, 31 August 2026.** Order the work so that each piece is demonstrable
-on its own and the escape hatch stays reachable. The runtime bring-up first, because it is the
-only part that can fail in a way nothing else routes around. Then the provider and dispatch, then
-the lanes, then upload, then the trace surface and the evaluation table. The upload path's
-provenance work is the most likely thing to be cut and the fixture path must keep working without
-it.
+**The deadline is 1 September 2026** — corrected on 30 August, having been planned against the
+31st. `HANDOFF.md` and `CLAUDE.md` both still say the 31st and are wrong; they are the first files
+a new session reads, so the wrong date propagates.
+
+That is one extra day, and it changes what gets cut rather than how the work is ordered. Order
+each piece so it is demonstrable on its own and the escape hatch stays reachable: the runtime
+bring-up first, because it is the only part that can fail in a way nothing else routes around,
+then the provider and dispatch, then the lanes, then upload, then the trace surface and the
+evaluation table.
+
+Everything through the evaluation table landed on the 30th. **With the extra day the trace surface
+is no longer the first thing to cut** — the argument for cutting it was time, not value.
 
 **A first-run cost is expected and is not a hang.** Turing support ships as intermediate code
 that the driver compiles on first launch, and the result is cached. Discard the first

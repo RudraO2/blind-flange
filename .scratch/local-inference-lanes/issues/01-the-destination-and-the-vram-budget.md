@@ -15,7 +15,10 @@ Resolved by grilling on 30 August 2026. Twenty-two questions over four rounds.
 
 ### The frame
 
-The IITM BS internal round is due **31 August 2026 — tomorrow**. Phase 0 is done and green
+The IITM BS internal round is due **1 September 2026**. Recorded here as the 31st during charting,
+because that is what `HANDOFF.md` and `CLAUDE.md` say; corrected by the user on 30 August. Those
+two files are still wrong and are the first thing a new session reads, so the error propagates
+until someone fixes them. Phase 0 is done and green
 (epics 1-5 and 8, epic 6 all but 6.3). What is real: the egress seal, the canary, the licence
 gate, the keyword classifier and capability scorer, the routing chip, the RapidOCR ingestion
 service, the `.docx` factory, and `pwsh` sandbox execution. What is canned: **every token the
