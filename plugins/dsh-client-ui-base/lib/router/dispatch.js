@@ -113,6 +113,16 @@ export function resolveRuntimeModel(selected, fleet) {
 }
 
 /**
+ * The task type of the turn currently being answered, or `null` when nothing has
+ * been routed. Carried alongside the runtime model because the lane that shapes
+ * the request is chosen by task type while the model that answers it is chosen by
+ * dispatch, and both decisions come from the same routing event.
+ */
+export function currentTaskType() {
+	return lastRoutingDecision()?.taskType ?? null;
+}
+
+/**
  * The runtime model for the turn currently being answered: the recorded routing
  * decision resolved against the fleet.
  * @param {Array<{ name?: string, runtime_id?: string }>} fleet

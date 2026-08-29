@@ -169,6 +169,76 @@ const NETWORK_PWSH_PATTERN =
 	/\b(Invoke-WebRequest|iwr|Invoke-RestMethod|irm|curl(\.exe)?|wget|Start-BitsTransfer|Test-NetConnection)\b|Net\.Sockets\.(TcpClient|TcpListener|UdpClient|Socket)|Net\.(WebClient|Http\.HttpClient)|Net\.Dns/i;
 
 /**
+ * Matches Python's network surface, for the same reason and in the same place.
+ *
+ * **Why this exists.** The coding lane asks the model for Python, not
+ * PowerShell — measured on 30 August 2026, the 1.5B coder produced runnable
+ * PowerShell zero times out of nine and runnable Python six times out of nine
+ * (`.scratch/local-inference-lanes/issues/08`). The executor is still
+ * `tool-pwsh`, because `dsh-bash-sandbox` never loads on win32; the command
+ * simply invokes the interpreter.
+ *
+ * That change, made without this pattern, would have opened a hole in the one
+ * claim this product rests on. {@link NETWORK_PWSH_PATTERN} knows PowerShell
+ * cmdlets and .NET types and nothing else, so a Python program calling
+ * `urllib.request.urlopen` would have walked straight past the waterfall while
+ * the egress monitor kept reading a counted zero — reachable by any judge who
+ * types a prompt at the sandbox, not by a determined attacker.
+ *
+ * Covers the standard library's clients and raw sockets, the two third-party
+ * clients an agent reaches for unprompted, and `webbrowser`, which opens a URL
+ * without importing anything that looks like a network module.
+ */
+const NETWORK_PYTHON_PATTERN =
+	/\b(urllib|urlopen|Request|requests|httpx|aiohttp|http\.client|httplib|socket|socketserver|ftplib|smtplib|poplib|imaplib|telnetlib|nntplib|xmlrpc|webbrowser|websocket|websockets|paramiko|pycurl)\b|\basyncio\.open_connection\b|\bcreate_connection\b/i;
+
+/**
+ * Matches an interpreter invocation whose code this waterfall cannot read.
+ *
+ * `tools/pre-execute` decides from the call's static shape, before the body
+ * runs. That works when the program is inline — `python -c "..."` puts the
+ * whole thing in the `command` argument, where {@link NETWORK_PYTHON_PATTERN}
+ * can see it. It does **not** work for `python script.py`, because the file's
+ * contents are not in the call, and it does not work for `python -m
+ * http.server`, where the module does the reaching.
+ *
+ * That is a one-step bypass rather than a determined evasion: an agent that
+ * writes a file with `tool-fs` and then runs it would defeat the seal without
+ * trying to. So for Phase 0 the interpreter is only permitted inline, which is
+ * all the coding lane needs and all the demo does. Widening this is a decision
+ * to record, not a convenience to add at the point of use.
+ *
+ * Deliberately does not match a bare `python --version` or `python -c ...`.
+ */
+const UNINSPECTABLE_PYTHON_PATTERN = /(?:^|[\s;&|(])(?:python[\d.]*|py|pythonw)(?:\.exe)?\s+(?!-c\b|-V\b|--version\b)[^\s]/i;
+
+/**
+ * Why this sandbox command must be refused, or `undefined` to allow it.
+ *
+ * One function so the three policies read in one place and the waterfall stays
+ * a single branch. Order matters: the specific network match is reported before
+ * the blanket "cannot be inspected" rule, because a named client is a more
+ * useful denial reason than a shape complaint.
+ * @param {string} command - the `command` argument of a sandbox tool call.
+ * @returns {string | undefined}
+ */
+function sandboxDenialReason(command) {
+	if (NETWORK_PWSH_PATTERN.test(command)) {
+		return `attempted to reach the network via: ${command}`;
+	}
+	if (NETWORK_PYTHON_PATTERN.test(command)) {
+		return `attempted to reach the network from Python via: ${command}`;
+	}
+	if (UNINSPECTABLE_PYTHON_PATTERN.test(command)) {
+		return (
+			"ran Python from a file or module, whose contents this policy cannot inspect before execution. " +
+			`Phase 0 permits the interpreter inline only (\`python -c "..."\`). Refused: ${command}`
+		);
+	}
+	return undefined;
+}
+
+/**
  * The session-log event the egress denial waterfall writes when it refuses a
  * call (Story 2.2). Story 2.1 leaned on the harness's own `tool/call` record
  * for the audit trail — but `tool/call` is appended for every call, allowed or
@@ -366,9 +436,12 @@ export function apply(ctx, config) {
 		}
 		if (exec.name === PWSH_TOOL_NAME) {
 			const command = pwshCommandText(exec.arguments);
-			if (command !== undefined && NETWORK_PWSH_PATTERN.test(command)) {
+			const denial = command === undefined ? undefined : sandboxDenialReason(command);
+			if (denial !== undefined) {
 				// Same distinct denial marker as above (Story 2.2) — the sandbox's
-				// shell is sealed the same way the network canary is (Story 5.3).
+				// shell is sealed the same way the network canary is (Story 5.3),
+				// and since 30 August 2026 that covers Python as well as
+				// PowerShell, because the coding lane now writes Python.
 				try {
 					exec.agent?.session?.append?.(EGRESS_DENIED_EVENT, { tool: exec.name, target: command });
 				} catch (error) {
@@ -376,7 +449,7 @@ export function apply(ctx, config) {
 				}
 				return {
 					kind: "deny",
-					reason: `Blind Flange denies outbound network access: "${exec.name}" attempted to reach the network via: ${command}`,
+					reason: `Blind Flange denies outbound network access: "${exec.name}" ${denial}`,
 				};
 			}
 		}

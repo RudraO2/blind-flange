@@ -876,6 +876,109 @@ test("denies a pwsh call that opens a raw socket", async () => {
 	assert.equal(decision.kind, "deny");
 });
 
+/**
+ * The coding lane writes Python (issues/08), and the seal has to know that.
+ * Before 30 August 2026 it inspected PowerShell cmdlets and .NET types only, so
+ * every one of these would have been permitted while the egress monitor kept
+ * reading a counted zero. That is not a determined evasion — it is the first
+ * thing a judge poking at the sandbox would reach.
+ */
+for (const [label, command] of [
+	["urllib, the standard library's client", 'python -c "import urllib.request; print(urllib.request.urlopen(\'https://example.com\').read())"'],
+	["requests, the one an agent reaches for unprompted", 'python -c "import requests; requests.get(\'https://example.com\')"'],
+	["httpx", 'python -c "import httpx; httpx.get(\'https://example.com\')"'],
+	["http.client", 'python -c "import http.client as h; h.HTTPSConnection(\'example.com\').request(\'GET\', \'/\')"'],
+	["a raw socket", 'python -c "import socket; socket.socket().connect((\'example.com\', 80))"'],
+	["socket.create_connection", 'python -c "from socket import create_connection; create_connection((\'example.com\', 80))"'],
+	["asyncio's connector", 'python -c "import asyncio; asyncio.open_connection(\'example.com\', 80)"'],
+	["smtplib", 'python -c "import smtplib; smtplib.SMTP(\'mail.example.com\')"'],
+	["ftplib", 'python -c "import ftplib; ftplib.FTP(\'ftp.example.com\')"'],
+	// webbrowser reaches the network without importing anything that looks like it.
+	["webbrowser, which imports nothing network-shaped", 'python -c "import webbrowser; webbrowser.open(\'https://example.com\')"'],
+	["the py launcher rather than python", 'py -c "import urllib.request"'],
+	["python3 on PATH", 'python3 -c "import requests"'],
+]) {
+	test(`denies a sandbox call that reaches the network from Python: ${label}`, async () => {
+		const host = stubHostCtx();
+		apply(host.ctx);
+		const decision = await host.preExecuteListener({ name: "pwsh", arguments: { command } }, () => {
+			throw new Error("next() must not be called for a denied tool");
+		});
+		assert.equal(decision.kind, "deny", `PERMITTED a Python network call: ${command}`);
+		assert.match(decision.reason, /denies outbound network access/);
+	});
+}
+
+test("denies running Python from a file or module, because the code cannot be inspected first", async () => {
+	// tools/pre-execute decides from the call's static shape, before the body
+	// runs. `python -c "..."` puts the whole program in the command argument
+	// where the pattern can see it; `python script.py` does not, so an agent that
+	// wrote a file with tool-fs and then ran it would defeat the seal without
+	// even trying. Phase 0 permits the interpreter inline only.
+	for (const command of [
+		"python fetch_data.py",
+		"python .\\scripts\\run.py",
+		"python -m http.server 8000",
+		// Deliberately free of any network keyword, so this exercises the shape
+		// rule rather than accidentally re-testing NETWORK_PYTHON_PATTERN — an
+		// earlier fixture said `pip install requests`, which the network pattern
+		// caught first and which therefore proved nothing about inspectability.
+		"py -m json.tool data.json",
+		"cd tmp; python main.py",
+	]) {
+		const host = stubHostCtx();
+		apply(host.ctx);
+		const decision = await host.preExecuteListener({ name: "pwsh", arguments: { command } }, () => {
+			throw new Error("next() must not be called for a denied tool");
+		});
+		assert.equal(decision.kind, "deny", `PERMITTED an uninspectable Python invocation: ${command}`);
+		assert.match(decision.reason, /cannot inspect|inline only/);
+	}
+});
+
+test("the seal does not deny the ordinary sandbox work the coding lane depends on", async () => {
+	// A seal that blocks the lane it exists to protect is worse than no seal,
+	// because it gets switched off. These are the shapes the coding lane actually
+	// emits, plus the interpreter's own harmless forms.
+	for (const command of [
+		'python -c "print(sum(range(1, 101)))"',
+		'python -c "actual = (9.5 - 7.2) / 9.5 * 100; print(round(actual, 1))"',
+		"python --version",
+		"python -V",
+		'python -c "import math, json, statistics; print(math.pi)"',
+		"(1..10 | Measure-Object -Sum).Sum",
+		"Get-ChildItem -Name",
+	]) {
+		const host = stubHostCtx();
+		apply(host.ctx);
+		let reached = false;
+		const decision = await host.preExecuteListener({ name: "pwsh", arguments: { command } }, () => {
+			reached = true;
+			return { kind: "allow" };
+		});
+		assert.ok(reached, `the waterfall did not pass through a benign command: ${command}`);
+		assert.equal(decision.kind, "allow");
+	}
+});
+
+test("a denied Python network call lands on the same egress/denied event the monitor counts", async () => {
+	const agent = stubAgent();
+	const host = stubHostCtx();
+	apply(host.ctx);
+	await host.preExecuteListener(
+		{ name: "pwsh", arguments: { command: 'python -c "import requests; requests.get(\'https://example.com\')"' }, agent },
+		() => {
+			throw new Error("next() must not be called for a denied tool");
+		},
+	);
+	// The counted zero is the number of these events (FR15), so a denial the
+	// monitor cannot see is a denial that proves nothing.
+	assert.equal(agent.events.length, 1);
+	assert.equal(agent.events[0].type, "egress/denied");
+	assert.equal(agent.events[0].data.tool, "pwsh");
+	assert.match(agent.events[0].data.target, /requests/);
+});
+
 test("a denied pwsh call is recorded on the same egress/denied event the monitor counts", async () => {
 	const agent = stubAgent();
 	const host = stubHostCtx();

@@ -23,8 +23,24 @@
  * nothing here for the symlink to break.
  */
 
+import {
+	CODE_LANE_SYSTEM_PROMPT,
+	clearPrediction,
+	describeVerdict,
+	parseProgram,
+	pendingPrediction,
+	PYTHON_PROGRAM_SCHEMA,
+	PYTHON_PROGRAM_SCHEMA_NAME,
+	pythonCommand,
+	rememberPrediction,
+	SANDBOX_TOOL_NAME,
+	sandboxHasReported,
+	sandboxOutput,
+	servesTaskType,
+	verdictFor,
+} from "../lanes/code.js";
 import { announceRefusals, loadFleet } from "../registry/loader.js";
-import { runtimeModelForCurrentTurn } from "../router/dispatch.js";
+import { currentTaskType, runtimeModelForCurrentTurn } from "../router/dispatch.js";
 
 /** Exact model identity this adapter reports; nothing here validates against a catalog (advisory only, per the harness's own contract). */
 async function resolveModel(provider, model) {
@@ -106,18 +122,107 @@ function dispatchForTurn() {
 	}
 }
 
+/**
+ * Read the model's schema-constrained reply out of a stream of pieces.
+ * @param {AsyncGenerator<{ type: string, text?: string }>} pieces
+ */
+async function drainText(pieces) {
+	let text = "";
+	for await (const piece of pieces) {
+		if (piece.type === "text") text += piece.text;
+	}
+	return text;
+}
+
+/**
+ * The coding lane's two steps, as harness pieces.
+ *
+ * **Step one** asks the model for `{ code, description, expected }` under a
+ * schema, remembers the prediction, and emits a `tool-call` for the sandbox. The
+ * harness dispatches that call for real — through `tools/pre-execute`, so the
+ * egress seal inspects the program exactly as it would any other command — and
+ * calls back with the result.
+ *
+ * **Step two** compares what the sandbox printed against what the model
+ * predicted *before* running, and states the verdict as the first thing in the
+ * reply. That line is ours, computed by `verdictFor`; the prose after it is the
+ * model's. Which means a judge reading the answer can tell what was measured
+ * from what was narrated.
+ *
+ * Falls back to a plain turn whenever the lane cannot proceed — a reply that is
+ * not usable JSON, a multi-line program, a missing prediction. A coding answer
+ * without a sandbox run is a worse answer, not a broken product.
+ * @param {import("./model-provider.js").ModelProvider} modelProvider
+ * @param {{ messages: unknown[] }} options
+ * @param {{ runtimeId: string | null }} dispatch
+ */
+async function* codeLanePieces(modelProvider, options, dispatch) {
+	const model = dispatch.runtimeId ?? undefined;
+
+	if (sandboxHasReported(options.messages)) {
+		const prediction = pendingPrediction();
+		if (prediction === null) {
+			yield* modelProvider.answer({ messages: options.messages, model });
+			return;
+		}
+		const result = verdictFor(prediction.expected, sandboxOutput(options.messages));
+		clearPrediction();
+		yield { type: "text", text: `${describeVerdict(result)}\n\n` };
+		yield* modelProvider.answer({ messages: options.messages, model });
+		return;
+	}
+
+	const reply = await drainText(
+		modelProvider.answer({
+			model,
+			schema: PYTHON_PROGRAM_SCHEMA,
+			schemaName: PYTHON_PROGRAM_SCHEMA_NAME,
+			maxTokens: CODE_LANE_MAX_TOKENS,
+			messages: [{ role: "system", content: CODE_LANE_SYSTEM_PROMPT }, ...options.messages],
+		}),
+	);
+
+	let program;
+	let command;
+	try {
+		program = parseProgram(reply);
+		command = pythonCommand(program.code);
+	} catch (error) {
+		console.warn(`@blind-flange/dsh-client-ui-base: coding lane fell back to a plain turn — ${error.message}`);
+		yield* modelProvider.answer({ messages: options.messages, model });
+		return;
+	}
+
+	rememberPrediction(program);
+	yield { type: "text", text: `${program.description}\n\nPredicted result: ${program.expected}\n\n` };
+	yield {
+		type: "tool-call",
+		id: `bf-code-lane-${Date.now()}`,
+		name: SANDBOX_TOOL_NAME,
+		arguments: JSON.stringify({ command, description: program.description }),
+	};
+}
+
+/**
+ * A reply ceiling. A third of the failures during bring-up were the *schema
+ * output itself* truncating mid-string because the model rambled past 300
+ * tokens — a defect in our request, not in the model.
+ */
+const CODE_LANE_MAX_TOKENS = 700;
+
 async function* streamImpl(modelProvider, options) {
 	const dispatch = dispatchForTurn();
+	// The lane that shapes the request is chosen by task type; the model that
+	// answers it by dispatch. Both come from the same routing decision.
+	const pieces = servesTaskType(currentTaskType())
+		? codeLanePieces(modelProvider, options, dispatch)
+		: modelProvider.answer({ messages: options.messages, model: dispatch.runtimeId ?? undefined });
 	let index = -1;
 	let openTextIndex = -1;
 	let openText = "";
 	let sawToolCall = false;
 	try {
-		// The widened request (ADR-0001's seam): `model` is what makes the
-		// router's decision reach an actual model. `undefined` means "use the
-		// provider's default", which is what an unroutable turn and every replay
-		// turn both want.
-		for await (const piece of modelProvider.answer({ messages: options.messages, model: dispatch.runtimeId ?? undefined })) {
+		for await (const piece of pieces) {
 			if (piece.type === "text") {
 				if (piece.text.length === 0) continue;
 				if (openTextIndex === -1) {
