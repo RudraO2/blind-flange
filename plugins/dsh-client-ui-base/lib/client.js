@@ -1283,6 +1283,12 @@ body, #root {
   border-color: ${NAVY_BORDER} !important;
   background: rgba(255,255,255,0.10) !important;
 }
+/* Remove dark-blue inner highlight that appears over the text */
+.hHd-Xa_newSession > *,
+.hHd-Xa_newSession span,
+.hHd-Xa_newSession [class] {
+  background: transparent !important;
+}
 .hHd-Xa_newSession:hover {
   background: rgba(255,255,255,0.16) !important;
 }
@@ -1480,7 +1486,7 @@ body, #root {
 .uV2eYG_input,
 textarea.uV2eYG_input {
   background: #FFFFFF !important;
-  border: 1px solid rgba(13,17,23,0.15) !important;
+  border: none !important;
   border-radius: 14px !important;
   color: ${DARK_TEXT} !important;
   /* webkit-text-fill-color wins over inherited color in Chrome/Electron */
@@ -1595,7 +1601,7 @@ body[data-ds-dark-theme] [class*=" uV2eYG_"] {
 
 body[data-ds-dark-theme] .uV2eYG_input {
   background: #161b22 !important;
-  border-color: rgba(255,255,255,0.15) !important;
+  border: none !important;
   color: ${WHITE} !important;
 }
 /* Dark mode — textarea IS the .uV2eYG_input, override with full specificity */
