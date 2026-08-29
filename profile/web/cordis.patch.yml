@@ -55,6 +55,21 @@
       entirely offline on the {{model}} model within the DeepSeek Harness. Your working
       directory is {{cwd}}.
 
+# Story 1.4: our task-type indicator occupies conversation.hero.agentPreset, a
+# single slot. The shipped ui-agent-preset (@deepseek-ai/dsh-client-ui-agent-preset)
+# registers its own seat into the same slot with no explicit id (the harness
+# assigns one at boot — it shows up in a conflict error as an opaque token like
+# "z5", not a stable name) and at the same default priority ours uses. With
+# both active, whichever plugin's apply() runs first wins the slot silently and
+# the other throws "single slot ... already has a registration at priority 0"
+# on boot — intermittent, since load order between an inserted row and the
+# bundle's own isn't guaranteed. Disabling this row removes the race outright
+# rather than winning it by luck. Side-effect: the "default preset" row in
+# Settings > General disappears. That is safe here: Blind Flange routes
+# automatically and the operator never picks a preset manually.
+- id: ui-agent-preset
+  disabled: true
+
 # Story 1.5: our mark, our tab title, our favicon. conversation.hero.brand.mark is a
 # single slot, and a dynamically-registered (out-of-tree) entry gets a lower priority
 # than a shipped one — the same rule the harness notes call out for the literal `root`
