@@ -1449,6 +1449,7 @@ Star counts were read live from `api.github.com`, because the directories inflat
 | `ruvnet/ruflo` | A second agent meta-harness. Fights ADR-0003. |
 | `ccch1mneyyy/dsh-TUI` | A terminal UI. We demo the web app. |
 | `dshmarket` | An in-app plugin marketplace; fetches a remote index. Fails gate 2. |
+| `FSMargoo/dsh-at-file` | **Rejected 29 Aug 2026, after installing it.** MIT with zero runtime dependencies, and it passes the licence gate outright — the audit enumerated 494 components and the plugin added nothing to the 11 already outside the allow-list, every one of which carries a recorded decision. It fails the design gate instead: the harness already ships `@deepseek-ai/dsh-client-ui-reference`, a unified `@file`/`@session` source that the `dsh-web-app` bundle mounts, so this plugin registers a **second** source on the same `@` trigger. Both were measured live in one menu — 25 rows, `deliverables` listed twice in two different spellings, and this plugin's group headed by the raw source key `at-file` beside the shipped groups' translated titles. It also ships eight hand-authored file-type icon hues where the shipped rows use none. Story 8.2's own escape hatch covers this exactly. |
 | `omdsh-dev/DSH-better-sidebar` | **Deferred, not rejected.** MIT, and all 30 direct dependencies pass (28 MIT, `rxjs` Apache-2.0, `dompurify` dual MPL-2.0/Apache-2.0 — elect Apache-2.0). It is a *right* sidebar and does not contest the `sidebar` slot, so the brand mark is safe. But its seven tabs default on and five of them (`git`, `terminal`, `sidechat`, `browser`, `editor`) either read as an IDE or open an egress path, `node-pty` builds natively whether or not the terminal tab is shown, and the per-tab switches need seeding into the profile's `settings.yaml` for a cold clone. 15 MB and a native build to keep two panels. Revisit after 31 Aug 2026 with Story 6.3 closed. |
 
 ### Story 8.1: The agent's findings render as something you can read at a glance
@@ -1539,3 +1540,42 @@ us, not a convenience
 
 > **Escape hatch.** If it contests the composer with the shipped attachment menu, drop it.
 > Zero dependencies means zero sunk cost.
+
+**Outcome, 29 August 2026 — the escape hatch was taken, and every criterion above is met
+without the adoption.** The gate found what nobody had checked: the harness already ships this
+feature. `@deepseek-ai/dsh-client-ui-reference` — "Unified Web @file and @session reference
+source" — is mounted by the `dsh-web-app` bundle at the pinned host `0.1.1-rc.2`, backed by
+`dsh-file-reference-local` on the host side, and it was verified working on a cold clone before
+anything was installed. `FSMargoo/dsh-at-file` was still installed through the profile bundle
+channel and put through all four gates; it passed the licence gate and failed the design gate by
+duplicating that shipped source. It is recorded in the Rejected table above and removed.
+
+Each criterion, against the shipped surface, measured on a cold `DSH_HOME` whose seeded
+workspace is the repository checkout:
+
+- **The picker.** `@` opens `listbox "Trigger suggestions"`, grouped "Files & folders" and
+  "Session conversations", 20 candidates at the repository root. It is the harness's own
+  control in its own design language — nothing to match, because there is nothing bolted on.
+  Both themes screenshotted (`docs/screenshots/story-8-2-mention-*.png`).
+- **Confinement.** `@../`, `@../../` and `@C:/Windows/` each offer nothing and close the menu,
+  with a positive control immediately after proving the menu was not merely stuck. In source,
+  `dsh-file-reference-local`'s `resolveDisplayDirectory` refuses a path whose `relative()` from
+  the workspace root is `..`, and refuses a symlinked directory segment. A mention injects **no
+  file content**: it is prompt text plus one standing instruction, "Use the read tool when their
+  contents are needed", so what a mention can reach is bounded by the `read` tool under the
+  session's sandbox mode rather than by the mention itself.
+- **No contest.** Nothing was mounted, so nothing displaced or duplicated anything. This is the
+  criterion the adoption failed.
+- **The demo beat.** `@insp` returns `services/ingestion/fixtures/sample-inspection-report.pdf`
+  as the **first** candidate, and selecting it lands an inline chip reading
+  `@ sample-inspection-report.pdf` in the draft. Story 6.5's recording does not need re-recording:
+  the beat is unchanged, because nothing changed.
+
+Two measurements taken while checking whether the index needed tuning, kept because they are the
+evidence that it does not: the walk over this checkout indexes 9,609 entries in 262 ms, of which
+8,847 are `services/ingestion/.venv` — gitignored, and invisible to every bare query, because
+`visibleForGlobalQuery` hides dot-prefixed segments. An `excludedDirectories` row on the
+`file-reference-local` patch layer would cut that to 730 entries in 27 ms, and it was **not**
+written: the sample report is entry #496 in walk order against a 10,000-entry cap, it already
+ranks first for `sample`, `inspection` and `report.pdf`, and 262 ms is not a demo problem. A
+config row that fixes nothing measurable is scope, not care.

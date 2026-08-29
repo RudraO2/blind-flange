@@ -1078,6 +1078,71 @@ dsh plugin --profile web remove @changfenhuang/dsh-genui
 
 The key findings go back to being a code block in the reply; nothing else changes.
 
+## Story 8.2: the @ mention is already in the box
+
+**Nothing was installed for this story, and that is the finding.** `@` in the composer opens a
+searchable list of workspace files and folders on a stock `0.1.1-rc.2` harness, before any
+Blind Flange row is applied. It is worth writing down because the obvious next move — adopting a
+plugin that adds an `@` picker — makes the workbench worse, and someone will try it again.
+
+**What ships it.** Three rows, all from the `dsh-web-app` bundle, none of them ours:
+
+| Row | Package | Half |
+|---|---|---|
+| `ui-reference` | `@deepseek-ai/dsh-client-ui-reference` | the browser `@` source ("Unified Web @file and @session reference source") |
+| `file-reference-local` | `@deepseek-ai/dsh-file-reference-local` | the host-side workspace index behind it |
+| `session-reference` | `@deepseek-ai/dsh-session-reference` | the `@session` half of the same menu |
+
+They register through `ctx.inputTriggers.registerSource`, the same pipeline `/` commands use.
+`registerSource` rejects a duplicate `(trigger, name)` pair and nothing else — so a second
+plugin claiming `@` under a different source name does not collide, it **coexists**, and both
+sets of candidates render in one menu. That is what disqualified `dsh-at-file` (Epic 8's
+Rejected table).
+
+**What a mention actually does.** It inserts prompt text, not file content. The host adds one
+system-prompt section, verbatim:
+
+> Paths prefixed with @ are files explicitly referenced by the user. Use the read tool when their
+> contents are needed; do not claim to have inspected a file before reading it.
+
+So a mention is a pointer. What it can reach is bounded by the `read` tool under the session's
+sandbox mode (`read-only` | `workspace-write` | `danger-full-access`, owned by
+`dsh-sandbox-policy`), not by the mention. Worth knowing before anyone describes this surface to
+MRPL as the confidentiality boundary — it is not; the sandbox mode is.
+
+**Confinement of the picker itself**, which *is* enforced there. `resolveDisplayDirectory` in
+`dsh-file-reference-local` resolves the typed directory against the workspace root and returns
+`undefined` when `relative()` gives `..` or a `..`-prefixed path, when the result is absolute,
+and when any segment on the way is a symlink or not a directory. Measured live on a cold clone:
+`@../`, `@../../` and `@C:/Windows/` each offer nothing and close the menu; a bare `@`
+immediately afterwards reopens with 20 candidates, which is what makes the three refusals
+refusals rather than a stuck menu.
+
+**The demo beat.** On a cold `DSH_HOME` the seeded workspace is the repository checkout, so
+`@insp` returns `services/ingestion/fixtures/sample-inspection-report.pdf` first, and picking it
+lands an inline chip in the draft. Verified in both themes:
+`docs/screenshots/story-8-2-mention-picker-{light,dark}.png` and
+`story-8-2-mention-chip-{light,dark}.png`.
+
+**The index, and why it was left alone.** `file-reference-local` takes `maxResults` (20),
+`maxEntries` (10,000) and `excludedDirectories` (`.git`, `node_modules`) from the patch layer.
+Over this checkout the walk indexes 9,609 entries in 262 ms; 8,847 of them are
+`services/ingestion/.venv`, which is gitignored and invisible to every bare query because
+`visibleForGlobalQuery` drops dot-prefixed segments. Adding `.venv`, `__pycache__` and
+`.pytest_cache` to `excludedDirectories` cuts it to 730 entries in 27 ms — and was deliberately
+not done. The sample report is entry #496 in breadth-first walk order, nowhere near the cap, and
+it already ranks first for `sample`, `inspection` and `report.pdf`. Write the row if the
+checkout ever grows past the cap; do not write it for tidiness.
+
+**Two cosmetic gaps on a cold clone's first screen**, found while doing the above and belonging
+to Story 1.5 rather than here. Both brand *mark* seats are ours —
+`conversation.hero.brand.mark` and `sidebar.brand.mark` carry the Blind Flange glyph — but:
+
+- `sidebar.brand.name` is an unclaimed declared slot and falls back to a
+  `fallbackBrandName` span reading "DSH Local Build", plus a build-revision chip.
+- The hero headline reads "Into the Unknown" with a "Preview" badge. It is shipped greeting copy
+  (`headlineText`), not a brand slot, so taking it needs a different seat than Story 1.5 used.
+
 ## Removing it
 
 ```sh

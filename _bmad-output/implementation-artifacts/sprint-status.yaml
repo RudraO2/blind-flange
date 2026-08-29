@@ -88,9 +88,9 @@ development_status:
   6-5-a-recorded-offline-run-exists: done
   epic-6-retrospective: optional
 
-  epic-8: in-progress
+  epic-8: done
   8-1-the-agents-findings-render-as-something-you-can-read-at: done
-  8-2-a-workspace-file-is-attached-by-naming-it: backlog
+  8-2-a-workspace-file-is-attached-by-naming-it: done
   epic-8-retrospective: optional
 
   epic-7: deferred
