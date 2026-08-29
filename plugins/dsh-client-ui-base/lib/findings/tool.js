@@ -29,6 +29,7 @@
 import { readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
+import { recordIngestion } from "../trace/turn.js";
 import { currentDocument, rememberFindings } from "./attached.js";
 import { DEFAULT_INGESTION_ENDPOINT, ingest } from "./ingestion-client.js";
 
@@ -103,6 +104,17 @@ export function createReportFindingsTool(options = {}) {
 		 * the ingested report for the shipped fixture.
 		 */
 		async execute() {
+			// One recording point rather than one per return path. How the text was
+			// obtained — live OCR or the committed capture — is the same fact the
+			// deliverable's audit trail prints, so it is taken from what this tool
+			// actually returned rather than derived a second time.
+			const value = await readFindings();
+			recordIngestion(value);
+			return value;
+		},
+	};
+
+	async function readFindings() {
 			const attached = currentDocument();
 			if (attached !== null) {
 				try {
@@ -146,8 +158,7 @@ export function createReportFindingsTool(options = {}) {
 					}`,
 				};
 			}
-		},
-	};
+	}
 }
 
 // Re-exported so callers that already reach for these through the tool keep

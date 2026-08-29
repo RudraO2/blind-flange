@@ -26,6 +26,10 @@
 import { mkdirSync, writeFileSync } from "node:fs";
 import { createHash } from "node:crypto";
 import { dirname, isAbsolute, resolve as resolvePath } from "node:path";
+import { loadFleet } from "../registry/loader.js";
+import { lastRoutingDecision, runtimeModelForCurrentTurn } from "../router/dispatch.js";
+import { lastIngestion, toolsRunThisTurn } from "../trace/turn.js";
+import { buildAuditTrail } from "./audit-trail.js";
 import { buildApprovalNoteDocx } from "./docx.js";
 
 export const APPROVAL_NOTE_TOOL_NAME = "bf_approval_note";
@@ -96,7 +100,16 @@ function contentHashOf(args) {
  * @param {() => Date} [now] - override for tests; defaults to the real clock.
  * @returns a harness `ToolDefinition`.
  */
-export function createApprovalNoteTool(now = () => new Date()) {
+/**
+ * @param {(() => Date) | { now?: () => Date, providerName?: string }} [options]
+ *   A function keeps the original single-argument call working; an object also
+ *   carries the active provider name, which the note discloses — a reply served
+ *   from a stored response must say so inside the file, not only on screen
+ *   (ADR-0001).
+ */
+export function createApprovalNoteTool(options = {}) {
+	const now = typeof options === "function" ? options : (options.now ?? (() => new Date()));
+	const providerName = typeof options === "function" ? "unknown" : (options.providerName ?? "unknown");
 	return {
 		name: APPROVAL_NOTE_TOOL_NAME,
 		description:
@@ -168,6 +181,35 @@ export function createApprovalNoteTool(now = () => new Date()) {
 			const cwd = exec?.agent?.session?.header?.cwd;
 			const absolutePath = isAbsolute(relativePath) ? relativePath : resolvePath(cwd ?? process.cwd(), relativePath);
 			mkdirSync(dirname(absolutePath), { recursive: true });
+
+			// The audit trail is assembled from the same state the live panels read —
+			// the router's own decision and the dispatch resolved from it — rather than
+			// from a parallel record kept for the document's benefit. A second source of
+			// truth for "which model answered" is a second thing to be wrong, and the
+			// copy inside the file is the one nobody can check against the screen once
+			// the file has been emailed.
+			//
+			// Never allowed to fail the deliverable: a note without its reasoning is
+			// worth less than one with it, and worth far more than an error.
+			let auditTrail;
+			try {
+				auditTrail = buildAuditTrail({
+					routing: lastRoutingDecision(),
+					dispatch: runtimeModelForCurrentTurn(loadFleet().loaded),
+					providerName,
+					ingestion: lastIngestion(),
+					// This tool's own call is included, because "generated the note" is a
+					// step in the work and a list that omits its own last action reads as
+					// incomplete to anyone checking it.
+					tools: [...toolsRunThisTurn(), { name: APPROVAL_NOTE_TOOL_NAME, outcome: `${args.clauses.length} clauses cited` }],
+				}).lines;
+			} catch (error) {
+				console.warn(
+					`@blind-flange/dsh-client-ui-base: the approval note's audit trail could not be assembled — ${error instanceof Error ? error.message : String(error)}`,
+				);
+				auditTrail = undefined;
+			}
+
 			const buffer = buildApprovalNoteDocx({
 				title: args.title,
 				referenceNumber: args.referenceNumber,
@@ -175,6 +217,7 @@ export function createApprovalNoteTool(now = () => new Date()) {
 				sourceReport: args.sourceReport,
 				clauses: args.clauses,
 				contentHash,
+				auditTrail,
 			});
 			writeFileSync(absolutePath, buffer);
 			return { path: absolutePath, referenceNumber: args.referenceNumber, contentHash, clauseCount: args.clauses.length };

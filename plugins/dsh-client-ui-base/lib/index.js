@@ -503,7 +503,13 @@ export function apply(ctx, config) {
 	// two tools above, so every preset's agent can turn a completed set of
 	// findings into a real, signed .docx without a per-preset row.
 	ctx.inject(["tools"], (toolCtx) => {
-		toolCtx.effect(() => toolCtx.tools.register(createApprovalNoteTool()), "blind-flange: approval note tool");
+		// The provider name is passed in because the note discloses it: a reply
+		// served from a stored response has to say so inside the file, not only on
+		// screen, or the disclosure does not survive the file being emailed.
+		toolCtx.effect(
+			() => toolCtx.tools.register(createApprovalNoteTool({ providerName: config?.modelPlane?.provider ?? "replay" })),
+			"blind-flange: approval note tool",
+		);
 	});
 	ctx.inject(["connection", "agents", "tools"], (canaryCtx) => {
 		canaryCtx.effect(() => {
