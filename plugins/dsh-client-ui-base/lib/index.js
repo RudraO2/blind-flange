@@ -81,6 +81,7 @@ import { classifyRequest, lastUserText } from "./router/classify.js";
 import { recordRoutingDecision } from "./router/dispatch.js";
 import { scoreFleet } from "./router/score.js";
 import { registerKnownSessionEventTypes } from "./session-events/known-types.js";
+import { createTraceRpcHandler, TRACE_CHANNEL } from "./trace/rpc.js";
 import { createUploadRpcHandler, UPLOAD_CHANNEL } from "./upload/rpc.js";
 
 const FAVICON_PATH = "/blind-flange/favicon.svg";
@@ -536,6 +537,21 @@ export function apply(ctx, config) {
 				void dispose();
 			};
 		}, "blind-flange: upload rpc channel");
+
+		// The residency chip's channel. Read-only, and it reports llama-swap's own
+		// `/running` rather than anything we track — we do not own loading or
+		// eviction, and a second idea of what is resident could disagree with the
+		// thing actually holding the memory.
+		uploadCtx.effect(() => {
+			const dispose = uploadCtx.connection.rpc.handle(
+				TRACE_CHANNEL,
+				createTraceRpcHandler({ providerName: config?.modelPlane?.provider ?? "replay" }),
+				{ authority: "loopback" },
+			);
+			return () => {
+				void dispose();
+			};
+		}, "blind-flange: trace rpc channel");
 	});
 
 	const providerName = config?.modelPlane?.provider ?? "replay";

@@ -1130,6 +1130,166 @@ window.__ModuleLoader__.load({
 		 * time it took — a number the user can sanity-check, rather than a tick.
 		 * ------------------------------------------------------------------- */
 
+		/* ---------------------------------------------------------------------
+		 * Residency (30 August 2026)
+		 *
+		 * CONTEXT.md "Residency": which fleet members are resident in VRAM at a
+		 * given moment, and how long they stay before eviction.
+		 *
+		 * The spec asked for an execution-trace surface. Most of what one would show
+		 * already has a home — the routing chip carries every classifier score and
+		 * exclusion reason, and the approval note carries the model, the OCR
+		 * provenance and the tool sequence in a form that survives the file being
+		 * emailed. Repeating those here would be work spent making the same fact
+		 * visible in a fourth place.
+		 *
+		 * One thing is genuinely invisible: which models are in 4 GB of VRAM right
+		 * now, and what was evicted to make room. That is the hardest constraint on
+		 * this build, and it is the difference between a chip that changes a label
+		 * and a machine visibly managing a card too small for its fleet. So this
+		 * shows residency, with the turn's trace as the detail underneath.
+		 *
+		 * Read from llama-swap's own `/running` through the host. We do not own
+		 * loading or eviction, so a panel with its own idea of what is loaded would
+		 * be a second source of truth that can disagree with the thing actually
+		 * holding the memory — the same reasoning that keeps the egress monitor
+		 * counting events rather than a counter.
+		 * ------------------------------------------------------------------- */
+
+		const TRACE_CHANNEL = "/bf-trace";
+		const TRACE_ENDPOINT = "read";
+
+		/**
+		 * Build the residency chip for `conversation.session.header.utilities`.
+		 * @param connection - the host transport (`ctx.connection`), carrying `rpc.call`.
+		 */
+		function buildResidencyChip(connection) {
+			// Deliberately only the hooks the rest of this file already uses. An
+			// earlier version reached for `useCallback`, which the browser has and
+			// this package's own test seam does not model — so the chip threw in test
+			// and rendered fine in the app, which is the worst way round.
+			const { useEffect, useState } = require("react");
+			const { jsx, jsxs } = require("react/jsx-runtime");
+			const { Menu, Pill, StateDot } = require("@deepseek-ai/dsh-client-ui-primitives");
+
+			function ResidencyChip() {
+				const [trace, setTrace] = useState(null);
+				const [open, setOpen] = useState(false);
+
+				useEffect(() => {
+					let live = true;
+					async function read() {
+						try {
+							const result = await connection.rpc.call(TRACE_CHANNEL, TRACE_ENDPOINT, {});
+							// Guard against a resolve arriving after unmount, which would
+							// otherwise be a setState on a dead component every time a
+							// session is closed mid-poll.
+							if (live) setTrace(result?.ok === true ? result.value : null);
+						} catch {
+							// A chip that throws is worse than one that says nothing.
+							if (live) setTrace(null);
+						}
+					}
+					read();
+					// Polled rather than pushed. llama-swap has an SSE event stream its own
+					// UI consumes, and using it would mean a second transport for one chip;
+					// a swap takes about three seconds, so two-second polling shows it
+					// happening without pretending to be live.
+					const timer = setInterval(read, 2000);
+					return () => {
+						live = false;
+						clearInterval(timer);
+					};
+				}, []);
+
+				const residency = Array.isArray(trace?.residency) ? trace.residency : [];
+				const ready = residency.filter((entry) => entry.state === "ready");
+				const loading = residency.filter((entry) => entry.state === "starting" || entry.state === "stopping");
+
+				// Four states, and each says something different about the machine.
+				let tone = "neutral";
+				let label = "VRAM idle";
+				let title = "No model is resident in the GPU. One will load on the next question.";
+				if (trace === null || trace.runtimeReachable === false) {
+					tone = "danger";
+					label = "VRAM —";
+					title =
+						"llama-swap is not answering, so nothing can be loaded. Start it, or switch the model plane to `replay` " +
+						"in the profile patch.";
+				} else if (loading.length > 0) {
+					tone = "info";
+					label = `Loading ${loading[0].model}`;
+					title = `Swapping models: ${loading.map((entry) => `${entry.model} is ${entry.state}`).join(", ")}. On this card only one fits at a time.`;
+				} else if (ready.length > 0) {
+					tone = "success";
+					label = `VRAM ${ready.map((entry) => entry.model).join(", ")}`;
+					title = `Resident in GPU memory: ${ready.map((entry) => entry.model).join(", ")}. Read from llama-swap, not tracked by Blind Flange.`;
+				}
+
+				const items = [];
+				items.push({ kind: "label", text: "Resident in GPU memory" });
+				if (residency.length === 0) {
+					items.push({ kind: "text", text: trace?.runtimeReachable === false ? "llama-swap is not answering." : "Nothing loaded." });
+				} else {
+					for (const entry of residency) {
+						items.push({
+							kind: "text",
+							text: `${entry.model} — ${entry.state}${typeof entry.ttl === "number" && entry.ttl > 0 ? `, unloads after ${entry.ttl}s idle` : ""}`,
+						});
+					}
+				}
+				items.push({ kind: "label", text: "This turn" });
+				items.push({ kind: "text", text: `Model plane: ${trace?.providerName ?? "unknown"}` });
+				items.push({
+					kind: "text",
+					text:
+						trace?.taskType === null || trace?.taskType === undefined
+							? "Nothing routed yet."
+							: `Routed as ${trace.taskType} → ${trace.selected ?? "no member"}${trace.runtimeId ? ` (${trace.runtimeId})` : ""}`,
+				});
+				if (trace?.dispatchReason && trace.dispatchReason !== "routed") {
+					// A fallback to the default model looks exactly like a routing
+					// decision unless the reason is said out loud.
+					items.push({ kind: "text", text: `Not dispatched: ${trace.dispatchReason}` });
+				}
+				if (trace?.ingestion) {
+					items.push({
+						kind: "text",
+						text:
+							trace.ingestion.source === "live"
+								? `Read ${trace.ingestion.findings ?? "?"} OCR lines from ${trace.ingestion.report ?? "the document"} on this machine`
+								: `Read ${trace.ingestion.findings ?? "?"} OCR lines from the committed capture, not a live OCR pass`,
+					});
+				}
+				for (const [index, tool] of (Array.isArray(trace?.tools) ? trace.tools : []).entries()) {
+					items.push({ kind: "text", text: `${index + 1}. ${tool.name}${tool.outcome ? ` — ${tool.outcome}` : ""}` });
+				}
+
+				const anchor = jsxs(Pill, {
+					as: "button",
+					type: "button",
+					onClick: () => setOpen((was) => !was),
+					title,
+					"aria-label": title,
+					children: [jsx(StateDot, { tone }), label],
+				});
+
+				return jsx(Menu, {
+					open,
+					onOpenChange: setOpen,
+					side: "bottom",
+					anchor,
+					items: items.map((item, index) =>
+						item.kind === "label"
+							? { id: `l${index}`, type: "label", label: item.text }
+							: { id: `t${index}`, type: "item", label: item.text, disabled: true },
+					),
+				});
+			}
+
+			return ResidencyChip;
+		}
+
 		const UPLOAD_CHANNEL = "/bf-upload";
 		const UPLOAD_ENDPOINT = "attach";
 		const UPLOAD_ACCEPT = ".pdf,.png,.jpg,.jpeg,.tif,.tiff,.bmp,.webp";
@@ -1979,6 +2139,7 @@ window.__ModuleLoader__.load({
 			// the monitor is worth more than the button that calibrates it.
 			let disposeCanary;
 			let disposeUpload;
+			let disposeResidency;
 			ctx.inject(["connection"], (canaryCtx) => {
 				const CanaryButton = buildCanaryButton(canaryCtx.connection);
 				disposeCanary = canaryCtx.slots.inject("conversation.input.right", () => {
@@ -1999,6 +2160,19 @@ window.__ModuleLoader__.load({
 				// canary: the natural left-to-right reading of the row is "give it a
 				// document, then prove nothing left the box", which is also the order
 				// the demo does them in.
+				// Residency takes a seat in the session header beside the egress chip
+				// and the provider chip, not the composer row — it describes the
+				// machine's state rather than offering an action, and the header is
+				// where this product already puts that.
+				const ResidencyChip = buildResidencyChip(canaryCtx.connection);
+				disposeResidency = canaryCtx.slots.inject("conversation.session.header.utilities", () => {
+					const dispose = canaryCtx.slots.register(
+						{ name: "conversation.session.header.utilities", id: "bf-residency", label: "Residency", order: 20 },
+						ResidencyChip,
+					);
+					return () => { dispose(); };
+				});
+
 				const UploadButton = buildUploadButton(canaryCtx.connection);
 				disposeUpload = canaryCtx.slots.inject("conversation.input.right", () => {
 					const dispose = canaryCtx.slots.register(
@@ -2056,6 +2230,7 @@ window.__ModuleLoader__.load({
 				disposeEgressPanel?.();
 				disposeCanary?.();
 				disposeUpload?.();
+				disposeResidency?.();
 				disposeRoutingChip?.();
 				disposeProvenanceView?.();
 				disposeRoutingView?.();

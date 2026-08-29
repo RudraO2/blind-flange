@@ -104,8 +104,19 @@ The map's job was decisions, and it is done. What has since been built against
 - **The upload control** — a `Pill` in the composer row that reads a file, ingests it
   immediately, and reports the finding count. Verified rendering in light and dark.
 
-**Still to build:** the execution-trace surface, the audit-trail section inside the `.docx`,
-and the evaluation table. All three are presentation over work that is already real.
+- **The evaluation table** — `npm run evaluate`, ten fixtures against ground truth a human wrote
+  down. 7/10 correct, router 7/10, mean 1.71s, with the failing programs printed.
+- **The audit trail inside the `.docx`** — task type, every member's score, the model that
+  answered, whether the OCR ran live, and the tools in order. Verified opening clean in Word.
+- **The residency chip** — which models are in 4 GB of VRAM right now, read from llama-swap's own
+  `/running`. Scoped down from the spec's "execution-trace surface" on the lazy-ladder argument:
+  the routing chip already shows scores and the deliverable already carries the trace, so this
+  builds only the part that was invisible.
+
+**Nothing on this map is left to build.** What remains is other people's, or nobody's yet:
+the router's arithmetic gap and its model placement (`docs/router-handoff.md`), Story 6.3 on a
+second machine, re-recording the demo, and the `go-licenses` enumeration for llama-swap's
+statically linked modules.
 
 ## Not yet specified
 

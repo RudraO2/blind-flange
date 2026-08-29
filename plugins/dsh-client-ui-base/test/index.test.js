@@ -717,17 +717,20 @@ test("registers the approval-note tool (Story 5.4), unconditionally like the can
 	assert.equal(typeof approvalNoteTool.presentCall, "function");
 });
 
-test("registers the canary and upload channels, both loopback-only", () => {
+test("registers the canary, upload and trace channels, all loopback-only", () => {
 	const host = stubHostCtx();
 	apply(host.ctx);
-	// Both are reachable from a browser on this machine and from nothing that can
-	// merely reach the port. The upload channel carries a document the user chose;
-	// a non-loopback authority on it would be a way to push a file into someone
-	// else's session, so this is asserted rather than assumed.
+	// Every one is reachable from a browser on this machine and from nothing that
+	// can merely reach the port. The upload channel carries a document the user
+	// chose, so a non-loopback authority on it would be a way to push a file into
+	// someone else's session; the trace channel reports what is resident in VRAM,
+	// which is machine state nobody off this box should be reading. Asserted
+	// rather than assumed, for each of them.
 	assert.deepEqual(
 		host.rpcChannels.map((entry) => [entry.channel, entry.options.authority]).sort(),
 		[
 			["/bf-canary", "loopback"],
+			["/bf-trace", "loopback"],
 			["/bf-upload", "loopback"],
 		],
 	);
@@ -797,12 +800,12 @@ test("a profile with no tool registry still gets the egress denial waterfall", a
 	apply(host.ctx);
 	assert.deepEqual(host.registeredTools, []);
 	// The canary's channel needs the tool registry and so does not mount here. The
-	// upload channel needs only `connection`, because it attaches the document and
-	// calls the ingestion service directly rather than dispatching a tool — so it
-	// is present even in a profile with no tools, which is correct.
+	// upload and trace channels need only `connection` — one attaches a document
+	// and calls the ingestion service directly, the other reads llama-swap — so
+	// both are present even in a profile with no tools, which is correct.
 	assert.deepEqual(
-		host.rpcChannels.map((entry) => entry.channel),
-		["/bf-upload"],
+		host.rpcChannels.map((entry) => entry.channel).sort(),
+		["/bf-trace", "/bf-upload"],
 	);
 	const decision = await host.preExecuteListener({ name: "web_fetch", arguments: { url: "https://example.com" } }, () => {
 		throw new Error("next() must not be called for a denied tool");

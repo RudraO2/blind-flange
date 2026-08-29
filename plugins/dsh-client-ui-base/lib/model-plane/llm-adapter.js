@@ -41,6 +41,7 @@ import {
 } from "../lanes/code.js";
 import { announceRefusals, loadFleet } from "../registry/loader.js";
 import { currentTaskType, runtimeModelForCurrentTurn } from "../router/dispatch.js";
+import { recordTool } from "../trace/turn.js";
 
 /** Exact model identity this adapter reports; nothing here validates against a catalog (advisory only, per the harness's own contract). */
 async function resolveModel(provider, model) {
@@ -167,6 +168,12 @@ async function* codeLanePieces(modelProvider, options, dispatch) {
 		}
 		const result = verdictFor(prediction.expected, sandboxOutput(options.messages));
 		clearPrediction();
+		// Recorded here rather than when the call was emitted, because this is the
+		// first point the outcome is known — and an audit trail listing a sandbox
+		// run without saying what it produced is the half of the record that
+		// matters least. Without this a coding-lane approval note would name only
+		// the tools we dispatch ourselves and under-report its own work.
+		recordTool(SANDBOX_TOOL_NAME, { outcome: `${result.verdict.toLowerCase()} — the sandbox computed ${result.actual || "nothing"}` });
 		yield { type: "text", text: `${describeVerdict(result)}\n\n` };
 		yield* modelProvider.answer({ messages: options.messages, model });
 		return;

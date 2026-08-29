@@ -303,6 +303,11 @@ test("occupies both places the DeepSeek whale used to render, and the hero's tas
 		// box", which is also the order the demo does them in.
 		"conversation.input.right",
 		"conversation.input.right",
+		// Three chips in the session header: the provider disclosure, the egress
+		// monitor, and residency — which models are in VRAM right now. That last one
+		// is the only surface showing it; the routing chip shows scores and the
+		// approval note carries the rest of the trace.
+		"conversation.session.header.utilities",
 		"conversation.session.header.utilities",
 		"conversation.session.header.utilities",
 		// Story 4.5's crop viewer — a whole tab, not a chip.
@@ -1048,4 +1053,60 @@ test("it sets no colour of its own either — the state dot carries it through t
 	assert.doesNotMatch(section, /rgba?\(/, "the upload control must not hand-roll a colour");
 	// One exception, and it is layout rather than colour: the file input is hidden.
 	assert.match(section, /display: "none"/);
+});
+
+/* ---------------------------------------------------------------------------
+ * The residency chip (30 August 2026)
+ *
+ * CONTEXT.md "Residency": which fleet members are resident in VRAM at a given
+ * moment. The only surface that shows it — the routing chip shows scores and the
+ * approval note carries the rest of the trace, so this is the part that adds
+ * information rather than repeating it.
+ * ------------------------------------------------------------------------- */
+
+function findResidency(registered) {
+	return registered.find((call) => call.options.name === "conversation.session.header.utilities" && call.options.id === "bf-residency");
+}
+
+test("the residency chip takes a session-header seat, not a composer seat", () => {
+	const { exports } = loadClientHalf((specifier) => healthyHostModules[specifier]);
+	const { ctx, registered } = stubSlots();
+	exports.apply(ctx);
+
+	const chip = findResidency(registered);
+	assert.ok(chip, "no bf-residency registration");
+	assert.equal(chip.options.label, "Residency");
+	// It describes the machine's state rather than offering an action, and the
+	// header is where this product already puts that — beside the provider
+	// disclosure and the egress monitor.
+	assert.equal(chip.options.name, "conversation.session.header.utilities");
+});
+
+test("with nothing read yet it says the runtime is not answering, rather than looking idle", () => {
+	// The worse of the two mistakes: a comfortable "VRAM idle" while llama-swap is
+	// dead hides the reason nothing works. Before the first poll resolves there is
+	// no trace, and that must read as unknown-and-bad, not as fine.
+	const { exports } = loadClientHalf((specifier) => healthyHostModules[specifier]);
+	const { ctx, registered } = stubSlots();
+	exports.apply(ctx);
+
+	const rendered = findResidency(registered).component({});
+	// A Menu whose anchor is the Pill, the same shape as the routing chip.
+	assert.equal(rendered.type, PRIMITIVES.Menu);
+	const flat = JSON.stringify(rendered.props);
+	assert.match(flat, /VRAM/);
+	assert.match(flat, /llama-swap is not answering/);
+	// It names the escape hatch, because the person reading this chip at the wrong
+	// moment needs the one-line fix and not a diagnosis.
+	assert.match(flat, /replay/);
+});
+
+test("the residency chip sets no colour of its own either", () => {
+	// Same rule as the canary and the upload control, same reason: a hand-rolled
+	// colour is what made the 27 Aug egress monitor read as pasted on.
+	const source = readFileSync(join(packageDir, "lib", "client.js"), "utf8");
+	const section = source.slice(source.indexOf("function buildResidencyChip"), source.indexOf("const UPLOAD_CHANNEL"));
+	assert.ok(section.length > 1000, "the residency section was not found — this test is asserting nothing");
+	assert.doesNotMatch(section, /#[0-9a-fA-F]{3,8}\b/, "the residency chip must not hand-roll a hex colour");
+	assert.doesNotMatch(section, /rgba?\(/, "the residency chip must not hand-roll a colour");
 });
