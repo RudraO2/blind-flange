@@ -79,6 +79,34 @@ of `CLAUDE.md`'s stand-down.
   `Qwen/…` only** — `ggml-org`'s and `bartowski`'s uploads declare no licence at all. Editing
   `registry/models.yaml` breaks `test/loader.test.js` in the same commit.
 
+## Built, as of 30 August 2026 05:00
+
+The map's job was decisions, and it is done. What has since been built against
+[spec.md](spec.md), all on `feat/local-inference-lanes`, all green (320 Node tests,
+21 Python tests, licence audit clean):
+
+- **`LocalModelProvider`** — real inference through llama-swap over loopback, with a
+  separately-tested SSE parser and three named failure modes. 104 tok/s on the coder.
+- **Dispatch** — the router's `router/routed` decision now reaches an actual model. Four task
+  types resolve onto two runtime models with no router change. `classify.js` and `score.js`
+  untouched.
+- **The registry** — the two members that physically run, each with a `runtime_id`, plus a
+  second Research-Licence refusal case.
+- **The coding lane** — Python not PowerShell (0/9 versus 6/9 runnable), driven by a JSON
+  schema because native tool calling does not parse on a 1.5B, with the model predicting a
+  value and our code comparing it against what the sandbox computed.
+- **The egress seal** — extended to Python, which the lane switch would otherwise have
+  bypassed entirely, plus a refusal for interpreter invocations whose code cannot be inspected.
+- **Live ingestion** — the OCR service is finally called, with a *disclosed* capture fallback,
+  and the engine pre-warms at startup (15s → 7s).
+- **Provenance on demand** — pages rendered for a document nobody has rendered before, with a
+  test asserting every bounding box fits the page it cites.
+- **The upload control** — a `Pill` in the composer row that reads a file, ingests it
+  immediately, and reports the finding count. Verified rendering in light and dark.
+
+**Still to build:** the execution-trace surface, the audit-trail section inside the `.docx`,
+and the evaluation table. All three are presentation over work that is already real.
+
 ## Not yet specified
 
 - **Provenance for an arbitrary uploaded file.** `lib/findings/provenance.js` serves two
