@@ -1005,6 +1005,79 @@ The second command is expected to fail today with
 proof: the plugin tree loaded clean and every network-reaching adapter is gone, so there is
 nothing left to answer with. Headless starts answering once Story 3.1 lands the replay provider.
 
+## Story 8.1: the adopted panel plugin
+
+The one plugin in this workbench we did not write. `@changfenhuang/dsh-genui` teaches the model
+a ```dsh-ui fence and renders the fenced JSON inline in the reply; Blind Flange writes the key
+findings into one, and they arrive as a table instead of a paragraph.
+
+**Installed through the profile's own bundle channel, pinned to an exact version:**
+
+```sh
+dsh plugin --profile web add @changfenhuang/dsh-genui@0.9.3
+```
+
+`scripts/start.mjs` does this for you and is idempotent — it compares the profile manifest's
+dependency against the pin and installs only on a mismatch. No copy of the package enters this
+repository and no harness source is touched (NFR5). The row that mounts it comes from the
+package's own `cordis.patch.yml`, which is why `profile/web/cordis.patch.yml` says nothing
+about it: `dsh plugin add` records the bundle in `~/.dsh/profiles/web/package.json` instead.
+
+**Web only.** The headless profile has no browser to render a fence in, and the plugin's host
+half would otherwise add its fence-teaching section to that profile's system prompt for nothing.
+
+**Why 0.9.3 and not the newest release.** 0.9.6 was installed first and rejected on the design
+gate: 0.9.4 adds a template drawer with a timed first-run hint, and 0.9.5 adds gamified
+achievement toasts — a 🏆 "成就解锁" stack mounted onto `document.body`, outside the slot
+registry, that fires on the first rendered fence. On an industrial workbench, mid-demo, in a
+language the rest of the product does not speak. There is no configuration switch for either,
+patching a third-party plugin to pass a gate is not allowed, and pre-seeding its `localStorage`
+would be per-browser state that a cold clone cannot ship. 0.9.3 predates both, and its own
+changelog records verification against this project's pinned host, dsh 0.1.1-rc.2.
+
+**The permitted component set is ours, not the plugin's.** The plugin renders some thirty
+component types. Blind Flange allows three — `table`, `chart`, `plot` — declared in
+`plugins/dsh-client-ui-base/lib/genui/permitted-set.js` and enforced by
+`plugins/dsh-client-ui-base/test/genui.test.js`, which parses every fence in the authored
+replay cache and fails on a type outside the set, on an `action` key anywhere in the tree (the
+event loop back into the model, which no demonstrable needs), and on any `href` or `src`.
+The same test checks each row's cited region against the OCR capture, so a table row can never
+quietly cite a region Story 4.5's crop viewer cannot show.
+
+**What it mounts, verified on 29 August 2026:** the fence renderer (DOM channel — this host
+does not ship the `fence-registry` extension point, and the plugin logs
+`[genui] client active; fence-channel=dom`), a `conversation.input.dock` seat that renders
+nothing until a spec exists, a `tool.call.toolview` entry keyed to its own `render_ui` tool,
+and a `/panel` slash command. It also registers two tools, `render_ui` and `validate_dsh_ui`;
+neither is network-capable, so Story 1.2's claim is unaffected.
+
+**Checking it worked**, against a running `dsh web`:
+
+```sh
+curl -s -o /dev/null -w "%{http_code}
+"   "http://127.0.0.1:3080/plugins/@changfenhuang/dsh-genui/client.js"
+# -> 200, served from loopback like every other plugin bundle
+```
+
+Then ask for the key findings and watch the reply become a table. In the browser console,
+`[genui] client active; fence-channel=dom` is the activation proof; a downloaded `client.js`
+alone is not.
+
+**One behaviour worth knowing about.** On boot the client adds `<link rel="prefetch">` hints
+for two engine bundles it vendors, `mermaid.js` (3.4 MB) and `three.js` (0.7 MB). Both are
+served from loopback, so the egress claim is untouched, and neither is ever executed here —
+measured: no script element, no `window.__GenuiAssets__` entry, `window.mermaid`,
+`window.THREE` and `window.echarts` all `undefined`. `docs/licence-decisions.json` records all
+three engines and the DOMPurify copy inside the mermaid bundle.
+
+**Removing just this one:**
+
+```sh
+dsh plugin --profile web remove @changfenhuang/dsh-genui
+```
+
+The key findings go back to being a code block in the reply; nothing else changes.
+
 ## Removing it
 
 ```sh

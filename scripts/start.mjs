@@ -26,6 +26,23 @@ import { fileURLToPath } from 'node:url'
 
 /** The harness version this workbench was built and verified against (NFR6). */
 const HARNESS_VERSION = '0.1.1-rc.2'
+/**
+ * The one adopted third-party plugin (Story 8.1), pinned to an exact version.
+ *
+ * `@changfenhuang/dsh-genui` renders the ```dsh-ui fence our replay cache
+ * writes the key findings into. 0.9.3 rather than the newest release, and
+ * deliberately: 0.9.4 adds a template drawer with a timed hint and 0.9.5 adds
+ * gamified achievement toasts that fire on the first rendered fence, both in
+ * Chinese and both mounted outside the slot registry. 0.9.3 is also the
+ * release whose changelog records verification against this project's own
+ * pinned host, dsh 0.1.1-rc.2.
+ *
+ * Web only. The headless profile has no browser to render a fence in, and the
+ * plugin's host half would otherwise add its fence-teaching section to that
+ * profile's system prompt for nothing.
+ */
+const GENUI_PACKAGE = '@changfenhuang/dsh-genui'
+const GENUI_VERSION = '0.9.3'
 /** Node the plugin package was verified against; a minimum, not a pin. */
 const MIN_NODE = '22.15.0'
 /** `dsh plugin` forwards to whatever pnpm is on PATH. */
@@ -246,7 +263,7 @@ if (installed.status === 0 && installed.stdout.split('\n')[0].trim() === HARNESS
 } else {
   const found = installed.status === 0 ? installed.stdout.split('\n')[0].trim() : 'not installed'
   say(`  found: ${found}. Installing the pinned version (about 511 packages, ~2 minutes).`)
-  say('  This is the one step that uses the network, and it is the last one that does.')
+  say('  This and the adopted plugin below are the only steps that use the network.')
   run(`npm install -g @deepseek-ai/dsh@${HARNESS_VERSION}`, 'Installing the harness')
 }
 
@@ -267,6 +284,27 @@ for (const profile of PROFILES) {
     say('  already points at this checkout')
   } else {
     run(`dsh plugin --profile ${profile} add "${linkTarget}"`, `Installing the plugin into the ${profile} profile`)
+  }
+}
+
+// ── 3b. the adopted plugin, in the web profile only ─────────────────────────
+
+// Pinned to an exact version, installed through the profile's own bundle
+// channel: no copy of it enters this repository and no harness source is
+// touched (NFR5, NFR6). The insert row that mounts it comes from the package's
+// own `cordis.patch.yml`, so `profile/web/cordis.patch.yml` says nothing about
+// it — `dsh plugin add` records it in the profile manifest's `bundles` list.
+step(`Installing the adopted panel plugin into the web profile (${GENUI_PACKAGE}@${GENUI_VERSION})`)
+{
+  const manifestPath = join(dshHome, 'profiles', 'web', 'package.json')
+  const current = existsSync(manifestPath)
+    ? JSON.parse(readFileSync(manifestPath, 'utf8')).dependencies?.[GENUI_PACKAGE]
+    : undefined
+  if (current === GENUI_VERSION) {
+    say('  already at the pinned version — nothing is downloaded')
+  } else {
+    say(`  found: ${current ?? 'not installed'}. Installing the pinned version.`)
+    run(`dsh plugin --profile web add ${GENUI_PACKAGE}@${GENUI_VERSION}`, 'Installing the adopted plugin')
   }
 }
 

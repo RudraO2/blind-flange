@@ -82,6 +82,12 @@ model weights are downloaded by anything here, and a GPU changes nothing yet.**
 
 That split is deliberate and it is on screen, never hidden. See ADR-0001.
 
+The key findings arrive as a table rather than a paragraph. The table is a **rendering of that
+same replayed text** — the reply carries a `dsh-ui` fence and an adopted plugin
+(`@changfenhuang/dsh-genui`, MIT, pinned at 0.9.3) draws it. Nothing in it is computed live,
+the provider pill still reads *Replay — authored responses* while it is on screen, and each row
+names the page and region it was read from so the Provenance tab can show you the crop.
+
 ## What you should see
 
 The first screen is the workbench itself — no notice to dismiss, no API-key prompt, no
@@ -105,16 +111,19 @@ was actually read from.
    compatibility-breaking changes, so the version is pinned rather than tracked.
 3. **Installs this checkout's plugin package** into the `web` and `headless` profiles as a
    `link:` dependency, so the running app serves the working copy.
-4. **Writes the profile's patch layer, task-type presets and settings** from `profile/`.
-5. **Gives a brand-new install one workspace** pointing at this checkout, so the first session
+4. **Installs the one adopted plugin**, `@changfenhuang/dsh-genui@0.9.3` (MIT), into the `web`
+   profile at that exact version — again only if it is not already there. It renders the key
+   findings table.
+5. **Writes the profile's patch layer, task-type presets and settings** from `profile/`.
+6. **Gives a brand-new install one workspace** pointing at this checkout, so the first session
    can start without picking a directory first. An existing workspace list is never touched.
-6. **Starts the `web` profile.**
+7. **Starts the `web` profile.**
 
-**Step 2 is the only step that uses the network, and on a machine that already has the pinned
-harness there is no network use at all.** Nothing downloads a model, a font, an icon or a
-script at first use, or at any later use: every asset the page loads is served from
-`127.0.0.1:3080` or a `data:` URI, and the model plane answers from a cache committed to this
-repository. The fleet in `registry/models.yaml` is declared and licence-checked; the provider
+**Steps 2 and 4 are the only steps that use the network, and on a machine that already has the
+pinned harness and the pinned plugin there is no network use at all.** Nothing downloads a
+model, a font, an icon or a script at first use, or at any later use: every asset the page
+loads is served from `127.0.0.1:3080` or a `data:` URI, and the model plane answers from a
+cache committed to this repository. The fleet in `registry/models.yaml` is declared and licence-checked; the provider
 that would need weights on disk fails loudly rather than fetching anything.
 
 Blind Flange is a demo prototype and says so out loud: the live demo answers from **replay**,

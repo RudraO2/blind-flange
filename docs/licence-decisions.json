@@ -98,6 +98,38 @@
       "version": "shipped as reportlab/fonts/DarkGardenMK.pfb and DarkGarden.sfd",
       "role": "build-time",
       "note": "The one copyleft file in the tree that is unambiguously copyleft with no argument available. The fixture generator draws with the PDF base-14 names only, so no font file is embedded in any output — but the file ships inside a dependency and belongs on the attestation report either way."
+    },
+    {
+      "component": "Apache ECharts",
+      "inside": "@changfenhuang/dsh-genui@0.9.3, as the prebuilt bundle lib/assets/echarts.js",
+      "licence": "Apache-2.0",
+      "version": "5.6.0",
+      "role": "not reachable",
+      "note": "The adopted plugin's `echart` node type is outside Blind Flange's permitted set — tables, charts and plots only (plugins/dsh-client-ui-base/lib/genui/permitted-set.js, held by test/genui.test.js) — so the engine is never requested. Measured in the running workbench on 29 Aug 2026: lib/assets/echarts.js appears in no resource entry at all, and window.echarts is undefined. Version read from the pinned pnpm-lock.yaml at tag v0.9.3."
+    },
+    {
+      "component": "three.js",
+      "inside": "@changfenhuang/dsh-genui@0.9.3, as the prebuilt bundle lib/assets/three.js",
+      "licence": "MIT",
+      "version": "0.180.0",
+      "role": "fetched, never executed",
+      "note": "The plugin's client half adds a <link rel=\"prefetch\"> for this bundle on boot, so the browser downloads it from loopback whether or not anything uses it. It is never executed here: the `scene3d` node type is outside the permitted set, and the measured run on 29 Aug 2026 had no script element for it, no window.__GenuiAssets__ entry, and window.THREE undefined. Its own banner carries SPDX-License-Identifier: MIT."
+    },
+    {
+      "component": "Mermaid",
+      "inside": "@changfenhuang/dsh-genui@0.9.3, as the prebuilt bundle lib/assets/mermaid.js",
+      "licence": "MIT",
+      "version": "11.16.0",
+      "role": "fetched, never executed",
+      "note": "Prefetched from loopback on boot like three.js, and never executed — the `mermaid` node type is outside the permitted set, and window.mermaid was undefined in the measured run on 29 Aug 2026. The bundle vendors mermaid's own dependency graph; the only licence banner it preserves is DOMPurify's, recorded separately."
+    },
+    {
+      "component": "DOMPurify",
+      "inside": "the Mermaid bundle at lib/assets/mermaid.js inside @changfenhuang/dsh-genui@0.9.3",
+      "licence": "MPL-2.0 OR Apache-2.0",
+      "version": "3.4.13",
+      "role": "fetched, never executed",
+      "note": "Dual-licensed at our choice; Apache-2.0 is elected, which puts it on the allow-list without widening anything. Named separately from Mermaid because its banner is the one piece of licence text that bundle preserves, and because an MPL half found later reads like something that was hidden. It sits inside a bundle that is never executed — see the Mermaid entry."
     }
   ],
   "decisions": [

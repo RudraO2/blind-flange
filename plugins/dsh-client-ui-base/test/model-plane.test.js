@@ -285,7 +285,12 @@ test("the shipped 'key findings' replay entry walks create_goal -> bf_report_fin
 	assert.ok(textBlock, "the findings step must carry a text block, not only the tool call");
 	assert.match(textBlock.text, /E-1104A/);
 	assert.match(textBlock.text, /PSV-2207A/);
-	assert.match(textBlock.text, /page 1/);
+	// Story 8.1 moved the per-finding citation off the prose and into the reply's
+	// ```dsh-ui table, where it is written the way the Provenance tab writes it —
+	// `p1 · 560, 2048 · 814 × 58`. The page is still cited per finding; only the
+	// wording changed. `test/genui.test.js` checks each cited region against the
+	// OCR capture itself.
+	assert.match(textBlock.text, /p1 ·/u);
 	const e1104a = findingsResult.findings.find((f) => f.text.startsWith("Insulation cladding open"));
 	assert.ok(textBlock.text.includes(String(e1104a.bbox.left)), "the cited region must match the real tool result's bbox, not a hardcoded guess");
 	const updateCall = chunks2.filter((c) => c.type === "block-end").map((c) => c.block).find((block) => block.type === "tool-call");

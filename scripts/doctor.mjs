@@ -25,6 +25,9 @@ const dshHome = (process.env.DSH_HOME || '').trim() || join(homedir(), '.dsh')
 const HARNESS_VERSION = '0.1.1-rc.2'
 const MIN_NODE = '22.15.0'
 const PROFILES = ['web', 'headless']
+/** The adopted panel plugin and its pin — kept in step with scripts/start.mjs. */
+const GENUI_PACKAGE = '@changfenhuang/dsh-genui'
+const GENUI_VERSION = '0.9.3'
 
 const args = process.argv.slice(2)
 const portFlag = args.indexOf('--port')
@@ -126,6 +129,18 @@ for (const profile of PROFILES) {
   } else {
     bad(`the ${profile} profile has no cordis.patch.yml`, 'Run `npm run setup`.')
   }
+}
+
+// The adopted panel plugin (Story 8.1). Web only, and pinned: a range or a
+// newer version is a finding, not a convenience — 0.9.4 and 0.9.5 add surfaces
+// this project turned down, and an unpinned adoption is what the epic's
+// adoption gate exists to prevent.
+const webManifest = join(dshHome, 'profiles', 'web', 'package.json')
+if (existsSync(webManifest)) {
+  const adopted = JSON.parse(readFileSync(webManifest, 'utf8')).dependencies?.[GENUI_PACKAGE]
+  if (adopted === GENUI_VERSION) ok(`the web profile has ${GENUI_PACKAGE} at the pinned ${GENUI_VERSION}`)
+  else if (adopted) bad(`the web profile has ${GENUI_PACKAGE} at "${adopted}", not the pinned ${GENUI_VERSION}`, 'Run `npm run setup`.')
+  else bad(`the web profile does not have ${GENUI_PACKAGE}`, 'Run `npm run setup` — the key findings render through it.')
 }
 
 const workspaces = join(dshHome, 'storages', 'workspace.json')

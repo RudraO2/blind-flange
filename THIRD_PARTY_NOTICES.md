@@ -71,6 +71,34 @@ components on 28 August 2026** — and `docs/licence-audit.md` is its output. Ru
 with `npm run licence-audit`; it is also part of `npm test`, and it exits non-zero if
 anything outside the allow-list has no decision recorded against it.
 
+### The one adopted plugin, and the engines it carries
+
+`@changfenhuang/dsh-genui@0.9.3` (**MIT**, Copyright (c) 2026 dsh-external) is the only
+third-party plugin this project adopts (Story 8.1). It renders the ```dsh-ui fence the key
+findings are written into. Its licence was read from the `LICENSE` file in the installed
+package at the pinned version, not from the repository badge, and it resolves exactly one
+runtime dependency of its own: `react` (MIT).
+
+The package also **vendors three rendering engines as prebuilt bundles** under `lib/assets/`,
+which no metadata field names — the same class of finding as libvips inside `sharp`:
+
+| Engine | Version | Licence | Read from |
+|---|---|---|---|
+| Apache ECharts | 5.6.0 | Apache-2.0 | the pinned `pnpm-lock.yaml` at tag `v0.9.3`; `lib/assets/echarts.js` carries the Baidu copyright line |
+| three.js | 0.180.0 | MIT | `lib/assets/three.js` carries `SPDX-License-Identifier: MIT` in its own banner |
+| Mermaid | 11.16.0 | MIT | the pinned lockfile; its bundle preserves the **DOMPurify 3.4.13** banner, dual `MPL-2.0 OR Apache-2.0` — **Apache-2.0 elected** |
+
+`echarts.js` also carries Microsoft's `tslib` runtime helpers (0BSD). Every licence in that
+table is on the allow-list, and the election on DOMPurify is what keeps it there.
+
+**None of the three is executed here.** Blind Flange's permitted component set is tables,
+charts and plots (`plugins/dsh-client-ui-base/lib/genui/permitted-set.js`, held by
+`test/genui.test.js`), and none of those three types reaches an engine. Measured in the
+running workbench on 29 August 2026: `echarts.js` was never requested at all, and
+`mermaid.js` and `three.js` were fetched **from loopback as `<link rel="prefetch">` hints and
+never executed** — no script element, no `window.__GenuiAssets__` entry, and `window.mermaid`,
+`window.THREE` and `window.echarts` all `undefined`. Redistributed, not linked.
+
 ### The harness's own disclosure, checked against what actually installs
 
 `deepseek-ai/deepseek-harness` publishes a `THIRD_PARTY_NOTICES.md` in its repository root
