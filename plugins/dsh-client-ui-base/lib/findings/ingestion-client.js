@@ -142,3 +142,50 @@ export async function ingest({ bytes, filename, endpoint = DEFAULT_INGESTION_END
 	}
 	return { findings: payload.findings, source: "live", seconds: (Date.now() - started) / 1000 };
 }
+
+/**
+ * Render one page of a document to PNG, for the provenance crop.
+ *
+ * A crop is only evidence if it comes from the page the claim was read from. For
+ * the shipped fixture there are committed page images; for a document a judge
+ * uploaded, no such image exists until something renders it, and the only PDF
+ * renderer in this project is `pypdfium2` inside the ingestion service.
+ *
+ * The service renders at the same resolution it OCRs at, so the returned pixels
+ * and a finding's `bbox` share one coordinate space. It reports that resolution
+ * back on `X-Render-Dpi`, which is worth checking rather than assuming: a page
+ * rendered at a different number than the boxes were measured at yields a crop
+ * that is offset but still looks like a crop.
+ * @param {object} request
+ * @param {Uint8Array | Buffer} request.bytes
+ * @param {string} request.filename
+ * @param {number} request.page - 1-indexed.
+ * @param {string} [request.endpoint]
+ * @param {typeof globalThis.fetch} [request.fetchImpl]
+ * @returns {Promise<{ png: Uint8Array, renderDpi: number | null }>}
+ */
+export async function renderPage({ bytes, filename, page, endpoint = DEFAULT_INGESTION_ENDPOINT, fetchImpl = globalThis.fetch }) {
+	const target = ingestionTargetFor(filename);
+	if (target === null) {
+		throw new Error(`"${filename}" is not a document the ingestion service can render`);
+	}
+	let response;
+	try {
+		response = await fetchImpl(`${endpoint}/v1/render/page?page=${encodeURIComponent(page)}`, {
+			method: "POST",
+			headers: { "content-type": target.contentType },
+			body: bytes,
+		});
+	} catch (error) {
+		throw new Error(
+			`the ingestion service is not reachable at ${endpoint} to render page ${page} — start it with ` +
+				`\`npm run ingestion\` (${error instanceof Error ? error.message : String(error)})`,
+		);
+	}
+	if (!response.ok) {
+		throw new Error(`the ingestion service returned ${response.status} rendering page ${page} of "${filename}"`);
+	}
+	const png = new Uint8Array(await response.arrayBuffer());
+	const declared = Number(response.headers.get("x-render-dpi"));
+	return { png, renderDpi: Number.isFinite(declared) && declared > 0 ? declared : null };
+}

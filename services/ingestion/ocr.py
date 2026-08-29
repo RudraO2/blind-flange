@@ -225,6 +225,22 @@ def image_to_findings(image_bytes: bytes) -> list[Finding]:
     return findings_from_image(image)
 
 
+def image_to_png(image_bytes: bytes) -> bytes:
+    """Re-encode an image as PNG, for the provenance crop's page request.
+
+    Decoded and re-encoded rather than passed through, for two reasons: the crop viewer
+    should only ever have to handle one format, and the pixel space the caller crops in must
+    be the pixel space OCR read — `findings_from_image` converts to RGB, so this does too.
+
+    Raises PIL.UnidentifiedImageError for bytes that are not a decodable image, like
+    `image_to_findings`, so the server maps it to a 400.
+    """
+    image = Image.open(io.BytesIO(image_bytes))
+    buffer = io.BytesIO()
+    image.convert("RGB").save(buffer, format="PNG")
+    return buffer.getvalue()
+
+
 def findings_from_image(image: Image.Image) -> list[Finding]:
     """Run OCR against an already-decoded image.
 

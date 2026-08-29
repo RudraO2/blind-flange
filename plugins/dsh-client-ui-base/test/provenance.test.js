@@ -130,10 +130,10 @@ test("a cited page whose image is missing is reported as unavailable, not droppe
 	}
 });
 
-test("the findings endpoint answers JSON the crop viewer can read", () => {
+test("the findings endpoint answers JSON the crop viewer can read", async () => {
 	const handler = createProvenanceHandler({ findingsPath, pagesDir });
 	const res = stubResponse();
-	handler({ method: "GET", url: `${PROVENANCE_ROUTE_PREFIX}/findings` }, res);
+	await handler({ method: "GET", url: `${PROVENANCE_ROUTE_PREFIX}/findings` }, res);
 	assert.equal(res.statusCode, 200);
 	assert.equal(res.headers["content-type"], "application/json; charset=utf-8");
 	const payload = JSON.parse(res.body.toString("utf8"));
@@ -141,28 +141,28 @@ test("the findings endpoint answers JSON the crop viewer can read", () => {
 	assert.equal(payload.pages.length, 2);
 });
 
-test("a page request answers the real PNG bytes", () => {
+test("a page request answers the real PNG bytes", async () => {
 	const handler = createProvenanceHandler({ findingsPath, pagesDir });
 	const res = stubResponse();
-	handler({ method: "GET", url: `${PROVENANCE_ROUTE_PREFIX}/pages/1` }, res);
+	await handler({ method: "GET", url: `${PROVENANCE_ROUTE_PREFIX}/pages/1` }, res);
 	assert.equal(res.statusCode, 200);
 	assert.equal(res.headers["content-type"], "image/png");
 	assert.ok(res.body.equals(readFileSync(join(pagesDir, "sample-inspection-report-p1.png"))));
 });
 
-test("a query string on a page request is not mistaken for part of the page number", () => {
+test("a query string on a page request is not mistaken for part of the page number", async () => {
 	const handler = createProvenanceHandler({ findingsPath, pagesDir });
 	const res = stubResponse();
-	handler({ method: "GET", url: `${PROVENANCE_ROUTE_PREFIX}/pages/2?rev=abc` }, res);
+	await handler({ method: "GET", url: `${PROVENANCE_ROUTE_PREFIX}/pages/2?rev=abc` }, res);
 	assert.equal(res.statusCode, 200);
 	assert.equal(res.headers["content-type"], "image/png");
 });
 
-test("a page the report does not have is a 404, and a traversal attempt is not a page at all", () => {
+test("a page the report does not have is a 404, and a traversal attempt is not a page at all", async () => {
 	const handler = createProvenanceHandler({ findingsPath, pagesDir });
 	for (const url of [`${PROVENANCE_ROUTE_PREFIX}/pages/9`, `${PROVENANCE_ROUTE_PREFIX}/pages/../../secret`]) {
 		const res = stubResponse();
-		handler({ method: "GET", url }, res);
+		await handler({ method: "GET", url }, res);
 		assert.equal(res.statusCode, 404, `${url} did not 404`);
 	}
 	assert.equal(pageNumberFromPath(`${PROVENANCE_ROUTE_PREFIX}/pages/../../etc/passwd`), null);
@@ -171,22 +171,22 @@ test("a page the report does not have is a 404, and a traversal attempt is not a
 	assert.equal(pageNumberFromPath(`${PROVENANCE_ROUTE_PREFIX}/pages/3`), 3);
 });
 
-test("a HEAD request answers the headers and no body; anything but GET or HEAD is refused", () => {
+test("a HEAD request answers the headers and no body; anything but GET or HEAD is refused", async () => {
 	const handler = createProvenanceHandler({ findingsPath, pagesDir });
 	const head = stubResponse();
-	handler({ method: "HEAD", url: `${PROVENANCE_ROUTE_PREFIX}/pages/1` }, head);
+	await handler({ method: "HEAD", url: `${PROVENANCE_ROUTE_PREFIX}/pages/1` }, head);
 	assert.equal(head.statusCode, 200);
 	assert.equal(head.body, undefined);
 
 	const post = stubResponse();
-	handler({ method: "POST", url: `${PROVENANCE_ROUTE_PREFIX}/findings` }, post);
+	await handler({ method: "POST", url: `${PROVENANCE_ROUTE_PREFIX}/findings` }, post);
 	assert.equal(post.statusCode, 405);
 });
 
-test("an unreadable capture answers an error the panel can report, rather than throwing into the server", () => {
+test("an unreadable capture answers an error the panel can report, rather than throwing into the server", async () => {
 	const handler = createProvenanceHandler({ findingsPath: join(pagesDir, "does-not-exist.json"), pagesDir });
 	const res = stubResponse();
-	handler({ method: "GET", url: `${PROVENANCE_ROUTE_PREFIX}/findings` }, res);
+	await handler({ method: "GET", url: `${PROVENANCE_ROUTE_PREFIX}/findings` }, res);
 	assert.equal(res.statusCode, 500);
 	assert.match(String(res.body), /unavailable/);
 });

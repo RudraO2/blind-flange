@@ -21,6 +21,8 @@ from pathlib import Path
 from server import HOST, IngestionHandler
 from http.server import ThreadingHTTPServer
 
+from pdf import RENDER_DPI
+
 FIXTURE = Path(__file__).resolve().parent / "fixtures" / "sample-inspection-report-p1.png"
 PDF_FIXTURE = Path(__file__).resolve().parent / "fixtures" / "sample-inspection-report.pdf"
 TEST_PORT = 8643
@@ -244,3 +246,82 @@ class IngestionServiceTest(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class RenderPageTest(IngestionServiceTest):
+    """`POST /v1/render/page`, added 30 August 2026 for the provenance crop.
+
+    A crop is only evidence if it comes from the page the claim was read from, and for a
+    document a judge uploaded no such image exists until something renders it. Node has no
+    PDF renderer; pypdfium2 lives here.
+
+    The property worth guarding is that the rendered page and the findings' bounding boxes
+    share one coordinate space. A page rendered at a different resolution than the boxes
+    were measured at yields a crop that is offset — and an offset crop still looks like a
+    crop, so nothing downstream would complain.
+    """
+
+    def test_render_pdf_page_matches_the_ocr_coordinate_space(self) -> None:
+        pdf_bytes = (FIXTURE.parent / "sample-inspection-report.pdf").read_bytes()
+
+        conn = self._client()
+        conn.request(
+            "POST",
+            "/v1/render/page?page=1",
+            body=pdf_bytes,
+            headers={"Content-Type": "application/pdf", "Content-Length": str(len(pdf_bytes))},
+        )
+        resp = conn.getresponse()
+        self.assertEqual(resp.status, 200)
+        self.assertEqual(resp.getheader("Content-Type"), "image/png")
+        # Reported rather than left to be assumed by the caller.
+        self.assertEqual(resp.getheader("X-Render-Dpi"), str(RENDER_DPI))
+        png = resp.read()
+        self.assertEqual(png[:8], b"\x89PNG\r\n\x1a\n")
+
+        # Every bounding box OCR produced for page 1 must fit inside the page rendered for
+        # the crop. This is the assertion that would have caught the 200 dpi change that was
+        # briefly shipped and reverted the same day.
+        width = int.from_bytes(png[16:20], "big")
+        height = int.from_bytes(png[20:24], "big")
+
+        conn = self._client()
+        conn.request(
+            "POST",
+            "/v1/ingest/pdf",
+            body=pdf_bytes,
+            headers={"Content-Type": "application/pdf", "Content-Length": str(len(pdf_bytes))},
+        )
+        findings = json.loads(conn.getresponse().read())["findings"]
+        page_one = [f for f in findings if f["page"] == 1]
+        self.assertGreater(len(page_one), 20)
+        for finding in page_one:
+            box = finding["bbox"]
+            self.assertGreaterEqual(box["left"], 0)
+            self.assertGreaterEqual(box["top"], 0)
+            self.assertLessEqual(box["left"] + box["width"], width, f"box escapes the page: {finding['text']!r}")
+            self.assertLessEqual(box["top"] + box["height"], height, f"box escapes the page: {finding['text']!r}")
+
+    def test_render_image_is_page_one_only(self) -> None:
+        image_bytes = FIXTURE.read_bytes()
+        for page, expected in ((1, 200), (2, 404)):
+            conn = self._client()
+            conn.request(
+                "POST",
+                f"/v1/render/page?page={page}",
+                body=image_bytes,
+                headers={"Content-Type": "image/png", "Content-Length": str(len(image_bytes))},
+            )
+            self.assertEqual(conn.getresponse().status, expected, f"page {page}")
+
+    def test_render_rejects_a_page_outside_the_document_and_a_bad_page_number(self) -> None:
+        pdf_bytes = (FIXTURE.parent / "sample-inspection-report.pdf").read_bytes()
+        for query, expected in (("page=99", 404), ("page=0", 400), ("page=abc", 400)):
+            conn = self._client()
+            conn.request(
+                "POST",
+                f"/v1/render/page?{query}",
+                body=pdf_bytes,
+                headers={"Content-Type": "application/pdf", "Content-Length": str(len(pdf_bytes))},
+            )
+            self.assertEqual(conn.getresponse().status, expected, query)

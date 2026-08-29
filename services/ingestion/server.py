@@ -14,12 +14,13 @@ from __future__ import annotations
 import json
 import os
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+from urllib.parse import parse_qs, urlparse
 
 from PIL import UnidentifiedImageError
 from pypdfium2 import PdfiumError
 
-from ocr import image_to_findings, warm_up
-from pdf import pdf_to_findings, RENDER_DPI
+from ocr import image_to_findings, image_to_png, warm_up
+from pdf import RENDER_DPI, pdf_to_findings, render_page_png
 
 HOST = "127.0.0.1"
 DEFAULT_PORT = 8642
@@ -50,12 +51,78 @@ class IngestionHandler(BaseHTTPRequestHandler):
         self._send_json(404, {"error": "not found"})
 
     def do_POST(self) -> None:  # noqa: N802 - stdlib method name
-        if self.path == "/v1/ingest/image":
+        path = self.path.split("?")[0]
+        if path == "/v1/ingest/image":
             self._handle_ingest_image()
-        elif self.path == "/v1/ingest/pdf":
+        elif path == "/v1/ingest/pdf":
             self._handle_ingest_pdf()
+        elif path == "/v1/render/page":
+            self._handle_render_page()
         else:
             self._send_json(404, {"error": "not found"})
+
+    def _requested_page(self) -> int:
+        """The 1-indexed page from `?page=N`, defaulting to 1."""
+        query = parse_qs(urlparse(self.path).query)
+        raw = (query.get("page") or ["1"])[0]
+        try:
+            return int(raw)
+        except ValueError:
+            return 0  # rejected below, rather than silently becoming page 1
+
+    def _handle_render_page(self) -> None:
+        """Render one page of a document to PNG, for the provenance crop.
+
+        Added 30 August 2026. The crop viewer needs the page image a claim was read from, and
+        for an uploaded document that image does not exist until something renders it. Node
+        has no PDF renderer; `pypdfium2` is here.
+
+        Rendered at `RENDER_DPI`, the same constant `pdf_to_findings` uses, because a
+        finding's bbox is in source-image pixels at that resolution. Serving a page rendered
+        at any other number would offset every crop.
+        """
+        content_type = self.headers.get("Content-Type", "")
+        body = self._read_body(MAX_BODY_BYTES)
+        if body is None:
+            return
+
+        page = self._requested_page()
+        if page < 1:
+            self._send_json(400, {"error": "page must be a positive integer"})
+            return
+
+        try:
+            if content_type == "application/pdf":
+                png = render_page_png(body, page)
+            elif content_type.startswith("image/"):
+                # An image is a single page, so anything but page 1 is out of range. Decoded
+                # and re-encoded rather than passed through, so the caller always gets PNG
+                # and the pixel space matches what OCR read.
+                if page != 1:
+                    self._send_json(404, {"error": "an image has only page 1"})
+                    return
+                png = image_to_png(body)
+            else:
+                self._send_json(400, {"error": "Content-Type must be application/pdf or image/*"})
+                return
+        except PdfiumError:
+            self._send_json(400, {"error": "body is not a decodable PDF"})
+            return
+        except UnidentifiedImageError:
+            self._send_json(400, {"error": "body is not a decodable image"})
+            return
+        except IndexError as error:
+            self._send_json(404, {"error": str(error)})
+            return
+
+        self.send_response(200)
+        self.send_header("Content-Type", "image/png")
+        self.send_header("Content-Length", str(len(png)))
+        # The bytes are derived from the request body, so a caller can cache them against
+        # whatever it already knows about the document.
+        self.send_header("X-Render-Dpi", str(RENDER_DPI))
+        self.end_headers()
+        self.wfile.write(png)
 
     def _read_body(self, max_bytes: int) -> bytes | None:
         # Read (and so drain from the socket) before any error response is sent. Responding

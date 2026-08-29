@@ -6,6 +6,8 @@ Never `PyMuPDF`: it is AGPL-3.0 (ADR-0005, CLAUDE.md).
 
 from __future__ import annotations
 
+import io
+
 import pypdfium2 as pdfium
 
 from ocr import Finding, findings_from_image
@@ -40,6 +42,53 @@ _SCALE = RENDER_DPI / 72.0
 
 class PageFinding(Finding):
     page: int
+
+
+def page_count(pdf_bytes: bytes) -> int:
+    """How many pages the document has.
+
+    Raises pypdfium2.PdfiumError for bytes that are not a decodable PDF, like the other
+    entry points here, so the server maps it to a 400 rather than a 500.
+    """
+    pdf = pdfium.PdfDocument(pdf_bytes)
+    try:
+        return len(pdf)
+    finally:
+        pdf.close()
+
+
+def render_page_png(pdf_bytes: bytes, page_number: int) -> bytes:
+    """Render one 1-indexed page to PNG bytes at RENDER_DPI.
+
+    Added 30 August 2026 for the provenance crop. A crop is only evidence if it comes from
+    the page the claim was read from, so the panel needs the page image — and for a document
+    a judge uploaded, no such image exists anywhere until somebody renders it. Node cannot:
+    the PDF renderer is `pypdfium2`, which lives here.
+
+    **RENDER_DPI is the contract.** The bounding boxes in a finding are in source-image
+    pixels at this resolution, so the page served for cropping has to be rendered at the same
+    number or the crop is offset — and an offset crop still looks like a crop, which is the
+    failure mode worth being careful about. Both come from this one constant.
+
+    Raises IndexError for a page outside the document, which the server maps to a 404.
+    """
+    pdf = pdfium.PdfDocument(pdf_bytes)
+    try:
+        if page_number < 1 or page_number > len(pdf):
+            raise IndexError(f"page {page_number} is outside a {len(pdf)}-page document")
+        page = pdf[page_number - 1]
+        try:
+            bitmap = page.render(scale=_SCALE)
+            try:
+                buffer = io.BytesIO()
+                bitmap.to_pil().convert("RGB").save(buffer, format="PNG")
+                return buffer.getvalue()
+            finally:
+                bitmap.close()
+        finally:
+            page.close()
+    finally:
+        pdf.close()
 
 
 def pdf_to_findings(pdf_bytes: bytes) -> list[PageFinding]:

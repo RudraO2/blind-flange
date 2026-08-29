@@ -18,13 +18,33 @@
 import assert from "node:assert/strict";
 import { createServer } from "node:http";
 import test from "node:test";
+import { attachDocument, clearDocument, rememberFindings } from "../lib/findings/attached.js";
 import {
 	ACCEPTED_UPLOAD_EXTENSIONS,
 	ingest,
 	ingestionHealth,
 	ingestionTargetFor,
+	renderPage,
 } from "../lib/findings/ingestion-client.js";
-import { attachDocument, clearDocument, createReportFindingsTool } from "../lib/findings/tool.js";
+import { createProvenanceHandler, PROVENANCE_ROUTE_PREFIX, pngSize } from "../lib/findings/provenance.js";
+import { createReportFindingsTool } from "../lib/findings/tool.js";
+
+/** Minimal ServerResponse stand-in, matching the shape provenance.test.js uses. */
+function stubResponse() {
+	return {
+		statusCode: 0,
+		headers: {},
+		body: undefined,
+		writeHead(status, headers = {}) {
+			this.statusCode = status;
+			for (const [key, value] of Object.entries(headers)) this.headers[key.toLowerCase()] = value;
+			return this;
+		},
+		end(body) {
+			this.body = body;
+		},
+	};
+}
 
 /** Start a loopback stub, returning its base URL and a stop function. */
 async function startStub(handler) {
@@ -186,6 +206,142 @@ test("an uploaded document with no service to read it FAILS rather than describi
 			assert.match(error.message, /npm run ingestion/);
 			return true;
 		});
+	} finally {
+		clearDocument();
+	}
+});
+
+// ---------------------------------------------------------------------------
+// Rendering a page for the provenance crop
+// ---------------------------------------------------------------------------
+
+/** The smallest valid PNG header the size reader will accept, plus a byte of payload. */
+function fakePng(width, height) {
+	const buffer = Buffer.alloc(25);
+	Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]).copy(buffer, 0);
+	buffer.write("IHDR", 12, "latin1");
+	buffer.writeUInt32BE(width, 16);
+	buffer.writeUInt32BE(height, 20);
+	return buffer;
+}
+
+/** A stub that answers page renders and records what was asked for. */
+async function startRenderStub({ width = 2480, height = 3508, dpi = 300, status = 200 } = {}) {
+	const seen = {};
+	const stub = await startStub((req, res) => {
+		req.on("data", () => {});
+		req.on("end", () => {
+			seen.url = req.url;
+			seen.contentType = req.headers["content-type"];
+			if (status !== 200) {
+				res.writeHead(status, { "content-type": "application/json" });
+				res.end(JSON.stringify({ error: "page 9 is outside a 2-page document" }));
+				return;
+			}
+			const png = fakePng(width, height);
+			res.writeHead(200, { "content-type": "image/png", "x-render-dpi": String(dpi) });
+			res.end(png);
+		});
+	});
+	return { ...stub, seen };
+}
+
+test("renderPage asks for the page by number and reports the resolution it was rendered at", async () => {
+	const stub = await startRenderStub({ dpi: 300 });
+	try {
+		const result = await renderPage({
+			bytes: Buffer.from("%PDF-1.7 fake"),
+			filename: "report.pdf",
+			page: 2,
+			endpoint: stub.endpoint,
+		});
+		assert.equal(stub.seen.url, "/v1/render/page?page=2");
+		assert.equal(stub.seen.contentType, "application/pdf");
+		// Worth returning rather than assuming: a page rendered at a different
+		// resolution than the bounding boxes were measured at gives a crop that is
+		// offset and still looks like a crop.
+		assert.equal(result.renderDpi, 300);
+		assert.equal(pngSize(Buffer.from(result.png)).height, 3508);
+	} finally {
+		await stub.stop();
+	}
+});
+
+test("renderPage names its failures — an out-of-range page and an unreachable service", async () => {
+	const stub = await startRenderStub({ status: 404 });
+	try {
+		await assert.rejects(
+			() => renderPage({ bytes: Buffer.from("x"), filename: "report.pdf", page: 9, endpoint: stub.endpoint }),
+			/returned 404 rendering page 9/,
+		);
+	} finally {
+		await stub.stop();
+	}
+	await assert.rejects(
+		() => renderPage({ bytes: Buffer.from("x"), filename: "report.pdf", page: 1, endpoint: "http://127.0.0.1:1" }),
+		/not reachable.*to render page 1/s,
+	);
+});
+
+test("provenance serves an uploaded document's pages, rendered on demand and then cached", async () => {
+	const stub = await startRenderStub({ width: 1700, height: 2400 });
+	let renders = 0;
+	const counting = async (url, init) => {
+		if (String(url).includes("/v1/render/page")) renders += 1;
+		return globalThis.fetch(url, init);
+	};
+	try {
+		attachDocument("judges-own-report.pdf", Buffer.from("%PDF-1.7 uploaded"));
+		// The findings the panel cites come from whatever read the document, not
+		// from a second OCR pass — so the two can never describe it differently.
+		rememberFindings([
+			{ text: "TK-4102 shell plate", bbox: { left: 10, top: 20, width: 300, height: 40 }, confidence: 98.1, page: 1 },
+		]);
+		const handler = createProvenanceHandler({ endpoint: stub.endpoint, fetchImpl: counting });
+
+		const manifest = stubResponse();
+		await handler({ method: "GET", url: `${PROVENANCE_ROUTE_PREFIX}/findings` }, manifest);
+		assert.equal(manifest.statusCode, 200);
+		const payload = JSON.parse(String(manifest.body));
+		assert.equal(payload.report, "judges-own-report.pdf");
+		assert.equal(payload.source, "upload");
+		assert.deepEqual(payload.pages, [{ page: 1, available: true, width: 1700, height: 2400, renderDpi: 300 }]);
+		assert.equal(renders, 1);
+
+		// The viewer asks for the same page once per finding clicked, so the render
+		// is cached rather than repeated.
+		const image = stubResponse();
+		await handler({ method: "GET", url: `${PROVENANCE_ROUTE_PREFIX}/pages/1` }, image);
+		assert.equal(image.statusCode, 200);
+		assert.equal(image.headers["content-type"], "image/png");
+		assert.equal(renders, 1, "the second request should have been served from the cache");
+	} finally {
+		clearDocument();
+		await stub.stop();
+	}
+});
+
+test("an unrenderable page is a visible gap in the manifest, not a finding that clicks to nothing", async () => {
+	try {
+		attachDocument("judges-own-report.pdf", Buffer.from("%PDF-1.7 uploaded"));
+		rememberFindings([{ text: "x", bbox: { left: 0, top: 0, width: 1, height: 1 }, confidence: 90, page: 1 }]);
+		const handler = createProvenanceHandler({ endpoint: "http://127.0.0.1:1" });
+
+		const manifest = stubResponse();
+		await handler({ method: "GET", url: `${PROVENANCE_ROUTE_PREFIX}/findings` }, manifest);
+		const payload = JSON.parse(String(manifest.body));
+		assert.equal(payload.pages[0].available, false);
+		assert.match(payload.pages[0].reason, /not reachable/);
+		// Reported rather than omitted: the panel can then say this finding's page
+		// cannot be shown. Dropping the page would leave a finding that clicks to
+		// nothing with no explanation.
+		assert.equal(payload.findings.length, 1);
+
+		// And a direct page request is a 502, not a 404 — the page exists, we could
+		// not produce it, and that distinction matters to whoever debugs a blank crop.
+		const image = stubResponse();
+		await handler({ method: "GET", url: `${PROVENANCE_ROUTE_PREFIX}/pages/1` }, image);
+		assert.equal(image.statusCode, 502);
 	} finally {
 		clearDocument();
 	}

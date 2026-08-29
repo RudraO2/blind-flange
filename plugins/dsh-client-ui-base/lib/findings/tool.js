@@ -29,6 +29,7 @@
 import { readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
+import { currentDocument, rememberFindings } from "./attached.js";
 import { DEFAULT_INGESTION_ENDPOINT, ingest } from "./ingestion-client.js";
 
 export const REPORT_FINDINGS_TOOL_NAME = "bf_report_findings";
@@ -106,6 +107,10 @@ export function createReportFindingsTool(options = {}) {
 			if (attached !== null) {
 				try {
 					const result = await ingest({ bytes: attached.bytes, filename: attached.filename, endpoint, fetchImpl });
+					// Remembered so the provenance panel cites these exact lines rather
+					// than running its own OCR pass and possibly describing the same
+					// document slightly differently.
+					rememberFindings(result.findings);
 					return {
 						report: attached.filename,
 						findings: result.findings,
@@ -145,27 +150,8 @@ export function createReportFindingsTool(options = {}) {
 	};
 }
 
-/**
- * The document the workbench should answer about, set by the upload control.
- *
- * ponytail: one document for the whole process, the same ceiling and upgrade path
- * as `router/dispatch.js` and `lanes/code.js` — Phase 0 is single-session by the
- * cut line, and the fix is a map keyed by session id once there is one to key on.
- * @type {{ filename: string, bytes: Uint8Array } | null}
- */
-let attachedDocument = null;
-
-/** Attach an uploaded document, so the findings tool reads it instead of the fixture. */
-export function attachDocument(filename, bytes) {
-	attachedDocument = { filename, bytes };
-}
-
-/** The attached document, or null when the shipped fixture is what to read. */
-export function currentDocument() {
-	return attachedDocument;
-}
-
-/** Forget it. For tests, and when a session is cleared. */
-export function clearDocument() {
-	attachedDocument = null;
-}
+// Re-exported so callers that already reach for these through the tool keep
+// working; the state itself lives in `attached.js`, because the provenance route
+// needs the same answer and the two must never disagree about which document is
+// being described.
+export { attachDocument, clearDocument, currentDocument } from "./attached.js";
