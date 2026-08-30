@@ -51,8 +51,12 @@ Runs OCR against one scanned page image and returns line-level findings.
 - `confidence` is a float on a **0–100** scale. RapidOCR scores 0–1 natively and `ocr.py`
   scales it, deliberately: the scale is the contract's, not the engine's, so the harness
   side reads one number whichever engine is behind it.
-- **Page number is not in this contract.** Story 4.3 is single-image only; Story 4.4 adds
-  the PDF path and is where `page` joins each finding.
+- **`page` is always `1`.** Changed 30 August 2026. Story 4.3 left `page` out of this
+  endpoint because a single image has no pages to number, and Story 4.4 added it only to the
+  PDF path. The upload control made that inconsistency a defect: a judge can now attach a
+  photograph, and every consumer downstream — the findings table, the provenance crop, the
+  approval note's clauses — needs a page to cite. Both endpoints now return the same shape,
+  which is cheaper than a defaulting rule each caller has to remember.
 
 **Error responses**
 
@@ -92,7 +96,11 @@ page through the same OCR path as `/v1/ingest/image`.
   bounding-box-and-confidence-and-page requirement.
 - `findings` is a flat array across the whole document, in page order; grouping by page is
   left to the caller.
-- Pages are rendered at 300 dpi, matching the fixture PDF (`fixtures/README.md`) and the
+- Pages are rendered at **300 dpi**, and `GET /health` reports the value in use so a caller
+  never has to assume it. Lowering it to 200 was measured on 30 August 2026 and reverted:
+  warm, the two resolutions cost the same, and `bbox` is in source-image pixels, so serving
+  200 dpi boxes would have cropped the wrong region of the right page against the 300 dpi
+  page images the provenance route uses. Matching the fixture PDF (`fixtures/README.md`) and the
   resolution the engine proofs measured against, so `bbox` pixel coordinates carry the
   same meaning as the image endpoint's.
 

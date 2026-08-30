@@ -298,7 +298,16 @@ test("occupies both places the DeepSeek whale used to render, and the hero's tas
 		"conversation.hero.agentPreset",
 		"conversation.hero.brand.mark",
 		"conversation.input.model",
+		// Two seats in the composer tool row: the upload control and the canary.
+		// Left to right they read "give it a document, then prove nothing left the
+		// box", which is also the order the demo does them in.
 		"conversation.input.right",
+		"conversation.input.right",
+		// Three chips in the session header: the provider disclosure, the egress
+		// monitor, and residency — which models are in VRAM right now. That last one
+		// is the only surface showing it; the routing chip shows scores and the
+		// approval note carries the rest of the trace.
+		"conversation.session.header.utilities",
 		"conversation.session.header.utilities",
 		"conversation.session.header.utilities",
 		// Story 4.5's crop viewer — a whole tab, not a chip.
@@ -983,4 +992,121 @@ test("it sets no colour of its own — the state dot carries it through theme to
 	const canarySection = source.slice(source.indexOf("function buildCanaryButton"), source.indexOf("function holdTabTitle"));
 	assert.doesNotMatch(canarySection, /#[0-9a-fA-F]{3,8}\b/, "the canary must not hand-roll a hex colour");
 	assert.doesNotMatch(canarySection, /rgba?\(/, "the canary must not hand-roll a colour");
+});
+
+/* ---------------------------------------------------------------------------
+ * The upload control (30 August 2026)
+ *
+ * Story 8.2 established that the `@` mention picker already exists and that
+ * nothing needed installing for it. This does not replace it — it adds the
+ * moment a judge watches a file arrive, which naming a path already on disk does
+ * not give you.
+ * ------------------------------------------------------------------------- */
+
+/** The upload seat, by id, so a reordering of the row does not break these. */
+function findUpload(registered) {
+	return registered.find((call) => call.options.name === "conversation.input.right" && call.options.id === "bf-upload");
+}
+
+test("the upload control takes the composer tool row, before the canary", () => {
+	const { exports } = loadClientHalf((specifier) => healthyHostModules[specifier]);
+	const { ctx, registered } = stubSlots();
+	exports.apply(ctx);
+
+	const upload = findUpload(registered);
+	assert.ok(upload, "no bf-upload registration");
+	assert.equal(upload.options.label, "Upload");
+	// Left to right the row reads "give it a document, then prove nothing left the
+	// box", which is also the order the demo does them in.
+	assert.ok(upload.options.order < 0, "the upload control should sort before the canary");
+});
+
+test("it is a shipped Pill like the controls beside it, and says which stage it is in", () => {
+	const { exports } = loadClientHalf((specifier) => healthyHostModules[specifier]);
+	const { ctx, registered } = stubSlots();
+	exports.apply(ctx);
+
+	const element = findUpload(registered).component({});
+	assert.equal(element.type, PRIMITIVES.Pill, "the upload control must be a shipped primitive, not a hand-rolled one");
+	const flat = JSON.stringify(element.props.children);
+	assert.match(flat, /Upload a document/);
+	// The file input lives in the tree rather than being created on demand, so the
+	// Pill's click handler always has something to open, and it is hidden from
+	// assistive technology because the Pill is the control.
+	assert.match(flat, /"type":"file"/);
+	assert.match(flat, /"aria-hidden":"true"/);
+	// Every accepted extension is offered, so the picker does not let a user
+	// choose something the OCR path will refuse a second later.
+	assert.match(flat, /\.pdf/);
+	assert.match(flat, /\.png/);
+	assert.match(element.props.title, /nothing leaves the box/i);
+});
+
+test("it sets no colour of its own either — the state dot carries it through theme tokens", () => {
+	// Same rule as the canary, and the same reason: a hand-rolled colour is what
+	// made the 27 Aug egress monitor read as pasted on. Verified in the source
+	// because a component test cannot see what a token resolves to.
+	const source = readFileSync(join(packageDir, "lib", "client.js"), "utf8");
+	const section = source.slice(source.indexOf("function buildUploadButton"), source.indexOf("const CANARY_CHANNEL"));
+	assert.ok(section.length > 500, "the upload section was not found — this test is asserting nothing");
+	assert.doesNotMatch(section, /#[0-9a-fA-F]{3,8}\b/, "the upload control must not hand-roll a hex colour");
+	assert.doesNotMatch(section, /rgba?\(/, "the upload control must not hand-roll a colour");
+	// One exception, and it is layout rather than colour: the file input is hidden.
+	assert.match(section, /display: "none"/);
+});
+
+/* ---------------------------------------------------------------------------
+ * The residency chip (30 August 2026)
+ *
+ * CONTEXT.md "Residency": which fleet members are resident in VRAM at a given
+ * moment. The only surface that shows it — the routing chip shows scores and the
+ * approval note carries the rest of the trace, so this is the part that adds
+ * information rather than repeating it.
+ * ------------------------------------------------------------------------- */
+
+function findResidency(registered) {
+	return registered.find((call) => call.options.name === "conversation.session.header.utilities" && call.options.id === "bf-residency");
+}
+
+test("the residency chip takes a session-header seat, not a composer seat", () => {
+	const { exports } = loadClientHalf((specifier) => healthyHostModules[specifier]);
+	const { ctx, registered } = stubSlots();
+	exports.apply(ctx);
+
+	const chip = findResidency(registered);
+	assert.ok(chip, "no bf-residency registration");
+	assert.equal(chip.options.label, "Residency");
+	// It describes the machine's state rather than offering an action, and the
+	// header is where this product already puts that — beside the provider
+	// disclosure and the egress monitor.
+	assert.equal(chip.options.name, "conversation.session.header.utilities");
+});
+
+test("with nothing read yet it says the runtime is not answering, rather than looking idle", () => {
+	// The worse of the two mistakes: a comfortable "VRAM idle" while llama-swap is
+	// dead hides the reason nothing works. Before the first poll resolves there is
+	// no trace, and that must read as unknown-and-bad, not as fine.
+	const { exports } = loadClientHalf((specifier) => healthyHostModules[specifier]);
+	const { ctx, registered } = stubSlots();
+	exports.apply(ctx);
+
+	const rendered = findResidency(registered).component({});
+	// A Menu whose anchor is the Pill, the same shape as the routing chip.
+	assert.equal(rendered.type, PRIMITIVES.Menu);
+	const flat = JSON.stringify(rendered.props);
+	assert.match(flat, /VRAM/);
+	assert.match(flat, /llama-swap is not answering/);
+	// It names the escape hatch, because the person reading this chip at the wrong
+	// moment needs the one-line fix and not a diagnosis.
+	assert.match(flat, /replay/);
+});
+
+test("the residency chip sets no colour of its own either", () => {
+	// Same rule as the canary and the upload control, same reason: a hand-rolled
+	// colour is what made the 27 Aug egress monitor read as pasted on.
+	const source = readFileSync(join(packageDir, "lib", "client.js"), "utf8");
+	const section = source.slice(source.indexOf("function buildResidencyChip"), source.indexOf("const UPLOAD_CHANNEL"));
+	assert.ok(section.length > 1000, "the residency section was not found — this test is asserting nothing");
+	assert.doesNotMatch(section, /#[0-9a-fA-F]{3,8}\b/, "the residency chip must not hand-roll a hex colour");
+	assert.doesNotMatch(section, /rgba?\(/, "the residency chip must not hand-roll a colour");
 });

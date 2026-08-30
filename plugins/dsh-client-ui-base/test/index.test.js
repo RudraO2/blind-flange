@@ -19,6 +19,9 @@ import { dirname, join } from "node:path";
 import test from "node:test";
 import { fileURLToPath } from "node:url";
 import { apply, inject } from "../lib/index.js";
+import { loadFleet } from "../lib/registry/loader.js";
+import { clearRoutingDecision, resolveRuntimeModel, runtimeModelForCurrentTurn } from "../lib/router/dispatch.js";
+import { scoreFleet } from "../lib/router/score.js";
 import { OUR_SESSION_EVENT_TYPES } from "../lib/session-events/known-types.js";
 
 const packageDir = dirname(dirname(fileURLToPath(import.meta.url)));
@@ -438,7 +441,7 @@ test("scores the licence-checked fleet against the classified task type and reco
 	assert.ok(routed, "no router/routed event recorded");
 	assert.equal(routed.data.taskType, "code");
 	assert.equal(routed.data.turn, 2);
-	assert.equal(routed.data.selected, "Qwen/Qwen2.5-Coder-7B-Instruct");
+	assert.equal(routed.data.selected, "Qwen/Qwen2.5-Coder-1.5B-Instruct");
 	assert.ok(Array.isArray(routed.data.scored) && routed.data.scored.length > 0);
 	assert.ok(routed.data.scored.every((entry) => typeof entry.score === "number"));
 	assert.ok(Array.isArray(routed.data.excluded));
@@ -491,11 +494,57 @@ test("Story 3.8: a second turn classifying as a different task type routes to a 
 	const routed = agent.events.filter((event) => event.type === "router/routed");
 	assert.equal(routed.length, 2, "one routing decision per turn");
 	assert.equal(routed[0].data.taskType, "document");
-	assert.equal(routed[0].data.selected, "Qwen/Qwen2.5-VL-7B-Instruct");
+	assert.equal(routed[0].data.selected, "Qwen/Qwen3-VL-2B-Instruct");
 	assert.equal(routed[1].data.taskType, "code");
-	assert.equal(routed[1].data.selected, "Qwen/Qwen2.5-Coder-7B-Instruct");
+	assert.equal(routed[1].data.selected, "Qwen/Qwen2.5-Coder-1.5B-Instruct");
 	assert.notEqual(routed[0].data.selected, routed[1].data.selected);
 	assert.equal(routed[1].data.turn, 2);
+
+	// Story 3.8 was only ever true of the routing chip: the decision was recorded
+	// and nothing consumed it. This is the half that makes it true of the
+	// inference path — the selected member has to resolve to a runtime model the
+	// provider can actually be pointed at.
+	const dispatch = runtimeModelForCurrentTurn(loadFleet().loaded);
+	assert.equal(dispatch.reason, "routed");
+	assert.equal(dispatch.member, "Qwen/Qwen2.5-Coder-1.5B-Instruct");
+	assert.equal(dispatch.runtimeId, "bf-coder");
+});
+
+test("the four task types resolve onto two runtime models, with no change to the router", () => {
+	// The whole point of the capability weights in score.js: `code` and
+	// `calculation` land on the coder, `document` and `drawing` on the
+	// vision-document member, and the drawing lane excludes the text-only coder
+	// by the modality gate rather than by a rule anyone wrote.
+	const fleet = loadFleet().loaded;
+	const routeFor = (taskType) => resolveRuntimeModel(scoreFleet(taskType, fleet).selected, fleet);
+
+	assert.equal(routeFor("code").runtimeId, "bf-coder");
+	assert.equal(routeFor("calculation").runtimeId, "bf-coder");
+	assert.equal(routeFor("document").runtimeId, "bf-vision");
+	assert.equal(routeFor("drawing").runtimeId, "bf-vision");
+
+	const drawing = scoreFleet("drawing", fleet);
+	assert.deepEqual(
+		drawing.excluded.map((entry) => [entry.name, entry.reason.code]),
+		[["Qwen/Qwen2.5-Coder-1.5B-Instruct", "modality-missing"]],
+	);
+});
+
+test("dispatch degrades to the provider default rather than throwing into a turn", () => {
+	const fleet = loadFleet().loaded;
+	// A member the router named but the licence gate dropped, or a registry that
+	// drifted from the router. Both must be legible, not silent.
+	assert.deepEqual(resolveRuntimeModel("Qwen/Qwen2.5-Coder-3B-Instruct", fleet), {
+		runtimeId: null,
+		member: "Qwen/Qwen2.5-Coder-3B-Instruct",
+		reason: "member-not-in-fleet",
+	});
+	assert.equal(resolveRuntimeModel(null, fleet).reason, "no-selection");
+	// A refused member legitimately carries no runtime id, because it never runs.
+	assert.equal(resolveRuntimeModel("Qwen/Qwen2.5-3B-Instruct", [{ name: "Qwen/Qwen2.5-3B-Instruct" }]).reason, "member-has-no-runtime-id");
+
+	clearRoutingDecision();
+	assert.equal(runtimeModelForCurrentTurn(fleet).reason, "no-routing-decision");
 });
 
 /* -------------------------------------------------------------------------
@@ -668,12 +717,23 @@ test("registers the approval-note tool (Story 5.4), unconditionally like the can
 	assert.equal(typeof approvalNoteTool.presentCall, "function");
 });
 
-test("registers the canary channel loopback-only", () => {
+test("registers the canary, upload and trace channels, all loopback-only", () => {
 	const host = stubHostCtx();
 	apply(host.ctx);
-	assert.equal(host.rpcChannels.length, 1);
-	assert.equal(host.rpcChannels[0].channel, "/bf-canary");
-	assert.equal(host.rpcChannels[0].options.authority, "loopback");
+	// Every one is reachable from a browser on this machine and from nothing that
+	// can merely reach the port. The upload channel carries a document the user
+	// chose, so a non-loopback authority on it would be a way to push a file into
+	// someone else's session; the trace channel reports what is resident in VRAM,
+	// which is machine state nobody off this box should be reading. Asserted
+	// rather than assumed, for each of them.
+	assert.deepEqual(
+		host.rpcChannels.map((entry) => [entry.channel, entry.options.authority]).sort(),
+		[
+			["/bf-canary", "loopback"],
+			["/bf-trace", "loopback"],
+			["/bf-upload", "loopback"],
+		],
+	);
 });
 
 test("the canary is denied by the same waterfall that denies any other attempt", async () => {
@@ -739,7 +799,14 @@ test("a profile with no tool registry still gets the egress denial waterfall", a
 	const host = stubHostCtx({ tools: false });
 	apply(host.ctx);
 	assert.deepEqual(host.registeredTools, []);
-	assert.deepEqual(host.rpcChannels, []);
+	// The canary's channel needs the tool registry and so does not mount here. The
+	// upload and trace channels need only `connection` — one attaches a document
+	// and calls the ingestion service directly, the other reads llama-swap — so
+	// both are present even in a profile with no tools, which is correct.
+	assert.deepEqual(
+		host.rpcChannels.map((entry) => entry.channel).sort(),
+		["/bf-trace", "/bf-upload"],
+	);
 	const decision = await host.preExecuteListener({ name: "web_fetch", arguments: { url: "https://example.com" } }, () => {
 		throw new Error("next() must not be called for a denied tool");
 	});
@@ -825,6 +892,109 @@ test("denies a pwsh call that opens a raw socket", async () => {
 		},
 	);
 	assert.equal(decision.kind, "deny");
+});
+
+/**
+ * The coding lane writes Python (issues/08), and the seal has to know that.
+ * Before 30 August 2026 it inspected PowerShell cmdlets and .NET types only, so
+ * every one of these would have been permitted while the egress monitor kept
+ * reading a counted zero. That is not a determined evasion — it is the first
+ * thing a judge poking at the sandbox would reach.
+ */
+for (const [label, command] of [
+	["urllib, the standard library's client", 'python -c "import urllib.request; print(urllib.request.urlopen(\'https://example.com\').read())"'],
+	["requests, the one an agent reaches for unprompted", 'python -c "import requests; requests.get(\'https://example.com\')"'],
+	["httpx", 'python -c "import httpx; httpx.get(\'https://example.com\')"'],
+	["http.client", 'python -c "import http.client as h; h.HTTPSConnection(\'example.com\').request(\'GET\', \'/\')"'],
+	["a raw socket", 'python -c "import socket; socket.socket().connect((\'example.com\', 80))"'],
+	["socket.create_connection", 'python -c "from socket import create_connection; create_connection((\'example.com\', 80))"'],
+	["asyncio's connector", 'python -c "import asyncio; asyncio.open_connection(\'example.com\', 80)"'],
+	["smtplib", 'python -c "import smtplib; smtplib.SMTP(\'mail.example.com\')"'],
+	["ftplib", 'python -c "import ftplib; ftplib.FTP(\'ftp.example.com\')"'],
+	// webbrowser reaches the network without importing anything that looks like it.
+	["webbrowser, which imports nothing network-shaped", 'python -c "import webbrowser; webbrowser.open(\'https://example.com\')"'],
+	["the py launcher rather than python", 'py -c "import urllib.request"'],
+	["python3 on PATH", 'python3 -c "import requests"'],
+]) {
+	test(`denies a sandbox call that reaches the network from Python: ${label}`, async () => {
+		const host = stubHostCtx();
+		apply(host.ctx);
+		const decision = await host.preExecuteListener({ name: "pwsh", arguments: { command } }, () => {
+			throw new Error("next() must not be called for a denied tool");
+		});
+		assert.equal(decision.kind, "deny", `PERMITTED a Python network call: ${command}`);
+		assert.match(decision.reason, /denies outbound network access/);
+	});
+}
+
+test("denies running Python from a file or module, because the code cannot be inspected first", async () => {
+	// tools/pre-execute decides from the call's static shape, before the body
+	// runs. `python -c "..."` puts the whole program in the command argument
+	// where the pattern can see it; `python script.py` does not, so an agent that
+	// wrote a file with tool-fs and then ran it would defeat the seal without
+	// even trying. Phase 0 permits the interpreter inline only.
+	for (const command of [
+		"python fetch_data.py",
+		"python .\\scripts\\run.py",
+		"python -m http.server 8000",
+		// Deliberately free of any network keyword, so this exercises the shape
+		// rule rather than accidentally re-testing NETWORK_PYTHON_PATTERN — an
+		// earlier fixture said `pip install requests`, which the network pattern
+		// caught first and which therefore proved nothing about inspectability.
+		"py -m json.tool data.json",
+		"cd tmp; python main.py",
+	]) {
+		const host = stubHostCtx();
+		apply(host.ctx);
+		const decision = await host.preExecuteListener({ name: "pwsh", arguments: { command } }, () => {
+			throw new Error("next() must not be called for a denied tool");
+		});
+		assert.equal(decision.kind, "deny", `PERMITTED an uninspectable Python invocation: ${command}`);
+		assert.match(decision.reason, /cannot inspect|inline only/);
+	}
+});
+
+test("the seal does not deny the ordinary sandbox work the coding lane depends on", async () => {
+	// A seal that blocks the lane it exists to protect is worse than no seal,
+	// because it gets switched off. These are the shapes the coding lane actually
+	// emits, plus the interpreter's own harmless forms.
+	for (const command of [
+		'python -c "print(sum(range(1, 101)))"',
+		'python -c "actual = (9.5 - 7.2) / 9.5 * 100; print(round(actual, 1))"',
+		"python --version",
+		"python -V",
+		'python -c "import math, json, statistics; print(math.pi)"',
+		"(1..10 | Measure-Object -Sum).Sum",
+		"Get-ChildItem -Name",
+	]) {
+		const host = stubHostCtx();
+		apply(host.ctx);
+		let reached = false;
+		const decision = await host.preExecuteListener({ name: "pwsh", arguments: { command } }, () => {
+			reached = true;
+			return { kind: "allow" };
+		});
+		assert.ok(reached, `the waterfall did not pass through a benign command: ${command}`);
+		assert.equal(decision.kind, "allow");
+	}
+});
+
+test("a denied Python network call lands on the same egress/denied event the monitor counts", async () => {
+	const agent = stubAgent();
+	const host = stubHostCtx();
+	apply(host.ctx);
+	await host.preExecuteListener(
+		{ name: "pwsh", arguments: { command: 'python -c "import requests; requests.get(\'https://example.com\')"' }, agent },
+		() => {
+			throw new Error("next() must not be called for a denied tool");
+		},
+	);
+	// The counted zero is the number of these events (FR15), so a denial the
+	// monitor cannot see is a denial that proves nothing.
+	assert.equal(agent.events.length, 1);
+	assert.equal(agent.events[0].type, "egress/denied");
+	assert.equal(agent.events[0].data.tool, "pwsh");
+	assert.match(agent.events[0].data.target, /requests/);
 });
 
 test("a denied pwsh call is recorded on the same egress/denied event the monitor counts", async () => {

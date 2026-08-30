@@ -40,6 +40,8 @@
 import { existsSync, readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
+import { attachedFindings, cachedPage, cachePage, currentDocument } from "./attached.js";
+import { DEFAULT_INGESTION_ENDPOINT, renderPage } from "./ingestion-client.js";
 
 /** Prefix the route is registered under. Matches `p` and `p/<anything>` (`kind: "prefix"`). */
 export const PROVENANCE_ROUTE_PREFIX = "/blind-flange/provenance";
@@ -142,8 +144,63 @@ export function pageNumberFromPath(pathname) {
  * @param {string} [paths.pagesDir] - override for tests.
  * @returns a `WebRoute` handler `(req, res) => void`.
  */
-export function createProvenanceHandler({ findingsPath = DEFAULT_FINDINGS_PATH, pagesDir = DEFAULT_PAGES_DIR } = {}) {
-	return function handleProvenance(req, res) {
+/**
+ * The payload for an uploaded document: its remembered OCR lines, and a page
+ * manifest built by actually rendering each cited page.
+ *
+ * Rendering is what makes upload mean anything. The committed page images belong
+ * to one file, so for any other document the crop has to be cut from a page
+ * nobody has rendered yet — and only the ingestion service can render one.
+ *
+ * A page that cannot be rendered is reported `available: false` with the reason,
+ * exactly as a missing fixture page is. The panel then says that finding's page
+ * cannot be shown, which is a visible gap; omitting it would leave a finding that
+ * clicks to nothing.
+ * @param {object} options
+ * @param {string} [options.endpoint]
+ * @param {typeof globalThis.fetch} [options.fetchImpl]
+ */
+async function buildAttachedPayload({ endpoint, fetchImpl }) {
+	const document = currentDocument();
+	const findings = attachedFindings();
+	if (document === null || findings === null) return null;
+
+	const pages = [];
+	for (const page of citedPages(findings)) {
+		const cached = cachedPage(page);
+		if (cached !== null) {
+			pages.push({ page, available: true, width: cached.width, height: cached.height });
+			continue;
+		}
+		try {
+			const { png, renderDpi } = await renderPage({
+				bytes: document.bytes,
+				filename: document.filename,
+				page,
+				endpoint,
+				fetchImpl,
+			});
+			const size = pngSize(Buffer.from(png));
+			if (size === null) {
+				pages.push({ page, available: false, reason: "the rendered page was not a readable PNG" });
+				continue;
+			}
+			cachePage(page, { png, width: size.width, height: size.height });
+			pages.push({ page, available: true, width: size.width, height: size.height, renderDpi });
+		} catch (error) {
+			pages.push({ page, available: false, reason: error instanceof Error ? error.message : String(error) });
+		}
+	}
+	return { report: document.filename, pages, findings, source: "upload" };
+}
+
+export function createProvenanceHandler({
+	findingsPath = DEFAULT_FINDINGS_PATH,
+	pagesDir = DEFAULT_PAGES_DIR,
+	endpoint = DEFAULT_INGESTION_ENDPOINT,
+	fetchImpl = globalThis.fetch,
+} = {}) {
+	return async function handleProvenance(req, res) {
 		if (req.method !== "GET" && req.method !== "HEAD") {
 			res.writeHead(405, { allow: "GET, HEAD" });
 			res.end();
@@ -155,7 +212,11 @@ export function createProvenanceHandler({ findingsPath = DEFAULT_FINDINGS_PATH, 
 		if (pathname === `${PROVENANCE_ROUTE_PREFIX}/findings`) {
 			let body;
 			try {
-				body = Buffer.from(JSON.stringify(buildProvenancePayload({ findingsPath, pagesDir })), "utf8");
+				// An uploaded document takes precedence, because it is what the user is
+				// asking about. Falling through to the fixture here would show a crop
+				// of the wrong document beside a real finding.
+				const attached = await buildAttachedPayload({ endpoint, fetchImpl });
+				body = Buffer.from(JSON.stringify(attached ?? buildProvenancePayload({ findingsPath, pagesDir })), "utf8");
 			} catch (error) {
 				// The capture is shipped inside this package, so an unreadable one
 				// means a broken install rather than a missing upload. Say which
@@ -174,6 +235,39 @@ export function createProvenanceHandler({ findingsPath = DEFAULT_FINDINGS_PATH, 
 
 		const page = pageNumberFromPath(pathname);
 		if (page !== null) {
+			// An uploaded document's pages are rendered on demand and cached. The
+			// manifest above will normally have warmed the cache already, so this is
+			// usually a memory read; it renders here too, so a direct request for a
+			// page still works without loading the manifest first.
+			const document = currentDocument();
+			if (document !== null) {
+				let rendered = cachedPage(page);
+				if (rendered === null) {
+					try {
+						const { png } = await renderPage({
+							bytes: document.bytes,
+							filename: document.filename,
+							page,
+							endpoint,
+							fetchImpl,
+						});
+						const size = pngSize(Buffer.from(png));
+						if (size === null) throw new Error("the rendered page was not a readable PNG");
+						rendered = { png, width: size.width, height: size.height };
+						cachePage(page, rendered);
+					} catch (error) {
+						// 502 rather than 404: the page exists, we could not produce it.
+						// The distinction matters to whoever is debugging a blank crop.
+						res.writeHead(502, { "content-type": "application/json; charset=utf-8" });
+						res.end(head ? undefined : JSON.stringify({ error: error instanceof Error ? error.message : String(error) }));
+						return;
+					}
+				}
+				res.writeHead(200, { "content-type": "image/png", "content-length": String(rendered.png.length) });
+				res.end(head ? undefined : Buffer.from(rendered.png));
+				return;
+			}
+
 			const file = join(pagesDir, PAGE_FILE(page));
 			if (!existsSync(file)) {
 				res.writeHead(404, { "content-type": "application/json; charset=utf-8" });

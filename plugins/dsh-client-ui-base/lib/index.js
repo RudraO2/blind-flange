@@ -78,8 +78,11 @@ import { createLlmAdapter } from "./model-plane/llm-adapter.js";
 import { createModelProvider } from "./model-plane/model-provider.js";
 import { loadFleet } from "./registry/loader.js";
 import { classifyRequest, lastUserText } from "./router/classify.js";
+import { recordRoutingDecision } from "./router/dispatch.js";
 import { scoreFleet } from "./router/score.js";
 import { registerKnownSessionEventTypes } from "./session-events/known-types.js";
+import { createTraceRpcHandler, TRACE_CHANNEL } from "./trace/rpc.js";
+import { createUploadRpcHandler, UPLOAD_CHANNEL } from "./upload/rpc.js";
 
 const FAVICON_PATH = "/blind-flange/favicon.svg";
 const FAVICON_SVG = readFileSync(join(dirname(fileURLToPath(import.meta.url)), "favicon.svg"));
@@ -168,6 +171,76 @@ const NETWORK_PWSH_PATTERN =
 	/\b(Invoke-WebRequest|iwr|Invoke-RestMethod|irm|curl(\.exe)?|wget|Start-BitsTransfer|Test-NetConnection)\b|Net\.Sockets\.(TcpClient|TcpListener|UdpClient|Socket)|Net\.(WebClient|Http\.HttpClient)|Net\.Dns/i;
 
 /**
+ * Matches Python's network surface, for the same reason and in the same place.
+ *
+ * **Why this exists.** The coding lane asks the model for Python, not
+ * PowerShell — measured on 30 August 2026, the 1.5B coder produced runnable
+ * PowerShell zero times out of nine and runnable Python six times out of nine
+ * (`.scratch/local-inference-lanes/issues/08`). The executor is still
+ * `tool-pwsh`, because `dsh-bash-sandbox` never loads on win32; the command
+ * simply invokes the interpreter.
+ *
+ * That change, made without this pattern, would have opened a hole in the one
+ * claim this product rests on. {@link NETWORK_PWSH_PATTERN} knows PowerShell
+ * cmdlets and .NET types and nothing else, so a Python program calling
+ * `urllib.request.urlopen` would have walked straight past the waterfall while
+ * the egress monitor kept reading a counted zero — reachable by any judge who
+ * types a prompt at the sandbox, not by a determined attacker.
+ *
+ * Covers the standard library's clients and raw sockets, the two third-party
+ * clients an agent reaches for unprompted, and `webbrowser`, which opens a URL
+ * without importing anything that looks like a network module.
+ */
+const NETWORK_PYTHON_PATTERN =
+	/\b(urllib|urlopen|Request|requests|httpx|aiohttp|http\.client|httplib|socket|socketserver|ftplib|smtplib|poplib|imaplib|telnetlib|nntplib|xmlrpc|webbrowser|websocket|websockets|paramiko|pycurl)\b|\basyncio\.open_connection\b|\bcreate_connection\b/i;
+
+/**
+ * Matches an interpreter invocation whose code this waterfall cannot read.
+ *
+ * `tools/pre-execute` decides from the call's static shape, before the body
+ * runs. That works when the program is inline — `python -c "..."` puts the
+ * whole thing in the `command` argument, where {@link NETWORK_PYTHON_PATTERN}
+ * can see it. It does **not** work for `python script.py`, because the file's
+ * contents are not in the call, and it does not work for `python -m
+ * http.server`, where the module does the reaching.
+ *
+ * That is a one-step bypass rather than a determined evasion: an agent that
+ * writes a file with `tool-fs` and then runs it would defeat the seal without
+ * trying to. So for Phase 0 the interpreter is only permitted inline, which is
+ * all the coding lane needs and all the demo does. Widening this is a decision
+ * to record, not a convenience to add at the point of use.
+ *
+ * Deliberately does not match a bare `python --version` or `python -c ...`.
+ */
+const UNINSPECTABLE_PYTHON_PATTERN = /(?:^|[\s;&|(])(?:python[\d.]*|py|pythonw)(?:\.exe)?\s+(?!-c\b|-V\b|--version\b)[^\s]/i;
+
+/**
+ * Why this sandbox command must be refused, or `undefined` to allow it.
+ *
+ * One function so the three policies read in one place and the waterfall stays
+ * a single branch. Order matters: the specific network match is reported before
+ * the blanket "cannot be inspected" rule, because a named client is a more
+ * useful denial reason than a shape complaint.
+ * @param {string} command - the `command` argument of a sandbox tool call.
+ * @returns {string | undefined}
+ */
+function sandboxDenialReason(command) {
+	if (NETWORK_PWSH_PATTERN.test(command)) {
+		return `attempted to reach the network via: ${command}`;
+	}
+	if (NETWORK_PYTHON_PATTERN.test(command)) {
+		return `attempted to reach the network from Python via: ${command}`;
+	}
+	if (UNINSPECTABLE_PYTHON_PATTERN.test(command)) {
+		return (
+			"ran Python from a file or module, whose contents this policy cannot inspect before execution. " +
+			`Phase 0 permits the interpreter inline only (\`python -c "..."\`). Refused: ${command}`
+		);
+	}
+	return undefined;
+}
+
+/**
  * The session-log event the egress denial waterfall writes when it refuses a
  * call (Story 2.2). Story 2.1 leaned on the harness's own `tool/call` record
  * for the audit trail — but `tool/call` is appended for every call, allowed or
@@ -243,6 +316,12 @@ function classifyAndRoute(agent, turn, step, messages) {
 	try {
 		const routing = scoreFleet(classification.taskType, loadFleet().loaded);
 		agent.session.append(ROUTED_EVENT, { turn, step, ...routing });
+		// The decision has to reach the model call, which happens later in the
+		// harness's LLM adapter with no session in scope. Recording it here is
+		// what makes Story 3.8's "the model changes by itself" true of the
+		// inference path and not only of the chip — see `router/dispatch.js` for
+		// why this is a memo rather than a read-back off the session log.
+		recordRoutingDecision(routing, turn);
 	} catch (error) {
 		console.warn(`@blind-flange/dsh-client-ui-base: fleet not scored — ${error instanceof Error ? error.message : String(error)}`);
 	}
@@ -359,9 +438,12 @@ export function apply(ctx, config) {
 		}
 		if (exec.name === PWSH_TOOL_NAME) {
 			const command = pwshCommandText(exec.arguments);
-			if (command !== undefined && NETWORK_PWSH_PATTERN.test(command)) {
+			const denial = command === undefined ? undefined : sandboxDenialReason(command);
+			if (denial !== undefined) {
 				// Same distinct denial marker as above (Story 2.2) — the sandbox's
-				// shell is sealed the same way the network canary is (Story 5.3).
+				// shell is sealed the same way the network canary is (Story 5.3),
+				// and since 30 August 2026 that covers Python as well as
+				// PowerShell, because the coding lane now writes Python.
 				try {
 					exec.agent?.session?.append?.(EGRESS_DENIED_EVENT, { tool: exec.name, target: command });
 				} catch (error) {
@@ -369,7 +451,7 @@ export function apply(ctx, config) {
 				}
 				return {
 					kind: "deny",
-					reason: `Blind Flange denies outbound network access: "${exec.name}" attempted to reach the network via: ${command}`,
+					reason: `Blind Flange denies outbound network access: "${exec.name}" ${denial}`,
 				};
 			}
 		}
@@ -422,7 +504,13 @@ export function apply(ctx, config) {
 	// two tools above, so every preset's agent can turn a completed set of
 	// findings into a real, signed .docx without a per-preset row.
 	ctx.inject(["tools"], (toolCtx) => {
-		toolCtx.effect(() => toolCtx.tools.register(createApprovalNoteTool()), "blind-flange: approval note tool");
+		// The provider name is passed in because the note discloses it: a reply
+		// served from a stored response has to say so inside the file, not only on
+		// screen, or the disclosure does not survive the file being emailed.
+		toolCtx.effect(
+			() => toolCtx.tools.register(createApprovalNoteTool({ providerName: config?.modelPlane?.provider ?? "replay" })),
+			"blind-flange: approval note tool",
+		);
 	});
 	ctx.inject(["connection", "agents", "tools"], (canaryCtx) => {
 		canaryCtx.effect(() => {
@@ -435,6 +523,35 @@ export function apply(ctx, config) {
 				void dispose();
 			};
 		}, "blind-flange: canary rpc channel");
+	});
+
+	// The upload channel the composer's upload control posts to. Same shape and
+	// same `authority: "loopback"` as the canary above — reachable from a browser
+	// on this machine, not from anything that can merely reach the port. It needs
+	// only `connection`, not the tool registry, because it attaches the document
+	// and calls the ingestion service directly rather than dispatching a tool.
+	ctx.inject(["connection"], (uploadCtx) => {
+		uploadCtx.effect(() => {
+			const dispose = uploadCtx.connection.rpc.handle(UPLOAD_CHANNEL, createUploadRpcHandler(), { authority: "loopback" });
+			return () => {
+				void dispose();
+			};
+		}, "blind-flange: upload rpc channel");
+
+		// The residency chip's channel. Read-only, and it reports llama-swap's own
+		// `/running` rather than anything we track — we do not own loading or
+		// eviction, and a second idea of what is resident could disagree with the
+		// thing actually holding the memory.
+		uploadCtx.effect(() => {
+			const dispose = uploadCtx.connection.rpc.handle(
+				TRACE_CHANNEL,
+				createTraceRpcHandler({ providerName: config?.modelPlane?.provider ?? "replay" }),
+				{ authority: "loopback" },
+			);
+			return () => {
+				void dispose();
+			};
+		}, "blind-flange: trace rpc channel");
 	});
 
 	const providerName = config?.modelPlane?.provider ?? "replay";
