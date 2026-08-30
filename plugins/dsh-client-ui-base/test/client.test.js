@@ -335,6 +335,10 @@ test("occupies both places the DeepSeek whale used to render, and the hero's tas
 		"shell.overlay",
 		"shell.overlay",
 		"sidebar.brand.mark",
+	// The wordmark beside it: the shipped fallback reads "DSH Local Build" with
+	// the harness's build hash, which is the wrong product name sitting directly
+	// beside our own mark for the whole demo.
+	"sidebar.brand.name",
 	]);
 });
 
@@ -401,7 +405,7 @@ test("the registered mark renders the Faraday paths in currentColor, not a hand-
 	assert.equal(svg.type, "svg");
 	assert.equal(svg.props.width, 20);
 	assert.equal(svg.props.className, "hero-mark");
-	assert.equal(svg.props.viewBox, "0 0 1254 1254");
+	assert.equal(svg.props.viewBox, "273 215 722 722", "the viewBox is cropped to the artwork, not the exported canvas");
 	// The artwork is authored at 1254pt and drawn through the exported group
 	// transform; rescaling the coordinates by hand would risk shifting the curves.
 	const group = svg.props.children;
@@ -962,7 +966,7 @@ test("a client with no host transport loses the canary and keeps every other sea
 	const { ctx, registered } = stubSlots({ connection: false });
 	exports.apply(ctx);
 	assert.equal(findCanary(registered), undefined);
-	assert.equal(registered.length, 9, "the other seats must survive a missing transport");
+	assert.equal(registered.length, 10, "the other seats must survive a missing transport");
 });
 
 test("pressing it posts to the host's loopback canary channel for this session", async () => {

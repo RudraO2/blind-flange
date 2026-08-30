@@ -1,4 +1,4 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1254 1254" fill="none">
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="273 215 722 722" fill="none">
 	<!--
 		The Faraday mark. Named for the cage: a conductive shell that lets
 		nothing in and nothing out, which is the whole claim this workbench makes
@@ -9,6 +9,14 @@
 		1254pt and drawn through the group transform below, which is how the
 		original was exported; rescaling the coordinates by hand would risk
 		shifting the curves, and the transform costs nothing.
+
+		The viewBox is cropped to the artwork, not to the exported canvas. Measured
+		in the browser on 30 August 2026: the two paths occupy 426 x 682 of a
+		1254 x 1254 export, so drawing the whole canvas rendered the mark at about
+		a third of the width of its seat and it read as a small smudge in the
+		sidebar and on the hero. Cropped to the real bounds it fills 94% of the
+		height. Square, and centred on the artwork, so a square slot has nothing
+		to letterbox.
 
 		`currentColor` rather than a colour of our own, so the mark inherits the
 		theme's foreground and reads in both light and dark (UX-DR7).

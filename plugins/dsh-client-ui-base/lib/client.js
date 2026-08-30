@@ -127,7 +127,10 @@ window.__ModuleLoader__.load({
 		 * Authored at 1254pt and drawn through the group transform below, which is
 		 * how the artwork was exported. Rescaling the coordinates by hand would risk
 		 * shifting the curves for no gain, and the transform costs nothing.
-		 * `favicon.svg` carries the same two paths for the browser tab.
+		 * The viewBox is cropped to the artwork rather than to the exported canvas:
+		 * measured in the browser, the paths occupy 426 x 682 of a 1254 x 1254
+		 * export, so drawing the full canvas rendered the mark at a third of the
+		 * width of its seat. `favicon.svg` carries the same paths and the same crop.
 		 */
 		const MARK_PATHS = [
 			"M5985 10174 c-371 -82 -622 -388 -707 -864 -9 -54 -13 -182 -13 -460 l0 -385 27 -57 c34 -74 95 -132 166 -159 46 -17 72 -20 137 -17 100 6 163 35 228 108 73 81 77 104 77 454 0 328 9 441 46 556 31 98 73 161 127 190 41 22 44 22 105 6 180 -46 402 -275 519 -536 63 -140 110 -308 139 -495 14 -92 16 -180 15 -530 -2 -461 2 -503 57 -575 38 -50 60 -68 122 -98 74 -36 209 -39 282 -5 66 30 132 95 157 154 22 49 22 60 22 512 0 587 -17 737 -116 1056 -122 393 -345 734 -614 936 -105 80 -278 167 -386 195 -108 29 -295 35 -390 14z m396 -140 c70 -21 217 -94 283 -140 315 -226 564 -651 661 -1130 47 -231 56 -370 53 -832 -3 -409 -4 -421 -24 -449 -26 -35 -81 -73 -105 -73 -18 0 -19 19 -19 473 0 601 -14 750 -101 1052 -140 490 -446 918 -776 1085 -65 33 -54 38 28 14z m-376 -396 c-41 -22 -104 -98 -133 -160 -67 -142 -82 -258 -82 -651 0 -264 -3 -324 -15 -355 -17 -39 -52 -82 -68 -82 -5 0 -7 166 -5 403 4 379 6 407 27 487 48 177 132 305 234 354 49 23 84 27 42 4z",
@@ -139,6 +142,31 @@ window.__ModuleLoader__.load({
 		 * `OfficialBrandMark` takes, since `conversation.hero.brand.mark` is a
 		 * `single` slot and this occupies it outright.
 		 */
+		/**
+		 * The wordmark beside the mark in the sidebar.
+		 *
+		 * `sidebar.brand.name` is a slot with a shipped fallback, and the fallback
+		 * reads "DSH Local Build" with the harness's build hash beside it. Correct
+		 * for the harness; wrong for a product that has just told the operator it is
+		 * called Faraday, and it sits directly beside our own mark at the top of the
+		 * sidebar, on screen for the whole demo. Taking the seat is the same one-line
+		 * move Story 1.5 made for the mark.
+		 *
+		 * No colour, weight or size of ours: the seat is already styled by the
+		 * sidebar around it, and a wordmark that restyles itself would stop matching
+		 * the row it sits in (UX-DR7).
+		 */
+		function FaradayWordmark() {
+			let jsxRuntime;
+			try {
+				jsxRuntime = require("react/jsx-runtime");
+			} catch {
+				return null;
+			}
+			if (typeof jsxRuntime?.jsx !== "function") return null;
+			return jsxRuntime.jsx("span", { children: "Faraday" });
+		}
+
 		function FaradayMark({ size, className }) {
 			let jsxRuntime;
 			try {
@@ -149,7 +177,7 @@ window.__ModuleLoader__.load({
 			if (typeof jsxRuntime?.jsx !== "function") return null;
 			return jsxRuntime.jsxs("svg", {
 				xmlns: "http://www.w3.org/2000/svg",
-				viewBox: "0 0 1254 1254",
+				viewBox: "273 215 722 722",
 				width: size,
 				height: size,
 				className,
@@ -2566,6 +2594,9 @@ function auditLine(entry) {
 			const disposeSidebarMark = ctx.slots.inject("sidebar.brand.mark", function* () {
 				yield ctx.slots.register({ name: "sidebar.brand.mark" }, FaradayMark);
 			});
+			const disposeSidebarName = ctx.slots.inject("sidebar.brand.name", function* () {
+				yield ctx.slots.register({ name: "sidebar.brand.name" }, FaradayWordmark);
+			});
 			const disposeHeroMark = ctx.slots.inject("conversation.hero.brand.mark", function* () {
 				yield ctx.slots.register({ name: "conversation.hero.brand.mark" }, FaradayMark);
 			});
@@ -2721,6 +2752,7 @@ function auditLine(entry) {
 			return () => {
 				disposeTabTitle();
 				disposeSidebarMark();
+				disposeSidebarName();
 				disposeHeroMark();
 				disposeIndicator?.();
 				disposeProviderDisclosure?.();
