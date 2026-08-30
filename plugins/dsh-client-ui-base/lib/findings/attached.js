@@ -32,6 +32,8 @@
  */
 
 /** @type {AttachedDocument | null} */
+import { ingestionTargetFor } from "./ingestion-client.js";
+
 let attached = null;
 
 /**
@@ -110,10 +112,50 @@ export function attachmentNote() {
 	if (attached === null) return null;
 	const count = Array.isArray(attached.findings) ? attached.findings.length : null;
 	const read = count === null ? "It has not been read yet" : `Its text has already been extracted - ${count} OCR lines`;
+	// An image is attached to the message itself, so the model is looking at it
+	// rather than reading a description of it. Saying so stops a vision model
+	// claiming it cannot see files while the picture is in its own context.
+	const sees = attachedImages() !== null;
 	return (
 		`A document is attached to this session: "${attached.filename}". ${read}. ` +
-		"Call `bf_report_findings` to read it before answering any question about its contents, " +
+		(sees ? "You can see it: the image is attached to this message, so describe what is actually in it. " : "") +
+		"Call `bf_report_findings` for its extracted text before answering any question about its contents, " +
 		"and cite the page and bounding box of every line a claim comes from. " +
 		"Do not describe the document from memory or from anything else in this conversation."
 	);
+}
+
+/**
+ * The attached document as vision input, or `null` when there is nothing to
+ * show a model.
+ *
+ * **Why this exists, and why it did not before.** `local-provider.js` has taken
+ * an `images` argument since the day it was written: it attaches them to the
+ * last user message as OpenAI `image_url` data URLs, which is exactly what
+ * llama-server's multimodal path reads, and `bf-vision` runs with its 424 MiB
+ * projector offloaded to the card whether or not an image is ever sent. The
+ * capability was built, tested and wired to nothing. Grep for `images` on
+ * 30 August 2026 and the only callers were the provider's own definition and
+ * its tests, so every picture a user uploaded was OCR'd to text and the vision
+ * model never saw a pixel.
+ *
+ * **Images only, deliberately - not PDF pages.** A photograph or a screenshot
+ * is exactly what a vision model is for, and OCR throws away everything about
+ * it that is not a word. A dense inspection report is the opposite case: its
+ * value is in tables of thickness readings and tag numbers, where a 2B model
+ * misreading one digit is worse than useless, and where the product's claim is
+ * that every finding carries the page and the pixel box it was read from
+ * (Story 4.5). A model cannot give a bounding box that can be checked; OCR can,
+ * and does, at 99% confidence per line on the fixture.
+ *
+ * So both paths run for an image: the model sees the picture, and OCR still
+ * supplies the text and the boxes underneath it. They answer different
+ * questions and neither replaces the other.
+ * @returns {Array<{ mediaType: string, base64: string }> | null}
+ */
+export function attachedImages() {
+	if (attached === null) return null;
+	const target = ingestionTargetFor(attached.filename);
+	if (target === null || target.contentType === "application/pdf") return null;
+	return [{ mediaType: target.contentType, base64: Buffer.from(attached.bytes).toString("base64") }];
 }

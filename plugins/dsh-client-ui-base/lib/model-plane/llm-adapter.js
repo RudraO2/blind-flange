@@ -40,6 +40,7 @@ import {
 	verdictFor,
 } from "../lanes/code.js";
 import { announceRefusals, loadFleet } from "../registry/loader.js";
+import { attachedImages } from "../findings/attached.js";
 import { currentTaskType, runtimeModelForCurrentTurn } from "../router/dispatch.js";
 import { recordTool } from "../trace/turn.js";
 
@@ -223,7 +224,19 @@ async function* streamImpl(modelProvider, options) {
 	// answers it by dispatch. Both come from the same routing decision.
 	const pieces = servesTaskType(currentTaskType())
 		? codeLanePieces(modelProvider, options, dispatch)
-		: modelProvider.answer({ messages: options.messages, model: dispatch.runtimeId ?? undefined });
+	// Everything that is not the coding lane is a plain turn - and until
+	// 30 August 2026 that turn never carried an image. `answer()` has always
+	// taken `images`, the vision model runs with its projector on the card, and
+	// nothing anywhere passed one: an uploaded photograph was OCR'd to text and
+	// the vision model was handed the words. That is the wrong tool for a
+	// picture. It still reads OCR text for a PDF, where the tables and the
+	// provenance boxes are the point - see `findings/attached.js` for why the
+	// two paths are not interchangeable.
+		: modelProvider.answer({
+			messages: options.messages,
+			model: dispatch.runtimeId ?? undefined,
+			images: attachedImages() ?? undefined,
+			});
 	let index = -1;
 	let openTextIndex = -1;
 	let openText = "";

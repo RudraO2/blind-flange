@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 
 import { lastUserText } from "../lib/router/classify.js";
-import { attachDocument, clearDocument, rememberFindings } from "../lib/findings/attached.js";
+import { attachDocument, attachedImages, clearDocument, rememberFindings } from "../lib/findings/attached.js";
 import { isGenuineHumanMessage, lastGenuineUserMessage, withoutHarnessInjections } from "../lib/model-plane/injected.js";
 import { toChatMessages } from "../lib/model-plane/local-provider.js";
 
@@ -89,5 +89,38 @@ describe("an attached document announces itself to the model", () => {
 		assert.match(note.content, /2 OCR lines/);
 		assert.match(note.content, /bf_report_findings/);
 		clearDocument();
+	});
+});
+
+describe("an uploaded image reaches the vision model as an image", () => {
+	it("offers a picture as vision input, and says the model can see it", () => {
+		// `local-provider.js` has taken `images` since it was written, and nothing
+		// ever passed one: every uploaded photograph was OCR'd to text and the
+		// vision model was handed the words, with its projector sitting on the card
+		// doing nothing. Measured 30 August 2026 by grepping for the caller.
+		attachDocument("profile.png", new Uint8Array([137, 80, 78, 71]));
+		rememberFindings([{ page: 1 }]);
+		const images = attachedImages();
+		assert.equal(images.length, 1);
+		assert.equal(images[0].mediaType, "image/png");
+		assert.ok(images[0].base64.length > 0);
+		assert.match(toChatMessages(sessionWithInjections()).find((m) => m.role === "system").content, /You can see it/);
+		clearDocument();
+	});
+
+	it("does not offer a PDF as vision input", () => {
+		// A dense report's value is in tables of readings and tag numbers, where a
+		// 2B model misreading a digit is worse than useless, and where every finding
+		// has to carry the pixel box it was read from. OCR can produce a box that
+		// can be checked; a model cannot.
+		attachDocument("report.pdf", new Uint8Array([37, 80, 68, 70]));
+		assert.equal(attachedImages(), null);
+		assert.doesNotMatch(toChatMessages(sessionWithInjections()).find((m) => m.role === "system").content, /You can see it/);
+		clearDocument();
+	});
+
+	it("offers nothing when no document is attached", () => {
+		clearDocument();
+		assert.equal(attachedImages(), null);
 	});
 });
