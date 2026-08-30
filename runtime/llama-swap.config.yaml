@@ -1,0 +1,114 @@
+# The inference runtime's model table — llama-swap v251.
+#
+# Reconstructed 30 August 2026 and committed here because it was missing: the
+# demo runbook's first command points at `D:\ai\llama-swap\config.yaml` and
+# `fetch-runtime.ps1` downloaded the runtime without ever writing one, so the
+# file existed on one laptop and nowhere else. Story 6.3 ("it runs on the second
+# machine") cannot pass while a required file lives only in someone's head.
+# `fetch-runtime.ps1` now copies this into place.
+#
+# Every flag below is here because a measurement put it here — the sources are
+# `.scratch/local-inference-lanes/issues/06` and `/07`. Three of them are not
+# optional:
+#
+#   --device           Both team laptops have two Vulkan devices, and llama.cpp
+#                      picks the first one by default. Pinning the discrete card
+#                      is mandatory: the iGPU answers too, just on shared system
+#                      RAM at a fraction of the bandwidth, so the failure is
+#                      invisible rather than loud.
+#
+#                      **The index is NOT portable, and assuming it is cost us a
+#                      run.** Measured 30 August 2026:
+#
+#                        Kohil  Vulkan0 = AMD Radeon (Ryzen 4600H iGPU, 8122 MiB)
+#                               Vulkan1 = NVIDIA GTX 1650 Ti      (4149 MiB)
+#                        Rudra  Vulkan0 = NVIDIA GTX 1650 Max-Q   (4152 MiB)
+#                               Vulkan1 = Intel UHD Graphics      (8042 MiB)
+#
+#                      Exactly inverted. A config hardcoding `Vulkan1` is correct
+#                      on one machine and silently wrong on the other, which is
+#                      Story 6.3's whole question answering itself. So
+#                      `fetch-runtime.ps1` reads `llama-server --list-devices`
+#                      and substitutes the placeholders below. Do not replace them
+#                      with a literal index.
+#
+#   --parallel 1       Defaults to auto and picked 4 slots, which makes
+#                      `--ctx-size 8192` mean 8192 tokens of KV cache *per slot*
+#                      — four times the budget on a card with none spare.
+#
+#   -ngl / -c explicit `--fit` is on by default and silently rewrites an unset
+#                      `-ngl` or `-c` against a 1024 MiB per-device margin. Both
+#                      are set here so the number we asked for is the number we
+#                      get.
+#
+# `runtime_id` in registry/models.yaml is the key under `models:` here. That is
+# the whole link between the router's decision and a model answering: the router
+# selects a fleet member by name, lib/router/dispatch.js resolves it to this
+# key, and llama-swap loads it. Adding a model means an entry in both files.
+#
+# One model is resident at a time. That is llama-swap's default with no
+# `routing:` section, so the mutual exclusion 3.7 GB forces on us needs no
+# configuration. A warm swap costs about 3 seconds, because both GGUFs stay in
+# the OS page cache.
+
+macros:
+  # One place to bump the llama.cpp build or a flag both lanes share.
+  llama-server: >
+    D:/ai/llama.cpp/llama-server.exe
+    --port ${PORT}
+    --host 127.0.0.1
+    --device __DISCRETE_GPU__
+    --parallel 1
+    --n-gpu-layers 99
+    --ctx-size 8192
+    --jinja
+
+models:
+  # Serves the `code` and `calculation` task types.
+  # Qwen/Qwen2.5-Coder-1.5B-Instruct, Apache-2.0, Q4_K_M.
+  "bf-coder":
+    name: "Coder"
+    cmd: |
+      ${llama-server}
+      --model D:/ai/models/qwen2.5-coder-1.5b-instruct-q4_k_m.gguf
+    ttl: 300
+
+  # Serves the `document` and `drawing` task types.
+  # Qwen/Qwen3-VL-2B-Instruct, Apache-2.0, Q4_K_M, plus its Q8_0 projector.
+  #
+  # The 424 MiB projector is offloaded to the card at startup whether or not an
+  # image is ever sent. It stays offloaded: the document lane usually feeds this
+  # model OCR text rather than a page image, but the drawing lane needs the image
+  # path live, and paying the load once beats paying it mid-demo.
+  "bf-vision":
+    name: "Vision / document"
+    cmd: |
+      ${llama-server}
+      --model D:/ai/models/Qwen3VL-2B-Instruct-Q4_K_M.gguf
+      --mmproj D:/ai/models/mmproj-Qwen3VL-2B-Instruct-Q8_0.gguf
+    ttl: 300
+
+  # The slot for a router model, if the router ever becomes one.
+  #
+  # It goes on Vulkan0 — the iGPU — and not on the discrete card. There are
+  # ~8 GB of iGPU-addressable memory sitting unused, llama-swap holds one model
+  # at a time on Vulkan1 because it has to, and a router that evicted the lane
+  # model on every turn would pay a swap per request. Still parallel hardware,
+  # and it never contends with the model actually answering.
+  #
+  # Uncomment, point --model at a real file, and add a matching entry with this
+  # runtime_id to registry/models.yaml.
+  #
+  # "bf-router":
+  #   name: "Router"
+  #   cmd: |
+  #     D:/ai/llama.cpp/llama-server.exe
+  #     --port ${PORT}
+  #     --host 127.0.0.1
+  #     --device __IGPU__
+  #     --parallel 1
+  #     --n-gpu-layers 99
+  #     --ctx-size 4096
+  #     --jinja
+  #     --model D:/ai/models/<router-model>.gguf
+  #   ttl: 300

@@ -37,6 +37,8 @@
  * governs *tool* calls and is untouched by this: the counted zero stays zero.
  */
 
+import { attachmentNote } from "../findings/attached.js";
+import { withoutHarnessInjections } from "./injected.js";
 import { ModelProviderError } from "./model-provider.js";
 import { createSseParser } from "./sse.js";
 
@@ -96,8 +98,19 @@ function messageText(message) {
  * @param {Array<{ mediaType: string, base64: string }>} [images]
  */
 export function toChatMessages(messages, images) {
-	const source = Array.isArray(messages) ? messages : [];
+	// The harness's own injected messages are dropped before the model sees
+	// them — the skill catalogue and the runtime-context snapshot. See
+	// `injected.js` for why, and for why tool results are deliberately kept.
+	const source = withoutHarnessInjections(messages);
 	const chat = [];
+
+	// An attached document is host state; nothing in the message list mentions it.
+	// Without this note the model has no idea a file arrived, never calls the
+	// findings tool, and answers about the document from whatever else is in its
+	// window - which on 30 August 2026 was the runtime-context snapshot, reported
+	// confidently as the contents of the file. See `findings/attached.js`.
+	const note = attachmentNote();
+	if (note !== null) chat.push({ role: "system", content: note });
 	for (const message of source) {
 		const text = messageText(message);
 		if (text === "") continue;

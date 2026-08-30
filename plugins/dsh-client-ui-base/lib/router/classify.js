@@ -34,6 +34,8 @@
  * classifier later is a change to this one file.
  */
 
+import { lastGenuineUserMessage } from "../model-plane/injected.js";
+
 /** The four task types a request can classify as. The router scores the fleet against exactly these (Story 3.6). */
 export const TASK_TYPES = ["document", "drawing", "calculation", "code"];
 
@@ -163,16 +165,17 @@ export function classifyRequest(text) {
  * @returns {string}
  */
 export function lastUserText(messages) {
-	if (!Array.isArray(messages)) return "";
-	for (let i = messages.length - 1; i >= 0; i -= 1) {
-		const message = messages[i];
-		if (!message || message.role !== "user") continue;
-		if (typeof message.content === "string") return message.content;
-		if (!Array.isArray(message.content)) return "";
-		return message.content
-			.filter((block) => block && block.type === "text" && typeof block.text === "string")
-			.map((block) => block.text)
-			.join("\n");
-	}
-	return "";
+	// The operator's own turn, not the runtime-context snapshot or the skill
+	// catalogue the harness folds in as `role: "user"` AFTER it. Scanning
+	// backwards for the last user-role message returned one of those instead, so
+	// the router classified the injection rather than the request — the same bug
+	// `replay-provider.js` recorded in Story 5.1, surfacing in a second file.
+	const message = lastGenuineUserMessage(messages);
+	if (!message) return "";
+	if (typeof message.content === "string") return message.content;
+	if (!Array.isArray(message.content)) return "";
+	return message.content
+		.filter((block) => block && block.type === "text" && typeof block.text === "string")
+		.map((block) => block.text)
+		.join("\n");
 }

@@ -88,3 +88,32 @@ export function cachedPage(page) {
 export function cachePage(page, rendered) {
 	if (attached !== null) attached.pages.set(page, rendered);
 }
+
+/**
+ * A one-line note telling the model that a document is attached, or `null` when
+ * none is.
+ *
+ * **Why this exists.** Upload attaches the document on the host and OCRs it
+ * immediately, and until 30 August 2026 that is where the chain stopped: nothing
+ * in the conversation said a file had arrived. Measured that day - a document was
+ * uploaded, then "what is in the doc I sent?" was asked, and the session log
+ * records zero tool calls for that turn. The model had no attachment in context,
+ * no reason to call `bf_report_findings`, and answered from the only text in its
+ * window. It said it had read the file, because that is what a model says.
+ *
+ * So the note names the file, says the OCR has already run, and names the tool
+ * that returns the text. It is deliberately a statement of fact and not an
+ * instruction to obey: the model still decides to call the tool, and the session
+ * log still records whether it did.
+ */
+export function attachmentNote() {
+	if (attached === null) return null;
+	const count = Array.isArray(attached.findings) ? attached.findings.length : null;
+	const read = count === null ? "It has not been read yet" : `Its text has already been extracted - ${count} OCR lines`;
+	return (
+		`A document is attached to this session: "${attached.filename}". ${read}. ` +
+		"Call `bf_report_findings` to read it before answering any question about its contents, " +
+		"and cite the page and bounding box of every line a claim comes from. " +
+		"Do not describe the document from memory or from anything else in this conversation."
+	);
+}

@@ -194,15 +194,38 @@ export function parseProgram(text) {
  *     knows it holds ground truth; this function does not.
  * @param {string} expected - a predicted value, or a fixture's ground truth.
  * @param {string} output   - everything the sandbox printed.
- * @returns {{ verdict: "AGREES" | "DISAGREES" | "NO-OUTPUT", expected: string, actual: string }}
+ * @returns {{ verdict: "AGREES" | "DISAGREES" | "NO-OUTPUT" | "FAILED", expected: string, actual: string, detail?: string }}
  */
 export function verdictFor(expected, output) {
-	const lines = String(output ?? "")
+	const raw = String(output ?? "");
+	const want0 = String(expected ?? "").trim();
+
+	// A program that crashed has no computed value, so there is nothing to
+	// compare, and calling the mismatch a disagreement misleads in the reader's
+	// favour: on 30 August 2026 a NameError produced "the model predicted 55 but
+	// the sandbox computed [exit code: 1] - the computed value is the one to
+	// trust", which told the operator to trust a stack trace. `tool-pwsh` reports
+	// the status as a trailing `[exit code: N]` line; a non-zero N is its own
+	// verdict, not a wrong answer.
+	// `tool-pwsh` frames its output with [stderr] / [stdout] / [exit code: N]
+	// markers. They are framing, not printed values, so neither the crash check
+	// below nor the last-line rule may mistake one for what the program computed.
+	const noise = /^\[(stderr|stdout|exit code)/;
+	const exit = raw.match(/\[exit code:\s*(-?\d+)\]/);
+	if (exit && exit[1] !== "0") {
+		const said = raw
+			.split(/\r?\n/)
+			.map((line) => line.trim())
+			.filter((line) => line !== "" && !noise.test(line));
+		return { verdict: "FAILED", expected: want0, actual: "", detail: said.at(-1) ?? `exit code ${exit[1]}` };
+	}
+
+	const lines = raw
 		.split(/\r?\n/)
 		.map((line) => line.trim())
-		.filter((line) => line !== "");
+		.filter((line) => line !== "" && !noise.test(line));
 	const actual = lines.at(-1) ?? "";
-	const want = String(expected ?? "").trim();
+	const want = want0;
 	if (actual === "") return { verdict: "NO-OUTPUT", expected: want, actual };
 
 	const asNumbers = [want, actual].map(Number);
@@ -219,6 +242,12 @@ export function verdictFor(expected, output) {
  * @param {{ verdict: string, expected: string, actual: string }} result
  */
 export function describeVerdict(result) {
+	if (result.verdict === "FAILED") {
+		return (
+			`FAILED — the program did not run to completion (${result.detail ?? "non-zero exit"}), so nothing was computed ` +
+			`and the model's prediction of ${JSON.stringify(result.expected)} was never checked. The error is the result.`
+		);
+	}
 	if (result.verdict === "NO-OUTPUT") {
 		return `NO OUTPUT — the program printed nothing, so there was no computed value to compare against the model's prediction of ${JSON.stringify(result.expected)}.`;
 	}

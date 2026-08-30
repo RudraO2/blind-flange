@@ -11,6 +11,19 @@
 - insert:
     - id: bf-base
       name: '@blind-flange/dsh-client-ui-base'
+      config:
+        modelPlane:
+          # `local` is real inference on this machine's GPU through llama-swap
+          # (lib/model-plane/local-provider.js). Absent this key the plugin
+          # defaults to `replay`, which answers every turn from the hand-authored
+          # cache — the router's chip would still change member by member while
+          # the same stored text came back, which is what it did through
+          # 29 August 2026.
+          #
+          # The escape hatch is this one word: set it back to `replay` and
+          # restart. Everything except live generation still works, because
+          # nothing else in the workbench depends on which provider answered.
+          provider: local
 
 # Story 1.2: no network-capable tool anywhere in the tool list. The tool
 # itself (`tool-web`) is mounted per agent preset, not here — sealing it took
@@ -85,8 +98,53 @@
 # makes a session answer at all.
 - id: agent-default-model
   config:
-    provider: replay
-    model: replay-authored-v1
+    # The provider token the model-plane adapter registers under — it is
+    # `modelPlane.provider` above, so the two move together. `model` is a fleet
+    # member's `name` from registry/models.yaml, which is the id the adapter
+    # publishes in the harness model list.
+    #
+    # This is only the *default* seat for a new session. From the first turn
+    # onward the router picks the member and lib/router/dispatch.js resolves it
+    # to a llama-swap runtime id, so this value stops mattering the moment a
+    # turn is classified.
+    provider: local
+    model: Qwen/Qwen2.5-Coder-1.5B-Instruct
+
+# 30 August 2026: no skill surface anywhere.
+#
+# `skill-filesystem`, `skill-badge` and `tool-skill` are already disabled by
+# dsh-web-app itself, but a `skill-catalog` context injection still reached the
+# model — several thousand tokens naming ai-seo, hyperframes, media-use and the
+# rest, read from `~/.agents/skills`, which is the same skill root the operator's
+# other tools use. Asked to summarise an inspection report with no report
+# attached, a 2B model summarised the catalogue instead, because the catalogue
+# was the only substantial text in its window. It was not hallucinating; it
+# answered about what it was given.
+#
+# Blind Flange offers no skills, so a catalogue of them is describing
+# capabilities this workbench does not have. Both remaining rows go off. The
+# plugin also filters the injection in `lib/model-plane/injected.js`, because a
+# profile row is a deployment choice and the seal should not depend on one.
+# `- id: skill` is deliberately NOT disabled, and must not be. It is only the
+# provider *registry*; it discovers nothing by itself, and every provider that
+# would fill it (`skill-filesystem`, `skill-badge`, `tool-skill`) is already
+# disabled by dsh-web-app, so the catalogue it serves is empty. Disabling the
+# row on 30 August 2026 broke the New Session button: `dsh-host-apiproxy` — the
+# API gateway carrying sessions, workspaces, presets and settings — resolves
+# `ctx.get("skills")` per request and fails the route outright when it is absent:
+#
+#   "skill registry is absent: neither this session's agent preset nor the host
+#    composition mounts @deepseek-ai/dsh-skill"
+#
+# It fails at request time rather than at boot, so nothing appears in the startup
+# log and the button simply does nothing. Exactly the `attachment-local` trap
+# recorded further down this file, in a second service.
+#
+# The catalogue is kept away from the model in `lib/model-plane/injected.js`
+# instead, which is the right layer for it: a filter at the model boundary does
+# not depend on a deployment row, and cannot take a harness service down with it.
+- id: ui-skill
+  disabled: true
 
 # Story 3.7: the routing chip replaces the stock model picker.
 # conversation.input.model is a single slot; disabling ui-model-selection

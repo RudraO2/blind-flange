@@ -35,6 +35,31 @@ Expand-Archive -Force -Path "$root\dl\llama-swap_251_windows_amd64.zip"   -Desti
 # second (cudart) archive to merge in, which is one of the reasons it is the easier path.
 Expand-Archive -Force -Path "$root\dl\llama-b10687-bin-win-vulkan-x64.zip" -DestinationPath "$root\llama.cpp"
 
+# The model table. Reconstructed and committed on 30 August 2026 — it used to
+# exist only on the machine that wrote it, which is exactly the failure Story 6.3
+# is meant to catch. Copied rather than generated so the reasoning in its comments
+# travels with it.
+$config = Join-Path $PSScriptRoot "..\..\runtime\llama-swap.config.yaml"
+if (-not (Test-Path $config)) { throw "missing runtime\llama-swap.config.yaml — run this from the repo checkout" }
+# Which Vulkan device is the discrete card is NOT portable — the two team laptops
+# enumerate it in opposite order (see the config's own header). Read it rather than
+# assume it: a wrong index still answers, on the iGPU, at a fraction of the speed.
+$devices = & "$root\llama.cpp\llama-server.exe" --list-devices 2>&1 | Out-String
+$discrete = $null; $igpu = $null
+foreach ($line in ($devices -split "`n")) {
+	if ($line -match '(Vulkan\d+):\s*(.+?)\s*\(') {
+		$id = $Matches[1]; $desc = $Matches[2]
+		if ($desc -match 'NVIDIA|Radeon RX|Arc') { $discrete = $id } else { $igpu = $id }
+		Write-Host "      $id = $desc"
+	}
+}
+if ($null -eq $discrete) { throw "no discrete GPU found in --list-devices; set --device by hand in $root\llama-swap\config.yaml" }
+Write-Host "      discrete = $discrete$(if ($igpu) { ", igpu = $igpu" })"
+
+(Get-Content -Raw $config).Replace('__DISCRETE_GPU__', $discrete).Replace('__IGPU__', $(if ($igpu) { $igpu } else { 'Vulkan0' })) |
+	Set-Content -NoNewline -Path "$root\llama-swap\config.yaml"
+Write-Host "OK    config.yaml -> $root\llama-swap\config.yaml (lanes pinned to $discrete)"
+
 Write-Host ""
 Write-Host "=== what landed ==="
 Get-ChildItem "$root\models" | Select-Object Name, @{n='MB';e={[math]::Round($_.Length/1MB,1)}} | Format-Table -AutoSize
