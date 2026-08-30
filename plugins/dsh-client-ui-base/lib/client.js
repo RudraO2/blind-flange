@@ -1185,6 +1185,22 @@ window.__ModuleLoader__.load({
 		let hostConnection = null;
 
 		/**
+		 * The host's command directory, once the client root has one.
+		 *
+		 * `remote.commands` is a service the client runtime declares and injects
+		 * (`@deepseek-ai/dsh-client-runtime`: `inject = ["connection", "typert",
+		 * "remote", "remote.commands"]`), and it is what
+		 * `@deepseek-ai/dsh-client-ui-commands` reads the `/` directory through.
+		 *
+		 * Held module-scoped and reached through its own nested `inject`, rather
+		 * than named alongside `connection` in one gate: Cordis only puts injected
+		 * services on the context, so asking for both together would mean a client
+		 * without `remote` loses the composer menu and the seal binding as well.
+		 * Absent, the menu opens with the document alone.
+		 */
+		let commandDirectory = null;
+
+		/**
 		 * The clock reading for one audit line, from the `time` the harness
 		 * stamped on the denial event. Local wall time with seconds, because an
 		 * evaluator reads it against the moment the request was refused. Renders
@@ -2359,14 +2375,38 @@ window.__ModuleLoader__.load({
 		const UPLOAD_ACCEPT = ".pdf,.png,.jpg,.jpeg,.tif,.tiff,.bmp,.webp";
 
 		/**
-		 * Build the upload control for `conversation.input.right`.
+		 * Build the composer menu for `conversation.input.left`.
+		 *
+		 * WHAT THIS REPLACES. The harness's own `+` opens a flat list of slash
+		 * commands, and the upload control sat away from it at the far end of the
+		 * row, beside the send button. Two places to start something, and the one
+		 * this product actually wants a judge to press was the one that looked
+		 * like a status pill. So `+` becomes the single entry point: the document
+		 * first, the commands tucked under one row that opens on hover.
+		 *
+		 * Built from the shipped `Menu`, including the submenu — its item shape
+		 * carries `submenu`, and it opens that submenu on `mouseenter` and on
+		 * `focus` with `aria-haspopup="menu"` already wired. Nothing here is a
+		 * hand-rolled menu.
+		 *
+		 * One detail worth knowing about that primitive: a `type: "label"` item
+		 * renders `text`, not `label`. An item passing only `label` renders as an
+		 * empty row, which is how the old residency chip's two headings were
+		 * invisible without anyone noticing.
+		 *
+		 * The harness's own `+` is hidden by the stylesheet in `apply`, and this
+		 * takes its place at the head of the row through flex `order`. That is a
+		 * real dependency on someone else's markup: if a harness upgrade renames
+		 * the class, the shipped `+` comes back and there are two of them — untidy
+		 * and immediately visible, which is the right failure for a demo surface
+		 * rather than a composer with no commands in it.
 		 * @param connection - the host transport (`ctx.connection`), carrying `rpc.call`.
 		 * @returns the component.
 		 */
-		function buildUploadButton(connection) {
-			const { useRef, useState } = require("react");
+		function buildComposerMenu(connection, readCommands) {
+			const { useEffect, useRef, useState } = require("react");
 			const { jsx, jsxs } = require("react/jsx-runtime");
-			const { Pill, StateDot } = require("@deepseek-ai/dsh-client-ui-primitives");
+			const { IconPlusOutline16, Menu, StateDot, Tooltip } = require("@deepseek-ai/dsh-client-ui-primitives");
 
 			/** Read a File as base64 without loading a second copy as a string first. */
 			function readAsBase64(file) {
@@ -2383,11 +2423,76 @@ window.__ModuleLoader__.load({
 				});
 			}
 
-			function UploadButton() {
+			/**
+			 * Put a slash command on the composer's line, ready to send.
+			 *
+			 * Deliberately types rather than executes. The harness owns command
+			 * dispatch — argument claiming, the image envelope, the lifecycle pair
+			 * on the session log — and a second path into that would be a second
+			 * thing to be wrong. Pressing Enter after this runs the command through
+			 * exactly the code that runs it when someone types the slash themselves.
+			 *
+			 * The composer is a controlled React input, so its value is set through
+			 * the prototype's own setter and announced with an `input` event; React
+			 * listens for that and updates its state. Assigning `.value` directly
+			 * would show the text and leave React believing the field was empty.
+			 */
+			function typeIntoComposer(text) {
+				const field = document.querySelector("textarea");
+				if (!field) return false;
+				try {
+					const setter = Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, "value")?.set;
+					if (setter) setter.call(field, text);
+					else field.value = text;
+					field.dispatchEvent(new Event("input", { bubbles: true }));
+					field.focus();
+					const end = field.value.length;
+					field.setSelectionRange?.(end, end);
+					return true;
+				} catch (error) {
+					console.warn(
+						`@blind-flange/dsh-client-ui-base: the command could not be typed into the composer — ${error instanceof Error ? error.message : String(error)}`,
+					);
+					return false;
+				}
+			}
+
+			function ComposerMenu(props) {
 				// idle -> reading -> ingesting -> ready | failed
 				const [phase, setPhase] = useState("idle");
 				const [detail, setDetail] = useState("");
+				const [open, setOpen] = useState(false);
+				const [commands, setCommands] = useState([]);
 				const inputRef = useRef(null);
+
+				// The commands this session actually has, read from the host's own
+				// directory rather than listed here. A hard-coded menu would drift
+				// from the harness the first time it shipped one more.
+				//
+				// Read through the `remote.commands` client service, which is what
+				// `@deepseek-ai/dsh-client-ui-commands` itself uses. An earlier
+				// version asked the HTTP gateway for `command.list` and got "not
+				// found": that namespace is not on `/api/`, and guessing a wire name
+				// is not the same as using the seam the harness declares.
+				useEffect(() => {
+					if (typeof readCommands !== "function" || !props.sessionId) return undefined;
+					let live = true;
+					Promise.resolve()
+						.then(() => readCommands(props.sessionId))
+						.then((rows) => {
+							if (!live || !Array.isArray(rows)) return;
+							setCommands(rows.filter((row) => typeof row?.name === "string"));
+						})
+						.catch((error) => {
+							// A menu that opens with the document alone is a working menu.
+							console.warn(
+								`@blind-flange/dsh-client-ui-base: the command directory could not be read — ${error instanceof Error ? error.message : String(error)}`,
+							);
+						});
+					return () => {
+						live = false;
+					};
+				}, [props.sessionId]);
 
 				async function onPicked(event) {
 					const file = event.target?.files?.[0];
@@ -2431,38 +2536,78 @@ window.__ModuleLoader__.load({
 				}
 
 				const busy = phase === "reading" || phase === "ingesting";
-				const LABEL = {
+				const UPLOAD_LABEL = {
 					idle: "Upload a document",
-					reading: "Reading…",
-					ingesting: "Running OCR…",
+					reading: "Reading\u2026",
+					ingesting: "Running OCR\u2026",
 					ready: "Document read",
 					failed: "Upload failed",
 				};
-				const TONE = { idle: "neutral", reading: "info", ingesting: "info", ready: "success", failed: "danger" };
-				const TITLE = {
-					idle: "Attach a scanned PDF or image. It is read on this machine by the local OCR service — nothing leaves the box.",
-					reading: `Reading ${detail} in the browser.`,
-					ingesting: `Running local OCR over ${detail}. Nothing leaves this machine.`,
-					ready: detail,
-					failed: detail,
+				const TONE = { idle: null, reading: "info", ingesting: "info", ready: "success", failed: "danger" };
+
+				const items = [
+					{
+						id: "bf-upload",
+						label: UPLOAD_LABEL[phase],
+						disabled: busy,
+						icon: TONE[phase] === null ? undefined : jsx(StateDot, { tone: TONE[phase] }),
+					},
+					{ id: "bf-sep", type: "separator" },
+					{
+						id: "bf-commands",
+						label: "Commands",
+						// `submenu` is what makes the row open on hover instead of
+						// selecting. With no commands in the directory yet the row is
+						// disabled rather than opening onto nothing.
+						disabled: commands.length === 0,
+						submenu: commands.map((row) => ({
+							id: `bf-cmd:${row.name}`,
+							label: typeof row.description === "string" && row.description !== ""
+								? `${row.name} \u2014 ${row.description}`
+								: row.name,
+						})),
+					},
+				];
+
+				const onSelect = (id) => {
+					if (id === "bf-upload") {
+						setOpen(false);
+						if (!busy) inputRef.current?.click();
+						return;
+					}
+					if (typeof id === "string" && id.startsWith("bf-cmd:")) {
+						setOpen(false);
+						typeIntoComposer(`/${id.slice("bf-cmd:".length)} `);
+					}
 				};
 
-				return jsxs(Pill, {
-					as: "button",
+				// Shaped like the harness's own `+`: the same 28px round button on the
+				// same `--dsw-specific-selector` surface, so the control that replaced
+				// it is not a different-looking control in the same place.
+				const anchor = jsxs("button", {
 					type: "button",
-					onClick: () => {
-						if (!busy) inputRef.current?.click();
+					"aria-label": "Attach a document, or run a command",
+					"aria-haspopup": "menu",
+					"aria-expanded": open ? "true" : "false",
+					onClick: () => setOpen((was) => !was),
+					style: {
+						display: "grid",
+						placeItems: "center",
+						width: "28px",
+						height: "28px",
+						flex: "none",
+						padding: 0,
+						border: "none",
+						borderRadius: "999px",
+						background: "var(--dsw-specific-selector)",
+						color: "var(--dsw-alias-label-primary)",
+						cursor: "pointer",
 					},
-					disabled: busy,
-					title: TITLE[phase],
-					"aria-label": LABEL[phase],
-					"aria-busy": busy ? "true" : undefined,
 					children: [
-						jsx(StateDot, { tone: TONE[phase] }),
-						LABEL[phase],
-						// Kept in the tree rather than created on demand, so the click
-						// handler above always has something to open. Hidden from
-						// assistive technology because the Pill is the control.
+						jsx(IconPlusOutline16, { size: 14 }),
+						// Kept in the tree rather than created on demand, so the handler
+						// above always has something to open. Hidden from assistive
+						// technology because the menu row is the control.
 						jsx("input", {
 							ref: inputRef,
 							type: "file",
@@ -2474,9 +2619,33 @@ window.__ModuleLoader__.load({
 						}),
 					],
 				});
+
+				return jsx("span", {
+					// The slot renders after the harness's own `+` and its mode
+					// controls. `order` puts this back at the head of the row, which is
+					// where the control it replaces was.
+					style: { order: -1, display: "inline-flex", alignItems: "center" },
+					title: phase === "idle" ? undefined : detail,
+					children: jsx(Menu, {
+						open,
+						onOpenChange: setOpen,
+						onClose: () => setOpen(false),
+						side: "top",
+						align: "start",
+						portal: true,
+						anchor: jsx(Tooltip, {
+							label: "Attach a document, or run a command",
+							side: "top",
+							delayMs: 500,
+							children: anchor,
+						}),
+						items,
+						onSelect,
+					}),
+				});
 			}
 
-			return UploadButton;
+			return ComposerMenu;
 		}
 
 		/**
@@ -3204,6 +3373,13 @@ window.__ModuleLoader__.load({
 					// cell size to its content and keeps the badge after it.
 					'[class*="_headline"] { display: flex !important; align-items: center; }',
 					'[class*="_headlineText"] { display: none !important; }',
+					// The harness's own `+`. Our composer menu stands in its place and
+					// carries what it carried plus the document, so leaving both would
+					// put two plus buttons side by side. Matched on the class fragment
+					// AND the ARIA role, because `_add` alone matches other things and
+					// the accessible name is a locale string. See `buildComposerMenu`
+					// for what happens if a harness upgrade renames the class.
+					'button[class*="_add"][aria-haspopup="listbox"] { display: none !important; }',
 				].join("\n");
 				document.head.appendChild(style);
 				disposeHeadlineStyle = () => {
@@ -3283,17 +3459,18 @@ window.__ModuleLoader__.load({
 				const dispose = ctx.slots.register({ name: "shell.overlay", id: "bf-seal-band" }, SealBand);
 				return () => { dispose(); };
 			});
-			// The upload control takes `conversation.input.right` (list, session) —
-			// the composer tool row, before the send button. Deferred behind
-			// `ctx.inject(["connection"])` rather than named in this plugin's own
-			// `inject` list: a hard gate on a service the headless client has no
-			// reason to provide would take every other seat down with it, and the
-			// monitor is worth more than any control beside it.
+			// The composer menu takes `conversation.input.left` (list, session) and
+			// stands in for the harness's own `+`, which the stylesheet above hides:
+			// the document first, then the commands under one row that opens on
+			// hover. Deferred behind `ctx.inject(["connection"])` rather than named
+			// in this plugin's own `inject` list — a hard gate on a service the
+			// headless client has no reason to provide would take every other seat
+			// down with it, and the monitor is worth more than any control beside it.
 			//
-			// The canary shared this seat until 30 August 2026 (ADR-0007). The
-			// composer row is one control lighter for it, which is the right
-			// direction: the proof is now the request the operator types.
-			let disposeUpload;
+			// Two controls have now left the right-hand end of the composer row: the
+			// canary on 30 August 2026 (ADR-0007), and the upload control into this
+			// menu. What is left there is the routing chip and the send button.
+			let disposeComposerMenu;
 			ctx.inject(["connection"], (connectedCtx) => {
 				// Point the seal store at the host transport and read the seal once.
 				// Everything that displays the seal — the band, the foot row, the mark's
@@ -3307,16 +3484,33 @@ window.__ModuleLoader__.load({
 				// ledger its own session log produced and simply has no residency to show.
 				hostConnection = connectedCtx.connection;
 
-				const UploadButton = buildUploadButton(connectedCtx.connection);
-				disposeUpload = connectedCtx.slots.inject("conversation.input.right", () => {
+				// `remote.commands` is a service the client runtime declares and
+				// injects; read lazily rather than gated on, so a context without it
+				// loses the command rows and keeps the document.
+				// Both names, because Cordis only puts injected services on the
+				// context and the runtime registers `remote` and `remote.commands`
+				// separately. The context is held rather than the service read out
+				// of it once, so a directory that arrives late is still found.
+				connectedCtx.inject(["remote", "remote.commands"], (remoteCtx) => {
+					commandDirectory = remoteCtx;
+				});
+				// `list` answers `{ ok, value }` like the rest of the wire, not a bare
+				// array — measured against the running harness, 30 August 2026.
+				const readCommands = async (sessionId) => {
+					const answer = await commandDirectory?.remote?.commands?.list?.(sessionId);
+					return answer?.ok === true && Array.isArray(answer.value) ? answer.value : [];
+				};
+				const ComposerMenu = buildComposerMenu(connectedCtx.connection, readCommands);
+				disposeComposerMenu = connectedCtx.slots.inject("conversation.input.left", () => {
 					const dispose = connectedCtx.slots.register(
 						{
-							name: "conversation.input.right",
-							id: "bf-upload",
-							label: "Upload",
+							name: "conversation.input.left",
+							id: "bf-composer-menu",
+							label: "Attach or run",
 							order: -10,
+							inject: (sessionId) => ({ sessionId }),
 						},
-						UploadButton,
+						ComposerMenu,
 					);
 					return () => { dispose(); };
 				});
@@ -3366,7 +3560,8 @@ window.__ModuleLoader__.load({
 				disposeDrawer?.();
 				disposeDenialNotice?.();
 				disposeSealBand?.();
-				disposeUpload?.();
+				disposeComposerMenu?.();
+				commandDirectory = null;
 				disposeInset();
 				hostConnection = null;
 				disposeRoutingChip?.();

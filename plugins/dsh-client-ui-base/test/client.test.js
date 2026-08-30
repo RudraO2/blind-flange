@@ -372,11 +372,13 @@ test("occupies both places the DeepSeek whale used to render, and the hero's tas
 	assert.deepEqual(names, [
 		"conversation.hero.agentPreset",
 		"conversation.hero.brand.mark",
+		// The composer menu, at the head of the tool row, standing in for the
+		// harness's own `+`: the document first, the commands under one row that
+		// opens on hover. Nothing of ours is left at the send-button end of the
+		// row — the canary went on 30 August 2026 (ADR-0007) and the upload
+		// control moved into this menu.
+		"conversation.input.left",
 		"conversation.input.model",
-		// One seat in the composer tool row now: the upload control. The canary
-		// shared it until 30 August 2026 (ADR-0007) — the proof is the request the
-		// operator types, so the row is one control lighter.
-		"conversation.input.right",
 		// One chip left in the session header: the provider disclosure, which
 		// discloses a per-turn fact and belongs to the conversation. The egress
 		// monitor moved to the sidebar foot (root-scoped, so it survives a new
@@ -1446,68 +1448,140 @@ test("a call that got out stays on the record after the seal is closed again", a
 });
 
 /* ---------------------------------------------------------------------------
- * The upload control (30 August 2026)
+ * The composer menu (30 August 2026)
  *
- * Story 8.2 established that the `@` mention picker already exists and that
- * nothing needed installing for it. This does not replace it — it adds the
- * moment a judge watches a file arrive, which naming a path already on disk does
- * not give you.
+ * It stands in for the harness's own `+`. That button opened a flat list of
+ * slash commands while the upload control sat away from it at the far end of
+ * the row, beside send — two places to start something, and the one this
+ * product wants pressed looked like a status pill. Now: the document first,
+ * the commands under one row that opens on hover.
  * ------------------------------------------------------------------------- */
 
-/** The upload seat, by id, so a reordering of the row does not break these. */
-function findUpload(registered) {
-	return registered.find((call) => call.options.name === "conversation.input.right" && call.options.id === "bf-upload");
+/** The composer menu seat, by id, so a reordering of the row does not break these. */
+function findComposerMenu(registered) {
+	return registered.find((call) => call.options.name === "conversation.input.left" && call.options.id === "bf-composer-menu");
 }
 
-test("the upload control takes the composer tool row", () => {
+/** The wrapper and the menu element inside it, rendered for a session. */
+function composerMenu(registered) {
+	const wrapper = findComposerMenu(registered).component({ sessionId: "s-1" });
+	return { wrapper, menu: wrapper.props.children };
+}
+
+test("the composer menu takes the head of the tool row, where the shipped + was", () => {
 	const { exports } = loadClientHalf((specifier) => healthyHostModules[specifier]);
 	const { ctx, registered } = stubSlots();
 	exports.apply(ctx);
 
-	const upload = findUpload(registered);
-	assert.ok(upload, "no bf-upload registration");
-	assert.equal(upload.options.label, "Upload");
-	// It sorts to the head of the row. The canary sat after it until 30 August
-	// 2026 (ADR-0007); the row is one control lighter now, and the ordering is
-	// kept so anything added later lands after the document, not before it.
-	assert.ok(upload.options.order < 0, "the upload control should sort to the head of the row");
+	const seat = findComposerMenu(registered);
+	assert.ok(seat, "no bf-composer-menu registration");
+	assert.equal(seat.options.name, "conversation.input.left");
+	assert.equal(typeof seat.options.inject, "function", "it needs the session to read that session's commands");
 	assert.equal(
-		registered.filter((call) => call.options.name === "conversation.input.right").length,
-		1,
-		"the composer row should carry the upload control alone",
+		registered.some((call) => call.options.name === "conversation.input.right"),
+		false,
+		"nothing of ours should be left at the send-button end of the row",
 	);
 });
 
-test("it is a shipped Pill like the controls beside it, and says which stage it is in", () => {
+test("it opens the shipped Menu with the document first and the commands under one row", () => {
 	const { exports } = loadClientHalf((specifier) => healthyHostModules[specifier]);
 	const { ctx, registered } = stubSlots();
 	exports.apply(ctx);
 
-	const element = findUpload(registered).component({});
-	assert.equal(element.type, PRIMITIVES.Pill, "the upload control must be a shipped primitive, not a hand-rolled one");
-	const flat = JSON.stringify(element.props.children);
-	assert.match(flat, /Upload a document/);
-	// The file input lives in the tree rather than being created on demand, so the
-	// Pill's click handler always has something to open, and it is hidden from
-	// assistive technology because the Pill is the control.
-	assert.match(flat, /"type":"file"/);
-	assert.match(flat, /"aria-hidden":"true"/);
-	// Every accepted extension is offered, so the picker does not let a user
-	// choose something the OCR path will refuse a second later.
-	assert.match(flat, /\.pdf/);
-	assert.match(flat, /\.png/);
-	assert.match(element.props.title, /nothing leaves the box/i);
+	const { wrapper, menu } = composerMenu(registered);
+	// `order` puts it back at the head of the row: the slot renders after the
+	// harness's own `+` and its mode controls.
+	assert.equal(wrapper.props.style.order, -1);
+	assert.equal(menu.type, PRIMITIVES.Menu, "the menu must be the shipped primitive, not a hand-rolled one");
+
+	// `join` rather than deepEqual: the client half runs in a `vm` context, so an
+	// array it built has a different Array.prototype and deepStrictEqual rejects
+	// it as "not reference-equal" however identical the contents are.
+	assert.equal(menu.props.items.map((item) => item.id).join(","), "bf-upload,bf-sep,bf-commands");
+	assert.equal(menu.props.items[0].label, "Upload a document");
+	assert.equal(menu.props.items[1].type, "separator");
+	assert.equal(menu.props.items[2].label, "Commands");
 });
 
-test("it sets no colour of its own either — the state dot carries it through theme tokens", () => {
-	// Same rule as the canary, and the same reason: a hand-rolled colour is what
-	// made the 27 Aug egress monitor read as pasted on. Verified in the source
-	// because a component test cannot see what a token resolves to.
+test("the commands row carries a submenu, which is what makes it open on hover", () => {
+	// The shipped Menu opens a submenu on `mouseenter` and on `focus`, with
+	// `aria-haspopup="menu"` already wired, and expands rather than selects an
+	// item that carries one. Nothing here hand-rolls that behaviour.
+	const commands = [
+		{ name: "export", description: "Download this Session log as a ZIP archive" },
+		{ name: "plan", description: "Enter or leave plan mode" },
+	];
+	// The menu holds four pieces of state and the command list is the last of
+	// them, so seat by the shape of the initial value rather than by call order.
+	const { exports } = loadClientHalf((specifier) =>
+		specifier === "react"
+			? {
+					...healthyHostModules.react,
+					useState: (initial) => [Array.isArray(initial) && initial.length === 0 ? commands : initial, () => {}],
+				}
+			: healthyHostModules[specifier],
+	);
+	const { ctx, registered } = stubSlots();
+	exports.apply(ctx);
+
+	const row = composerMenu(registered).menu.props.items.find((item) => item.id === "bf-commands");
+	assert.equal(row.disabled, false, "with commands to show, the row must open");
+	assert.equal(row.submenu.map((item) => item.id).join(","), "bf-cmd:export,bf-cmd:plan");
+	assert.match(row.submenu[0].label, /export . Download this Session log/);
+});
+
+test("with no commands in the directory the row is disabled rather than opening onto nothing", () => {
+	const { exports } = loadClientHalf((specifier) => healthyHostModules[specifier]);
+	const { ctx, registered } = stubSlots();
+	exports.apply(ctx);
+	const row = composerMenu(registered).menu.props.items.find((item) => item.id === "bf-commands");
+	assert.equal(row.disabled, true);
+});
+
+test("choosing the document opens the file picker rather than sending anything", () => {
+	const { exports } = loadClientHalf((specifier) => healthyHostModules[specifier]);
+	const { ctx, registered } = stubSlots();
+	exports.apply(ctx);
+	const { menu } = composerMenu(registered);
+	assert.equal(typeof menu.props.onSelect, "function");
+	// The file input lives in the tree rather than being created on demand, so
+	// the handler always has something to open, and it is hidden from assistive
+	// technology because the menu row is the control.
+	const flat = JSON.stringify(menu.props.anchor);
+	assert.match(flat, /"type":"file"/);
+	assert.match(flat, /"aria-hidden":"true"/);
+	assert.match(flat, /\.pdf/, "every accepted extension is offered");
+});
+
+test("picking a command types it on the composer's line rather than executing it", () => {
+	// The harness owns command dispatch — argument claiming, the image envelope,
+	// the lifecycle pair on the session log. A second path into that would be a
+	// second thing to be wrong, so this types the slash and lets Enter run the
+	// same code that runs it when somebody types it themselves.
 	const source = readFileSync(join(packageDir, "lib", "client.js"), "utf8");
-	const section = source.slice(source.indexOf("function buildUploadButton"), source.indexOf("const CANARY_CHANNEL"));
-	assert.ok(section.length > 500, "the upload section was not found — this test is asserting nothing");
-	assert.doesNotMatch(section, /#[0-9a-fA-F]{3,8}\b/, "the upload control must not hand-roll a hex colour");
-	assert.doesNotMatch(section, /rgba?\(/, "the upload control must not hand-roll a colour");
-	// One exception, and it is layout rather than colour: the file input is hidden.
-	assert.match(section, /display: "none"/);
+	assert.match(source, /function typeIntoComposer/);
+	// A controlled React input needs the prototype setter and an input event;
+	// assigning `.value` shows the text and leaves React believing it is empty.
+	assert.match(source, /HTMLTextAreaElement\.prototype, "value"/);
+	assert.match(source, /new Event\("input", \{ bubbles: true \}\)/);
+	assert.doesNotMatch(source, /command\.execute/, "nothing here may dispatch a command itself");
+});
+
+test("it stands in for the harness's + rather than sitting beside it", () => {
+	const source = readFileSync(join(packageDir, "lib", "client.js"), "utf8");
+	// Matched on the class fragment AND the ARIA role: `_add` alone matches
+	// other things, and the accessible name is a locale string.
+	assert.match(source, /button\[class\*="_add"\]\[aria-haspopup="listbox"\] \{ display: none !important; \}/);
+});
+
+test("the composer menu sets no colour of its own — the tokens carry it in both themes", () => {
+	const source = readFileSync(join(packageDir, "lib", "client.js"), "utf8");
+	const section = source.slice(source.indexOf("function buildComposerMenu"), source.indexOf("function holdTabTitle"));
+	assert.ok(section.length > 2000, "the composer menu section was not found — this test is asserting nothing");
+	assert.doesNotMatch(section, /#[0-9a-fA-F]{3,8}\b/, "the composer menu must not hand-roll a hex colour");
+	assert.doesNotMatch(section, /rgba?\(/, "the composer menu must not hand-roll a colour");
+	// It borrows the shipped `+`'s own surface token, so the control that
+	// replaced it is not a different-looking control in the same place.
+	assert.match(section, /var\(--dsw-specific-selector\)/);
 });
