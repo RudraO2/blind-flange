@@ -90,4 +90,4 @@ waterfall is the only thing there is.
 - [x] **3.2** `docs/adr/0007-the-request-is-the-canary.md`.
 - [x] **3.3** `HANDOFF.md`, `README.md`, `docs/demo-runbook.md`.
 - [x] **3.4** `epics.md` / `sprint-status.yaml` — Story 2.3 superseded, with the reason.
-- [ ] **3.5** `npm test` green; commit and push.
+- [x] **3.5** `npm test` green; commit and push.
