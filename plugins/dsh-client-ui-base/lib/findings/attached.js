@@ -112,13 +112,30 @@ export function attachmentNote() {
 	if (attached === null) return null;
 	const count = Array.isArray(attached.findings) ? attached.findings.length : null;
 	const read = count === null ? "It has not been read yet" : `Its text has already been extracted - ${count} OCR lines`;
-	// An image is attached to the message itself, so the model is looking at it
-	// rather than reading a description of it. Saying so stops a vision model
-	// claiming it cannot see files while the picture is in its own context.
+
+	// An image and a report want opposite instructions, and the first version of
+	// this note gave both at once - "you can see it, describe what is in it" and
+	// "call the findings tool and cite the page and box of every line". The
+	// second is more specific, so it won: asked what was in a photograph, the
+	// model called the OCR tool and listed thirteen numbered lines of extracted
+	// text. Measured 30 August 2026. A note that says two things says the
+	// narrower one.
 	const sees = attachedImages() !== null;
+	if (sees) {
+		return (
+			`An image is attached to this session: "${attached.filename}". You are looking at it right now - ` +
+			"it is attached to this message, not described to it. Answer from what you can see in the picture, " +
+			"in your own words. Do not list extracted text lines. " +
+			`${read}, and \`bf_report_findings\` will return it if you need the exact wording of something too small ` +
+			"to read, but reach for it only then."
+		);
+	}
+
+	// A report is the other case. Its value is in tables of readings and tag
+	// numbers, the model is being handed OCR text rather than the page, and every
+	// claim has to carry the page and box it came from (Story 4.5).
 	return (
 		`A document is attached to this session: "${attached.filename}". ${read}. ` +
-		(sees ? "You can see it: the image is attached to this message, so describe what is actually in it. " : "") +
 		"Call `bf_report_findings` for its extracted text before answering any question about its contents, " +
 		"and cite the page and bounding box of every line a claim comes from. " +
 		"Do not describe the document from memory or from anything else in this conversation."

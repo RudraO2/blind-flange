@@ -104,7 +104,13 @@ describe("an uploaded image reaches the vision model as an image", () => {
 		assert.equal(images.length, 1);
 		assert.equal(images[0].mediaType, "image/png");
 		assert.ok(images[0].base64.length > 0);
-		assert.match(toChatMessages(sessionWithInjections()).find((m) => m.role === "system").content, /You can see it/);
+		const note = toChatMessages(sessionWithInjections()).find((m) => m.role === "system").content;
+		assert.match(note, /You are looking at it right now/);
+		// The first version of this note also told the model to call the findings
+		// tool and cite a box per line. Asked what was in a photograph it did
+		// exactly that and listed thirteen OCR lines instead of describing it.
+		assert.match(note, /Do not list extracted text lines/);
+		assert.doesNotMatch(note, /cite the page and bounding box/);
 		clearDocument();
 	});
 
@@ -115,7 +121,9 @@ describe("an uploaded image reaches the vision model as an image", () => {
 		// can be checked; a model cannot.
 		attachDocument("report.pdf", new Uint8Array([37, 80, 68, 70]));
 		assert.equal(attachedImages(), null);
-		assert.doesNotMatch(toChatMessages(sessionWithInjections()).find((m) => m.role === "system").content, /You can see it/);
+		const note = toChatMessages(sessionWithInjections()).find((m) => m.role === "system").content;
+		assert.doesNotMatch(note, /You are looking at it right now/);
+		assert.match(note, /cite the page and bounding box/, "a report still has to carry its provenance");
 		clearDocument();
 	});
 
