@@ -842,15 +842,33 @@ test("the seal row takes the sidebar foot, which is root-scoped and so survives 
 	);
 });
 
-test("the seal row reads a counted zero and states the seal, not the count", async () => {
+test("the seal row names the instrument, states the seal, and counts the zero", async () => {
 	const { exports } = loadClientHalf((specifier) => healthyHostModules[specifier]);
 	const { ctx, registered } = stubSlots({ sessions: stubEgressSessions({ count: 0, entries: [], latest: null }) });
 	exports.apply(ctx);
 	await settled();
-	const flat = JSON.stringify(findSealRow(registered).component({ wide: true }));
+	const rendered = findSealRow(registered).component({ wide: true });
+	const flat = JSON.stringify(rendered);
+	// "Sealed" alone read as a property of the sidebar rather than as the name of
+	// a surface — sealed what? The title says which instrument this is.
+	assert.match(flat, /"children":"Egress monitor"/);
 	assert.match(flat, /Sealed/);
 	assert.match(flat, /"state":"done"/);
-	assert.match(flat, /"children":"0"/, "the zero must be on screen — it is the counted one (FR15)");
+	assert.match(flat, /0 denied/, "the zero must be on screen — it is the counted one (FR15)");
+
+	// And it has to look pressable at a glance: its own surface, its own border,
+	// and the chevron a label would never carry.
+	const button = findNode(rendered, (props) => typeof props.onClick === "function");
+	assert.equal(button.props.style.cursor, "pointer");
+	assert.match(button.props.style.background, /var\(--dsw-/);
+	assert.match(button.props.style.borderRadius, /px/);
+	assert.match(flat, /›/, "no chevron — nothing says this opens something");
+
+	// A hairline above the whole foot group, so the conversations end where the
+	// machine's own controls begin.
+	const separator = findNode(rendered, (props) => props.style && props.style.borderTop !== undefined);
+	assert.ok(separator, "nothing separates the foot group from the session list");
+	assert.match(separator.props.style.borderTop, /var\(--dsw-/);
 });
 
 test("a denial does not leave the row permanently red", async () => {
@@ -867,7 +885,7 @@ test("a denial does not leave the row permanently red", async () => {
 	const rendered = findSealRow(registered).component({ wide: true });
 	const flat = JSON.stringify(rendered);
 	assert.match(flat, /"state":"done"/, "a denial must not change what the dot says about the seal");
-	assert.match(flat, /"children":"3"/);
+	assert.match(flat, /3 denied/);
 	assert.doesNotMatch(flat, /"state":"error"/);
 });
 
@@ -878,7 +896,8 @@ test("an open seal is the one state the row does colour, and it says so in words
 	await settled();
 	const rendered = findSealRow(registered).component({ wide: true });
 	const flat = JSON.stringify(rendered);
-	assert.match(flat, /Seal OPEN/);
+	assert.match(flat, /"children":"Egress monitor"/, "the title stays; only the reading changes");
+	assert.match(flat, /OPEN/);
 	assert.match(flat, /"state":"warning"/);
 	assert.match(flat, /var\(--dsw-alias-state-warn/);
 });
@@ -893,7 +912,8 @@ test("the collapsed rail shows the dot alone, with the tooltip the sidebar gives
 	assert.equal(railed.props.disabled, false, "the tooltip is what names the control when the label is gone");
 	const flat = JSON.stringify(railed.props.children);
 	assert.match(flat, /"state":"done"/);
-	assert.doesNotMatch(flat, /"children":"2"/, "there is no shelf for a number in a 56px rail");
+	assert.doesNotMatch(flat, /2 denied/, "there is no shelf for a number in a 56px rail");
+	assert.doesNotMatch(flat, /"children":"Egress monitor"/, "nor for the title");
 });
 
 test("the seal row sets no hand-rolled colour of its own", () => {
@@ -922,7 +942,7 @@ test("the drawer is hidden until the seal row opens it, then shows the counted s
 
 	const opened = openDrawer(registered);
 	assert.equal(opened.type, "aside");
-	assert.equal(opened.props["aria-label"], "Sovereignty");
+	assert.equal(opened.props["aria-label"], "Egress monitor");
 	const flat = JSON.stringify(opened);
 	assert.match(flat, /denied this session/);
 	assert.match(flat, /web_search/);
@@ -1307,8 +1327,8 @@ test("the seal row says OPEN in words rather than showing a count that reads as 
 	await settled();
 	const row = findSealRow(registered).component({ wide: true });
 	const flat = JSON.stringify(row);
-	assert.match(flat, /Seal OPEN/);
-	assert.doesNotMatch(flat, /"children":"Sealed"/);
+	assert.match(flat, /OPEN/);
+	assert.doesNotMatch(flat, /"Sealed"/);
 	const button = findNode(row, (props) => typeof props.onClick === "function");
 	assert.match(button.props.title, /seal is OPEN/);
 });

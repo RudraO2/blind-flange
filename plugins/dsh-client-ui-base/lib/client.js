@@ -1335,6 +1335,7 @@ window.__ModuleLoader__.load({
 			 */
 			function SealFootRow(props) {
 				const wide = props?.wide !== false;
+				const [hot, setHot] = useState(false);
 				const sealState = useSyncExternalStore(seal.subscribe, seal.get);
 				const list = ctx.sessions?.list ?? null;
 				const current = useSyncExternalStore(
@@ -1350,16 +1351,26 @@ window.__ModuleLoader__.load({
 				const fresh = useRecentIncrease(count);
 				const open = sealState.known && !sealState.sealed;
 
-				const label = !sealState.known ? "Checking the seal" : open ? "Seal OPEN" : "Sealed";
+				// Line two: the state, then what has been counted under it. "Sealed"
+				// alone was the whole label until 30 August 2026 and read as a
+				// property of the sidebar rather than as the name of a surface —
+				// sealed *what*? The title says which instrument this is; the state
+				// is its reading.
+				const state = !sealState.known ? "Checking…" : open ? "OPEN" : "Sealed";
+				const counted = count === null ? null : `${count} denied`;
 				const title = open
-					? "The seal is OPEN — Faraday is not denying outbound calls. Open the Sovereignty drawer for the audit detail and the control that closes it."
+					? "Egress monitor: the seal is OPEN — Faraday is not denying outbound calls. Open it for the record and the control that closes the seal."
 					: count === null
-						? "Sealed. Outbound calls are denied before they run."
-						: `Sealed. ${count} outbound attempt${count === 1 ? "" : "s"} denied and recorded this session. Open the Sovereignty drawer for the audit detail.`;
+						? "Egress monitor: sealed. Outbound calls are denied before they run. Open it for the record."
+						: `Egress monitor: sealed, ${count} outbound attempt${count === 1 ? "" : "s"} denied and recorded this session. Open it for the record.`;
 
 				const row = jsxs("button", {
 					type: "button",
 					onClick: () => drawerOpen.toggle(),
+					onMouseEnter: () => setHot(true),
+					onMouseLeave: () => setHot(false),
+					onFocus: () => setHot(true),
+					onBlur: () => setHot(false),
 					"aria-haspopup": "dialog",
 					"aria-label": title,
 					title,
@@ -1369,42 +1380,97 @@ window.__ModuleLoader__.load({
 						gap: "10px",
 						width: "100%",
 						justifyContent: wide ? "flex-start" : "center",
-						padding: wide ? "8px 10px" : "8px 0",
-						border: "1px solid transparent",
+						padding: wide ? "7px 10px" : "8px 0",
+						// A hairline and a surface of its own. Two of the three things
+						// that were wrong with the old row were the same thing: it looked
+						// like a label, so nobody would think to press it. A control that
+						// opens something is drawn as a control.
+						border: "1px solid",
+						borderColor: open
+							? "var(--dsw-alias-state-warn-primary)"
+							: hot
+								? "var(--dsw-alias-border-l3)"
+								: "var(--dsw-alias-border-l1)",
 						borderRadius: "8px",
-						background: open ? "var(--dsw-alias-state-warn-tertiary)" : "transparent",
-						borderColor: open ? "var(--dsw-alias-state-warn-primary)" : "transparent",
-						color: "var(--dsw-alias-label-secondary)",
+						background: open
+							? "var(--dsw-alias-state-warn-tertiary)"
+							: hot
+								? "var(--dsw-alias-interactive-bg-hover)"
+								: "var(--dsw-alias-bg-layer-2)",
+						color: "var(--dsw-alias-label-primary)",
 						font: "inherit",
-						fontSize: "13px",
 						textAlign: "left",
 						cursor: "pointer",
+						transition: "background 120ms ease, border-color 120ms ease",
 					},
 					children: [
 						// Two readings only, deliberately: the seal is holding, or it is
 						// not. What has been denied is a number, not a colour.
 						jsx(StateDot, { state: open ? "warning" : "done", size: 8 }),
 						wide
-							? jsx("span", {
-									style: { flex: "1 1 auto", color: open ? "var(--dsw-alias-state-warn-label)" : undefined },
-									children: label,
+							? jsxs("span", {
+									style: { flex: "1 1 auto", minWidth: 0, display: "flex", flexDirection: "column", gap: "1px" },
+									children: [
+										jsx("span", { style: { fontSize: "13px", lineHeight: 1.25 }, children: "Egress monitor" }),
+										jsxs("span", {
+											style: {
+												fontSize: "11.5px",
+												lineHeight: 1.25,
+												color: open ? "var(--dsw-alias-state-warn-label)" : "var(--dsw-alias-label-tertiary)",
+											},
+											children: [
+												state,
+												counted === null
+													? null
+													: jsxs("span", {
+															style: {
+																fontVariantNumeric: "tabular-nums",
+																color: fresh ? "var(--dsw-alias-state-error-primary)" : undefined,
+																fontWeight: fresh ? 600 : 400,
+																transition: "color 200ms ease",
+															},
+															children: [" \u00b7 ", counted],
+														}),
+											],
+										}),
+									],
 								})
 							: null,
-						wide && count !== null
+						// The one-look answer to "can I press this?". A label has no
+						// chevron; a thing that opens a panel does.
+						wide
 							? jsx("span", {
-									style: {
-										fontVariantNumeric: "tabular-nums",
-										color: fresh ? "var(--dsw-alias-state-error-primary)" : "var(--dsw-alias-label-tertiary)",
-										fontWeight: fresh ? 600 : 400,
-										transition: "color 200ms ease",
-									},
-									children: String(count),
+									"aria-hidden": "true",
+									style: { flex: "0 0 auto", color: "var(--dsw-alias-label-tertiary)", fontSize: "11px" },
+									children: "\u203a",
 								})
 							: null,
 					],
 				});
 
-				return jsx(Tooltip, { label: title, delayMs: 500, disabled: wide, children: row });
+				// A hairline above the whole foot group, so the session list ends and
+				// the machine's own controls begin. The sidebar renders footer actions
+				// directly above Settings, so a border here separates both of them from
+				// the conversations rather than separating them from each other.
+				const separated = jsx("div", {
+					style: {
+						// `sidebar.footer.action` is a flex container, so this wrapper is
+						// a flex child and sizes to its content unless it is told not to.
+						// Without this the row hugged the left of the column at about
+						// half its width and read as a stray chip rather than as the
+						// foot of the sidebar.
+						flex: "1 1 auto",
+						width: "100%",
+						minWidth: 0,
+						boxSizing: "border-box",
+						borderTop: "1px solid var(--dsw-alias-border-l1)",
+						paddingTop: "8px",
+						marginTop: "4px",
+					},
+					children: row,
+				});
+
+				return jsx(Tooltip, { label: title, delayMs: 500, disabled: wide, children: separated });
 			}
 
 			return SealFootRow;
@@ -1761,7 +1827,7 @@ window.__ModuleLoader__.load({
 				return jsx("div", {
 					role: "separator",
 					"aria-orientation": "vertical",
-					"aria-label": "Resize the Sovereignty drawer",
+					"aria-label": "Resize the egress monitor",
 					"aria-valuenow": width,
 					"aria-valuemin": DRAWER_MIN_WIDTH,
 					"aria-valuemax": DRAWER_MAX_WIDTH,
@@ -1907,15 +1973,23 @@ window.__ModuleLoader__.load({
 				const residency = Array.isArray(trace?.residency) ? trace.residency : [];
 				const shown = (row) => row.name || row.model;
 				const residentReady = residency.filter((row) => row.state === "ready");
+				// A model coming or going is the most interesting thing this section
+				// ever has to say — it is the card being too small for the fleet,
+				// happening. Summarising only what is `ready` reported a swap in
+				// progress as "nothing loaded", which is both wrong and the opposite
+				// of what an evaluator is watching for.
+				const moving = residency.filter((row) => row.state === "starting" || row.state === "stopping");
 				const residencySummary =
 					trace === null || trace.runtimeReachable === false
 						? "not answering"
-						: residentReady.length > 0
-							? residentReady.map(shown).join(", ")
-							: "nothing loaded";
+						: moving.length > 0
+							? moving.map((row) => `${shown(row)} ${row.state}`).join(", ")
+							: residentReady.length > 0
+								? residentReady.map(shown).join(", ")
+								: "nothing loaded";
 
 				return jsxs("aside", {
-					"aria-label": "Sovereignty",
+					"aria-label": "Egress monitor",
 					style: {
 						// Fixed to the viewport, so it sits in the strip `applyInset`
 						// reclaims rather than inside the frame it just narrowed.
@@ -1944,12 +2018,12 @@ window.__ModuleLoader__.load({
 								borderBottom: "1px solid var(--dsw-alias-border-l1)",
 							},
 							children: [
-								jsx("strong", { style: { flex: "1 1 auto", fontSize: "14px" }, children: "Sovereignty" }),
+								jsx("strong", { style: { flex: "1 1 auto", fontSize: "14px" }, children: "Egress monitor" }),
 								jsx(Button, {
 									variant: "ghost",
 									size: "sm",
 									onClick: () => drawerOpen.set(false),
-									"aria-label": "Close the Sovereignty drawer",
+									"aria-label": "Close the egress monitor",
 									children: "Close",
 								}),
 							],
@@ -1985,7 +2059,7 @@ window.__ModuleLoader__.load({
 								jsxs("div", {
 									style: { padding: "16px 18px", borderTop: "1px solid var(--dsw-alias-border-l1)" },
 									children: [
-										jsx("div", { style: { ...SECTION_LABEL, marginBottom: "12px" }, children: "Egress monitor" }),
+										jsx("div", { style: { ...SECTION_LABEL, marginBottom: "12px" }, children: "This session" }),
 										!ready
 											? jsx("span", { style: SECONDARY, children: "Waiting for a session." })
 											: jsxs("div", {
