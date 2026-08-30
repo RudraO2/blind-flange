@@ -1127,34 +1127,47 @@ function sealControl(registered) {
 	return seat.type(seat.props);
 }
 
-test("a press and release does not open the seal — the gesture has to be completed", async () => {
-	// The whole point of the hold. If a tap opened it, the dangerous act and the
-	// safe act would cost the same gesture and the seal would be a switch.
+/** The switch itself: the `role="switch"` button inside the seal control. */
+function sealSwitch(registered) {
+	const control = sealControl(registered);
+	const row = control.props.children[0];
+	const found = row.props.children.find((child) => child && child.props && child.props.role === "switch");
+	assert.ok(found, "the seal control has no switch in it");
+	return found;
+}
+
+test("one press of the switch opens the seal", async () => {
+	// It was a press-and-hold. The hold had no pointer capture, so a small drag
+	// cancelled it silently and the control was indistinguishable from a broken
+	// button. What makes opening safe is that the seal is closed at boot, never
+	// persisted open, recorded when it changes, and banded across the window
+	// while it lasts - none of which depends on the gesture.
 	const { exports } = loadClientHalf((specifier) => healthyHostModules[specifier]);
 	const { ctx, registered, canaryCalls } = stubSlots({ sessions: stubEgressSessions({ count: 0, latest: null }) });
 	exports.apply(ctx);
 	await settled();
-	const before = canaryCalls.filter((call) => call.channel === "/bf-seal").length;
 
-	const wrapper = sealControl(registered).props.children[0];
-	wrapper.props.onPointerDown();
-	wrapper.props.onPointerUp();
-	await new Promise((resolve) => setTimeout(resolve, 120));
+	await sealSwitch(registered).props.onClick();
+	await settled();
 
-	const after = canaryCalls.filter((call) => call.channel === "/bf-seal").length;
-	assert.equal(after, before, "releasing early must abandon the hold, not open the seal");
+	const posted = canaryCalls.filter((call) => call.channel === "/bf-seal");
+	assert.equal(posted[posted.length - 1].endpoint, "open");
 });
 
-test("holding for the full duration is what opens it", async () => {
+test("the switch reports its state to a screen reader, and Space throws it", async () => {
 	const { exports } = loadClientHalf((specifier) => healthyHostModules[specifier]);
 	const { ctx, registered, canaryCalls } = stubSlots({ sessions: stubEgressSessions({ count: 0, latest: null }) });
 	exports.apply(ctx);
 	await settled();
 
-	const wrapper = sealControl(registered).props.children[0];
-	wrapper.props.onPointerDown();
-	await new Promise((resolve) => setTimeout(resolve, 1100));
+	const control = sealSwitch(registered);
+	assert.equal(control.props["aria-checked"], "false", "a closed seal is an unchecked switch");
+	assert.equal(control.props["aria-label"], "Network seal");
 
+	let prevented = false;
+	await control.props.onKeyDown({ key: " ", preventDefault: () => { prevented = true; } });
+	await settled();
+	assert.equal(prevented, true, "Space must not also scroll the panel");
 	const posted = canaryCalls.filter((call) => call.channel === "/bf-seal");
 	assert.equal(posted[posted.length - 1].endpoint, "open");
 });
@@ -1165,7 +1178,7 @@ test("the seal control says what opening it does, at the moment of deciding", as
 	exports.apply(ctx);
 	await settled();
 	const flat = JSON.stringify(sealControl(registered));
-	assert.match(flat, /Hold to open the seal/);
+	assert.match(flat, /Seal closed/);
 	assert.match(flat, /real outbound calls/);
 	assert.match(flat, /recorded/, "the operator should learn the act is logged before doing it");
 	assert.match(flat, /restarting the workbench closes it again/);

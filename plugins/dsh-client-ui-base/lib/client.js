@@ -913,9 +913,6 @@ window.__ModuleLoader__.load({
 
 		const seal = createSealStore();
 
-		/** How long the seal must be held open before it opens. See {@link buildSealControl}. */
-		const SEAL_HOLD_MS = 900;
-
 		/**
 		 * The clock reading for one audit line, from the `time` the harness
 		 * stamped on the denial event. Local wall time with seconds, because an
@@ -1132,92 +1129,109 @@ function auditLine(entry) {
 			}
 
 			/**
-			 * The seal control.
+			 * The seal control: a switch, labelled with the state it is in.
 			 *
-			 * WHY IT IS A HOLD AND NOT A SWITCH. Closing the seal is safe, so it
-			 * is one press. Opening it lets this workbench make real outbound
-			 * calls, so it asks for {@link SEAL_HOLD_MS} of deliberate pressure
-			 * instead. Not a confirmation dialog: a dialog is answered without
-			 * being read, and it makes the dangerous act and the safe act cost
-			 * the same gesture. A hold cannot happen by accident, it cannot
-			 * happen while the operator's attention is elsewhere, and — the part
-			 * that matters on a projector — the room can see it being done.
-			 * Resistance where the consequence is real.
+			 * WHY A SWITCH AND NOT A HOLD. It was a press-and-hold first, and the
+			 * reasoning was sound on paper - resistance where the consequence is real,
+			 * and a gesture the room can see being performed. In use it was neither.
+			 * The hold had no pointer capture, so the smallest drag cancelled it and
+			 * the operator could not tell whether the control or their hand had failed;
+			 * its only feedback was a two-pixel bar at half opacity. A control whose
+			 * failure mode is indistinguishable from a broken button is worse than a
+			 * plain one, whatever it protects.
 			 *
-			 * The sentence under the button is not a warning label. It says what
-			 * opening the seal actually does, that the act is recorded, and that
-			 * a restart undoes it, at the one moment that information is
-			 * relevant. An evaluator reading it learns the safety properties
-			 * from the product rather than from the pitch.
+			 * And the protection was aimed at the wrong risk. What makes opening the
+			 * seal safe is not that it is hard to press: it is that the seal is closed
+			 * at boot and never persisted open, that opening is recorded on the session
+			 * log, that a band across the window says so for as long as it lasts, and
+			 * that every call it lets through is recorded too. None of that depends on
+			 * the gesture. The gesture only ever cost legibility.
+			 *
+			 * On a projector this has to read at a glance and change in front of the
+			 * room: deny the canary with the seal closed, throw the switch, fire it
+			 * again and watch it reach the internet. The switch is the demo's whole
+			 * argument that the zero beside it is counted rather than painted.
+			 *
+			 * `role="switch"` with `aria-checked`, operable by Space and Enter, so it
+			 * is a real switch to a screen reader and not a div that happens to slide.
+			 * Track, thumb and text take `ui-theme` tokens only - no colour of ours
+			 * (UX-DR7).
+			 *
+			 * The sentence under it is not a warning label. It says what opening the
+			 * seal does, that the act is recorded, and that a restart undoes it, at the
+			 * one moment that information is relevant.
 			 * @param props.sessionId - the session the change is recorded against.
 			 */
 			function SealControl(props) {
 				const state = useSyncExternalStore(seal.subscribe, seal.get);
-				const [held, setHeld] = useState(0);
-				const timer = useRef(null);
-
-				function stop() {
-					if (timer.current !== null) {
-						clearInterval(timer.current);
-						timer.current = null;
-					}
-					setHeld(0);
-				}
-				// A press that ends with the pointer outside the button, or with the
-				// component unmounting, must not leave an interval running that opens
-				// the seal after the operator let go.
-				useEffect(() => stop, []);
-
-				function begin() {
-					if (timer.current !== null || state.busy) return;
-					const started = Date.now();
-					timer.current = setInterval(() => {
-						const progress = Math.min(1, (Date.now() - started) / SEAL_HOLD_MS);
-						setHeld(progress);
-						if (progress >= 1) {
-							stop();
-							void seal.request(false, props.sessionId);
-						}
-					}, 16);
-				}
-
 				const open = state.known && !state.sealed;
+				const disabled = !state.known || state.busy;
+
+				// One place, so the switch and its label can never disagree about which
+				// way is which. `sealed` is the safe state, and it is the default.
+				const toggle = () => {
+					if (disabled) return;
+					void seal.request(open, props.sessionId);
+				};
+
 				return jsxs("div", {
 					style: { display: "flex", flexDirection: "column", gap: "6px" },
 					children: [
-						// The hold's pointer handlers sit on a wrapper, not on `Button`.
-						// `Button` is a shipped primitive and nothing documents which
-						// props it forwards to its DOM node; hanging the gesture off it
-						// would fail silently if it forwards only the ones it knows.
-						// Events bubble to this wrapper whatever the primitive does with
-						// them. `onClick` stays on the Button itself — that one is
-						// proven, the Dismiss control beside it uses it.
 						jsxs("div", {
-							style: { display: "flex", flexDirection: "column", gap: "4px" },
-							onPointerDown: open ? undefined : begin,
-							onPointerUp: open ? undefined : stop,
-							onPointerLeave: open ? undefined : stop,
-							onPointerCancel: open ? undefined : stop,
+							style: { display: "flex", alignItems: "center", gap: "8px" },
 							children: [
-								jsx(Button, {
-									variant: "ghost",
-									size: "sm",
-									disabled: !state.known || state.busy,
-									onClick: open ? () => void seal.request(true, props.sessionId) : undefined,
+								jsx("button", {
+									type: "button",
+									role: "switch",
+									"aria-checked": open ? "true" : "false",
+									"aria-label": "Network seal",
+									disabled,
+									onClick: toggle,
+									onKeyDown: (event) => {
+										// Space and Enter both throw a switch. Enter alone is what a
+										// button gives you for free, and a switch that ignores Space is
+										// the one keyboard complaint every audit makes.
+										if (event.key === " " || event.key === "Enter") {
+											event.preventDefault();
+											toggle();
+										}
+									},
 									title: open
 										? "Close the seal. Blind Flange goes back to denying every outbound call."
-										: "Press and hold. Opening the seal lets this workbench make real outbound calls.",
-									children: open ? "Close the seal" : held > 0 ? "Keep holding…" : "Hold to open the seal",
-								}),
-								// The fill is the hold made visible. `currentColor` rather
-								// than a colour of our own, so it is legible in both themes
-								// and adds nothing to the palette (UX-DR7).
-								jsx("div", {
-									"aria-hidden": "true",
-									style: { height: "2px", borderRadius: "1px", overflow: "hidden", opacity: held > 0 ? 0.5 : 0 },
-									children: jsx("div", {
-										style: { height: "100%", width: `${Math.round(held * 100)}%`, background: "currentColor" },
+										: "Open the seal. This workbench will be allowed to make real outbound calls, and each one is recorded.",
+									style: {
+										position: "relative",
+										flex: "0 0 auto",
+										width: "38px",
+										height: "22px",
+										padding: 0,
+										borderRadius: "11px",
+										border: "1px solid var(--dsw-alias-border-l2)",
+										// The open state is the loud one, so it takes the foreground
+										// colour as a fill. Closed is the quiet surface every other
+										// control in this panel sits on.
+										background: open ? "var(--dsw-alias-label-primary)" : "var(--dsw-alias-bg-layer-2)",
+										cursor: disabled ? "default" : "pointer",
+										opacity: disabled ? 0.5 : 1,
+										transition: "background 120ms ease",
+									},
+									children: jsx("span", {
+										"aria-hidden": "true",
+										style: {
+											position: "absolute",
+											top: "2px",
+											left: open ? "18px" : "2px",
+											width: "16px",
+											height: "16px",
+											borderRadius: "50%",
+											background: open ? "var(--dsw-alias-bg-layer-1)" : "var(--dsw-alias-label-secondary)",
+											transition: "left 120ms ease",
+										},
 									}),
+								}),
+								jsx("span", {
+									style: { fontWeight: 600 },
+									children: open ? "Seal OPEN" : "Seal closed",
 								}),
 							],
 						}),
@@ -1617,6 +1631,12 @@ function auditLine(entry) {
 				}, []);
 
 				const residency = Array.isArray(trace?.residency) ? trace.residency : [];
+				// llama-swap answers with both a runtime id (`bf-coder`) and the display
+				// name the config gives it (`Coder`). The id is an internal key: it is what
+				// `registry/models.yaml`'s `runtime_id` has to match and what dispatch sends,
+				// and it means nothing to anyone reading the header. Prefer the name and keep
+				// the id for the expanded rows, where a reader chasing the config wants it.
+				const shown = (entry) => entry.name || entry.model;
 				const ready = residency.filter((entry) => entry.state === "ready");
 				const loading = residency.filter((entry) => entry.state === "starting" || entry.state === "stopping");
 
@@ -1632,12 +1652,12 @@ function auditLine(entry) {
 						"in the profile patch.";
 				} else if (loading.length > 0) {
 					tone = "info";
-					label = `Loading ${loading[0].model}`;
-					title = `Swapping models: ${loading.map((entry) => `${entry.model} is ${entry.state}`).join(", ")}. On this card only one fits at a time.`;
+					label = `Loading ${shown(loading[0])}`;
+					title = `Swapping models: ${loading.map((entry) => `${shown(entry)} is ${entry.state}`).join(", ")}. On this card only one fits at a time.`;
 				} else if (ready.length > 0) {
 					tone = "success";
-					label = `VRAM ${ready.map((entry) => entry.model).join(", ")}`;
-					title = `Resident in GPU memory: ${ready.map((entry) => entry.model).join(", ")}. Read from llama-swap, not tracked by Blind Flange.`;
+					label = `VRAM ${ready.map(shown).join(", ")}`;
+					title = `Resident in GPU memory: ${ready.map(shown).join(", ")}. Read from llama-swap, not tracked by Blind Flange.`;
 				}
 
 				const items = [];
@@ -1648,7 +1668,7 @@ function auditLine(entry) {
 					for (const entry of residency) {
 						items.push({
 							kind: "text",
-							text: `${entry.model} — ${entry.state}${typeof entry.ttl === "number" && entry.ttl > 0 ? `, unloads after ${entry.ttl}s idle` : ""}`,
+							text: `${shown(entry)} (${entry.model}) — ${entry.state}${typeof entry.ttl === "number" && entry.ttl > 0 ? `, unloads after ${entry.ttl}s idle` : ""}`,
 						});
 					}
 				}
