@@ -29,18 +29,28 @@
 import { readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
+import { recordIngestion } from "../trace/turn.js";
+import { currentDocument, rememberFindings } from "./attached.js";
+import { DEFAULT_INGESTION_ENDPOINT, ingest } from "./ingestion-client.js";
 
 export const REPORT_FINDINGS_TOOL_NAME = "bf_report_findings";
 
-const FIXTURE_PATH = join(dirname(fileURLToPath(import.meta.url)), "sample-report-findings.json");
+const HERE = dirname(fileURLToPath(import.meta.url));
+const FIXTURE_PATH = join(HERE, "sample-report-findings.json");
+/** The fixture PDF itself, so the shipped demo path can go through the live service too. */
+const FIXTURE_PDF_PATH = join(HERE, "..", "..", "..", "..", "services", "ingestion", "fixtures", "sample-inspection-report.pdf");
 const REPORT_NAME = "sample-inspection-report.pdf";
 
 /**
  * Build the report-findings tool definition.
- * @param {string} [fixturePath] - override for tests; defaults to the shipped capture.
+ * @param {string | { fixturePath?: string, endpoint?: string, fetchImpl?: typeof globalThis.fetch }} [options]
+ *   A path keeps the original single-argument call working; an object is for tests
+ *   that need to point the client at a stub service.
  * @returns a harness `ToolDefinition`.
  */
-export function createReportFindingsTool(fixturePath = FIXTURE_PATH) {
+export function createReportFindingsTool(options = {}) {
+	const { fixturePath = FIXTURE_PATH, endpoint = DEFAULT_INGESTION_ENDPOINT, fetchImpl = globalThis.fetch } =
+		typeof options === "string" ? { fixturePath: options } : options;
 	return {
 		name: REPORT_FINDINGS_TOOL_NAME,
 		description:
@@ -60,20 +70,99 @@ export function createReportFindingsTool(fixturePath = FIXTURE_PATH) {
 				properties: {
 					report: { type: "string" },
 					findings: { type: "array" },
+					// Disclosed on the tool's own output rather than tucked into a log:
+					// whether these lines came from an OCR pass just now or from the
+					// committed capture is exactly the kind of thing a demo must not
+					// blur.
+					source: { type: "string" },
+					detail: { type: "string" },
+					seconds: { type: "number" },
 				},
-				required: ["report", "findings"],
+				required: ["report", "findings", "source"],
 			},
 			render: (_args, value) => [
 				{
 					type: "text",
-					text: `Read ${value.findings.length} OCR findings from ${value.report}.`,
+					text:
+						value.source === "live"
+							? `Read ${value.findings.length} OCR findings from ${value.report} in ${value.seconds?.toFixed(1) ?? "?"}s.`
+							: `Read ${value.findings.length} OCR findings from ${value.report} — from the committed capture, not a live OCR pass.`,
 				},
 			],
 		},
-		/** Real fs I/O, dispatched every call — no in-memory cache to go stale. */
+		/**
+		 * Reads whatever document is currently attached, live, and falls back to
+		 * the shipped capture when the service is not running.
+		 *
+		 * The fallback is **disclosed, never silent**: the returned `source` says
+		 * which path answered and `detail` says why, so the trace can state it
+		 * rather than implying an OCR pass that never happened. That is the same
+		 * discipline ADR-0001 applies to replayed inference.
+		 *
+		 * When no document has been attached there is nothing to read live, and
+		 * the capture is the correct answer rather than a degraded one — it *is*
+		 * the ingested report for the shipped fixture.
+		 */
 		async execute() {
-			const findings = JSON.parse(readFileSync(fixturePath, "utf8"));
-			return { report: REPORT_NAME, findings };
+			// One recording point rather than one per return path. How the text was
+			// obtained — live OCR or the committed capture — is the same fact the
+			// deliverable's audit trail prints, so it is taken from what this tool
+			// actually returned rather than derived a second time.
+			const value = await readFindings();
+			recordIngestion(value);
+			return value;
 		},
 	};
+
+	async function readFindings() {
+			const attached = currentDocument();
+			if (attached !== null) {
+				try {
+					const result = await ingest({ bytes: attached.bytes, filename: attached.filename, endpoint, fetchImpl });
+					// Remembered so the provenance panel cites these exact lines rather
+					// than running its own OCR pass and possibly describing the same
+					// document slightly differently.
+					rememberFindings(result.findings);
+					return {
+						report: attached.filename,
+						findings: result.findings,
+						source: "live",
+						seconds: result.seconds,
+					};
+				} catch (error) {
+					// A judge's own document with no service to read it is the one
+					// case where falling back is a lie: the capture describes a
+					// different file. Say so instead of answering about the wrong
+					// document.
+					throw new Error(
+						`"${attached.filename}" was attached but could not be read: ${error instanceof Error ? error.message : String(error)}`,
+					);
+				}
+			}
+
+			// No upload: the shipped fixture. Try the live service first so the
+			// demo's own path is the real one, and fall back to the capture of
+			// that same file if the service is down.
+			try {
+				const bytes = readFileSync(FIXTURE_PDF_PATH);
+				const result = await ingest({ bytes, filename: REPORT_NAME, endpoint, fetchImpl });
+				return { report: REPORT_NAME, findings: result.findings, source: "live", seconds: result.seconds };
+			} catch (error) {
+				const findings = JSON.parse(readFileSync(fixturePath, "utf8"));
+				return {
+					report: REPORT_NAME,
+					findings,
+					source: "capture",
+					detail: `read from the committed 28 Aug 2026 capture of this same file, because ${
+						error instanceof Error ? error.message : String(error)
+					}`,
+				};
+			}
+	}
 }
+
+// Re-exported so callers that already reach for these through the tool keep
+// working; the state itself lives in `attached.js`, because the provenance route
+// needs the same answer and the two must never disagree about which document is
+// being described.
+export { attachDocument, clearDocument, currentDocument } from "./attached.js";

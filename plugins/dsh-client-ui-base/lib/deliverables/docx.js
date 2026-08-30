@@ -44,6 +44,7 @@ function clauseSourceLine(clause) {
  * @param {string} note.sourceReport - the ingested document the clauses were read from.
  * @param {Array<{ text: string, page: number, region: { left: number, top: number, width: number, height: number }, tag?: string }>} note.clauses
  * @param {string} note.contentHash - hex-encoded digest, printed in the footer.
+ * @param {string[]} [note.auditTrail] - lines from `audit-trail.js`; omitted entirely when absent, rather than printing an empty heading.
  * @returns the complete `.docx` file as a Buffer.
  */
 export function buildApprovalNoteDocx(note) {
@@ -60,6 +61,25 @@ export function buildApprovalNoteDocx(note) {
 		paragraph("Signatures", { bold: true, sizeHalfPoints: 26 }),
 		paragraph("Prepared by: _________________________        Date: _______________", { sizeHalfPoints: 22 }),
 		paragraph("Approved by: _________________________        Date: _______________", { sizeHalfPoints: 22 }),
+		// The audit trail goes after the signatures on purpose: it is evidence for a
+		// reviewer, not content for a signatory, and it must not sit between the
+		// findings and the line somebody signs.
+		//
+		// It goes in the document at all because the live surfaces — the routing chip,
+		// the egress monitor — explain a turn only while you are looking at them.
+		// A judge who takes this file away, or an MRPL reviewer opening it in six
+		// months, otherwise has a document that asserts findings and cannot show what
+		// produced them.
+		...(Array.isArray(note.auditTrail) && note.auditTrail.length > 0
+			? [
+					paragraph("How this note was produced", { bold: true, sizeHalfPoints: 26 }),
+					...note.auditTrail.map((line) =>
+						// A blank line stays a blank paragraph rather than collapsing, so
+						// the block's own grouping survives into Word.
+						paragraph(line === "" ? " " : line, { sizeHalfPoints: 18, italic: line.startsWith("Disclosure:") }),
+					),
+				]
+			: []),
 	].join("");
 
 	const documentXml =

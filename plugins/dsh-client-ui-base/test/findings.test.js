@@ -11,7 +11,20 @@ import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import test from "node:test";
-import { createReportFindingsTool, REPORT_FINDINGS_TOOL_NAME } from "../lib/findings/tool.js";
+import { clearDocument, createReportFindingsTool, REPORT_FINDINGS_TOOL_NAME } from "../lib/findings/tool.js";
+
+/**
+ * A deliberately dead endpoint, so these tests exercise the **capture** path
+ * whatever else is running on this machine.
+ *
+ * Since 30 August 2026 the tool tries the live ingestion service first. Three
+ * tests here started failing the moment a real service was started alongside
+ * them — they had been asserting the capture's exact bounding boxes while
+ * silently depending on the service being absent. A test whose result changes
+ * because a Python process is up is not testing what it claims to. The live path
+ * has its own tests, in `ingestion-client.test.js`, against a stub.
+ */
+const NO_SERVICE = "http://127.0.0.1:1";
 
 test("the definition carries everything ToolRuntime.register demands", () => {
 	const tool = createReportFindingsTool();
@@ -25,9 +38,11 @@ test("the definition carries everything ToolRuntime.register demands", () => {
 });
 
 test("execute reads the shipped fixture — a real file read, not fabricated data", async () => {
-	const tool = createReportFindingsTool();
+	clearDocument();
+	const tool = createReportFindingsTool({ endpoint: NO_SERVICE });
 	const value = await tool.execute();
 	assert.equal(value.report, "sample-inspection-report.pdf");
+	assert.equal(value.source, "capture");
 	assert.ok(Array.isArray(value.findings));
 	assert.ok(value.findings.length > 100, "the shipped capture has 156 real OCR lines");
 	for (const finding of value.findings) {
@@ -42,7 +57,11 @@ test("execute reads the shipped fixture — a real file read, not fabricated dat
 });
 
 test("carries the two Major findings the replay script cites, with their real provenance", async () => {
-	const tool = createReportFindingsTool();
+	clearDocument();
+	// These bounding boxes are the capture's, in 300 dpi source-image pixels. They
+	// are also what the provenance route crops against, which is why `RENDER_DPI`
+	// stayed at 300 — see the comment on it in services/ingestion/pdf.py.
+	const tool = createReportFindingsTool({ endpoint: NO_SERVICE });
 	const { findings } = await tool.execute();
 	const e1104a = findings.find((f) => f.text.startsWith("Insulation cladding open"));
 	assert.ok(e1104a, "the E-1104A corrosion finding is missing from the capture");
@@ -60,7 +79,7 @@ test("reads fresh from disk on every call — no stale in-memory cache", async (
 	const fixturePath = join(dir, "findings.json");
 	try {
 		writeFileSync(fixturePath, JSON.stringify([{ text: "first", bbox: { left: 0, top: 0, width: 1, height: 1 }, confidence: 100, page: 1 }]));
-		const tool = createReportFindingsTool(fixturePath);
+		const tool = createReportFindingsTool({ fixturePath, endpoint: NO_SERVICE });
 		const first = await tool.execute();
 		assert.equal(first.findings.length, 1);
 

@@ -28,8 +28,11 @@ test("createModelProvider selects by name — the only place ADR-0001's config s
 	assert.throws(() => createModelProvider("nonexistent"), ModelProviderError);
 });
 
-test("local and remote are declared but fail loud instead of answering nothing (day-4 stretch / dev-only)", async () => {
-	await assert.rejects(() => collect(createModelProvider("local").answer({ messages: [] })), ModelProviderError);
+test("remote is declared but fails loud instead of answering nothing (dev-only, ADR-0001)", async () => {
+	// `local` used to be asserted here as a throwing stub. It is now a real
+	// implementation and is covered by `local-provider.test.js`, which drives it
+	// against a loopback stub server rather than whatever happens to be on
+	// 127.0.0.1:8080 — a unit test must not reach a live llama-swap.
 	await assert.rejects(() => collect(createModelProvider("remote").answer({ messages: [] })), ModelProviderError);
 });
 
@@ -275,7 +278,10 @@ test("the shipped 'key findings' replay entry walks create_goal -> bf_report_fin
 	// Step 1: bf_report_findings — dispatch the REAL tool, exactly as the harness would.
 	const findingsCall = await runStep();
 	assert.equal(findingsCall.name, "bf_report_findings");
-	const findingsResult = await createReportFindingsTool().execute();
+	// Pointed at a dead endpoint so the capture answers deterministically. This
+	// test is about the replay cache's step sequence, not about ingestion, and it
+	// must not change its result because a Python service happens to be running.
+	const findingsResult = await createReportFindingsTool({ endpoint: "http://127.0.0.1:1" }).execute();
 	assert.ok(findingsResult.findings.length > 100);
 	messages = [...messages, toolResult(findingsCall.id, findingsResult)];
 
@@ -358,12 +364,12 @@ test("createLlmAdapter satisfies the duck-typed registerAdapter contract without
 	assert.equal(adapter.providerRetryPolicy("replay"), undefined);
 
 	// listModels now reads the fleet from registry/models.yaml (Story 3.3): the
-	// three allowed members, attributed to the provider, with the Qwen Research
-	// member filtered out.
+	// allowed members, attributed to the provider, with both Qwen Research
+	// members filtered out.
 	const listed = await adapter.listModels("replay");
 	assert.deepEqual(
 		listed.map((m) => m.id),
-		["Qwen/Qwen2.5-7B-Instruct", "Qwen/Qwen2.5-Coder-7B-Instruct", "Qwen/Qwen2.5-VL-7B-Instruct"],
+		["Qwen/Qwen2.5-Coder-1.5B-Instruct", "Qwen/Qwen3-VL-2B-Instruct"],
 	);
 	assert.ok(listed.every((m) => m.provider === "replay"));
 

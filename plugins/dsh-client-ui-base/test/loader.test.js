@@ -106,14 +106,37 @@ test("announceRefusals states one error line per refusal and returns the array",
 	assert.equal(returned, refused);
 });
 
-test("the shipped registry: Qwen2.5-3B-Instruct is refused for its Research Licence, the three Apache-2.0 members load", () => {
+test("the shipped registry: both Research-Licensed members are refused, both runnable members load", () => {
 	const { loaded, refused } = loadFleet();
 	assert.deepEqual(
 		loaded.map((m) => m.name),
-		["Qwen/Qwen2.5-7B-Instruct", "Qwen/Qwen2.5-Coder-7B-Instruct", "Qwen/Qwen2.5-VL-7B-Instruct"],
+		["Qwen/Qwen2.5-Coder-1.5B-Instruct", "Qwen/Qwen3-VL-2B-Instruct"],
 	);
-	assert.equal(refused.length, 1);
-	assert.equal(refused[0].name, "Qwen/Qwen2.5-3B-Instruct");
-	assert.match(refused[0].licence, /Qwen Research Licence/);
-	assert.match(refused[0].reason, /docs\/licence-policy\.md/);
+	// Asserted by name, not just by count. The second refusal was added on
+	// 30 August 2026 precisely because `Qwen2.5-Coder-3B-Instruct` is the size an
+	// engineer reaches for when 1.5B feels small, and it is the one non-Apache
+	// member of its family — the gate has to catch it without anyone remembering.
+	assert.deepEqual(
+		refused.map((m) => m.name),
+		["Qwen/Qwen2.5-3B-Instruct", "Qwen/Qwen2.5-Coder-3B-Instruct"],
+	);
+	for (const member of refused) {
+		assert.match(member.licence, /Qwen Research Licence/);
+		assert.match(member.reason, /docs\/licence-policy\.md/);
+	}
+});
+
+test("every loaded member declares the runtime id dispatch needs, and no refused member does", () => {
+	const { loaded, refused } = loadFleet();
+	// A loaded member with no runtime id is a registry entry that was never wired
+	// into llama-swap's config: the router would select it and dispatch would
+	// silently fall back to a default. Catch that here rather than on stage.
+	assert.deepEqual(
+		loaded.map((m) => m.runtime_id),
+		["bf-coder", "bf-vision"],
+	);
+	assert.ok(
+		refused.every((m) => m.runtime_id === undefined),
+		"a member declared only so the loader refuses it must not claim a runtime id",
+	);
 });
