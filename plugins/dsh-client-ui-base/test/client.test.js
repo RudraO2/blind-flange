@@ -42,6 +42,14 @@ function loadClientHalf(hostRequire, { initialTitle = "DeepSeek Harness" } = {})
 	};
 	const context = {
 		document,
+		// Standard browser globals the seal control's hold gesture uses. The vm
+		// context is a stand-in for a browser, so it has to carry the ones the
+		// client half actually reaches for — a missing global here is a
+		// ReferenceError at render, not a graceful degradation.
+		setInterval,
+		clearInterval,
+		setTimeout,
+		clearTimeout,
 		console: {
 			error: (...args) => errors.push(args.map(String).join(" ")),
 			warn: (...args) => warnings.push(args.map(String).join(" ")),
@@ -196,7 +204,7 @@ function hostModulesWithSeatedState(seated) {
  * no host transport — the canary button's seat disappears and every other seat
  * survives (Story 2.3).
  */
-function stubSlots({ sessions, connection } = {}) {
+function stubSlots({ sessions, connection, sealed = true } = {}) {
 	const canaryCalls = [];
 	const injectedNames = [];
 	const registered = [];
@@ -238,7 +246,17 @@ function stubSlots({ sessions, connection } = {}) {
 			rpc: {
 				call: (channel, endpoint, payload) => {
 					canaryCalls.push({ channel, endpoint, payload });
-					return Promise.resolve({ ok: true, value: { denied: true, target: "https://example.com", reason: "denied" } });
+					if (channel === "/bf-seal") {
+						// `open`/`close` answer with the state they were asked for, the
+						// way the host does — the client must render what it is told,
+						// never what its own button hoped for.
+						const answer = endpoint === "get" ? sealed : endpoint === "close";
+						return Promise.resolve({ ok: true, value: { sealed: answer } });
+					}
+					return Promise.resolve({
+						ok: true,
+						value: { outcome: "refused", sealed: true, target: "https://example.com", detail: "denied" },
+					});
 				},
 			},
 		}
@@ -312,6 +330,9 @@ test("occupies both places the DeepSeek whale used to render, and the hero's tas
 		"conversation.session.header.utilities",
 		// Story 4.5's crop viewer — a whole tab, not a chip.
 		"conversation.view",
+		// Two overlay seats: the egress panel, and the band that takes space at
+		// the top of the window for as long as the seal is open.
+		"shell.overlay",
 		"shell.overlay",
 		"sidebar.brand.mark",
 	]);
@@ -608,15 +629,15 @@ test("the bf-egress view builder counts denial nodes — the zero is a count, no
 	// Two denials in the log: count is two, latest detail is the higher-seq one.
 	const s1 = builder.replace({
 		nodes: [
-			{ key: "3", anchorSeq: 3, data: { tool: "web_search", target: "a" } },
-			{ key: "9", anchorSeq: 9, data: { tool: "web_fetch", target: "b" } },
+			{ key: "3", anchorSeq: 3, data: { kind: "denied", tool: "web_search", target: "a" } },
+			{ key: "9", anchorSeq: 9, data: { kind: "denied", tool: "web_fetch", target: "b" } },
 		],
 	});
 	assert.equal(s1.count, 2);
 	assert.equal(s1.latest.target, "b");
 	// A fresh denial arriving as an upsert increments; a replayed key does not double-count.
-	assert.equal(builder.apply({ upserts: [{ key: "12", anchorSeq: 12, data: { tool: "web_fetch", target: "c" } }] }).count, 3);
-	assert.equal(builder.apply({ upserts: [{ key: "12", anchorSeq: 12, data: { tool: "web_fetch", target: "c" } }] }).count, 3);
+	assert.equal(builder.apply({ upserts: [{ key: "12", anchorSeq: 12, data: { kind: "denied", tool: "web_fetch", target: "c" } }] }).count, 3);
+	assert.equal(builder.apply({ upserts: [{ key: "12", anchorSeq: 12, data: { kind: "denied", tool: "web_fetch", target: "c" } }] }).count, 3);
 });
 
 test("Story 2.4: the bf-egress view lists denials in the order the log wrote them", () => {
@@ -631,8 +652,8 @@ test("Story 2.4: the bf-egress view lists denials in the order the log wrote the
 	// Delivered out of order; ordered by the log's sequence number, oldest first.
 	const listed = builder.replace({
 		nodes: [
-			{ key: "9", anchorSeq: 9, data: { tool: "bf_canary", target: "https://example.com/", time: 1787918460000, seq: 9 } },
-			{ key: "3", anchorSeq: 3, data: { tool: "web_search", target: "MRPL", time: 1787918400000, seq: 3 } },
+			{ key: "9", anchorSeq: 9, data: { kind: "denied", tool: "bf_canary", target: "https://example.com/", time: 1787918460000, seq: 9 } },
+			{ key: "3", anchorSeq: 3, data: { kind: "denied", tool: "web_search", target: "MRPL", time: 1787918400000, seq: 3 } },
 		],
 	});
 	assert.equal(listed.entries.map((entry) => entry.seq).join(","), "3,9");
@@ -641,7 +662,7 @@ test("Story 2.4: the bf-egress view lists denials in the order the log wrote the
 	assert.equal(listed.count, listed.entries.length);
 	// A later denial lands at the end of the list without a restart or a reload.
 	const after = builder.apply({
-		upserts: [{ key: "14", anchorSeq: 14, data: { tool: "web_fetch", target: "https://mrpl.example/x", time: 1787918520000, seq: 14 } }],
+		upserts: [{ key: "14", anchorSeq: 14, data: { kind: "denied", tool: "web_fetch", target: "https://mrpl.example/x", time: 1787918520000, seq: 14 } }],
 	});
 	assert.equal(after.entries.map((entry) => entry.seq).join(","), "3,9,14");
 	assert.equal(after.latest.target, "https://mrpl.example/x");
@@ -930,7 +951,7 @@ test("a client with no host transport loses the canary and keeps every other sea
 	const { ctx, registered } = stubSlots({ connection: false });
 	exports.apply(ctx);
 	assert.equal(findCanary(registered), undefined);
-	assert.equal(registered.length, 8, "the other seats must survive a missing transport");
+	assert.equal(registered.length, 9, "the other seats must survive a missing transport");
 });
 
 test("pressing it posts to the host's loopback canary channel for this session", async () => {
@@ -939,10 +960,12 @@ test("pressing it posts to the host's loopback canary channel for this session",
 	exports.apply(ctx);
 	const element = findCanary(registered).component({ sessionId: "s1" });
 	await element.props.onClick();
-	assert.equal(canaryCalls.length, 1);
-	assert.equal(canaryCalls[0].channel, "/bf-canary");
-	assert.equal(canaryCalls[0].endpoint, "fire");
-	assert.equal(canaryCalls[0].payload.sessionId, "s1");
+	// Filtered by channel: mounting also reads the seal once over /bf-seal, and
+	// this assertion is about the canary's own post.
+	const fired = canaryCalls.filter((call) => call.channel === "/bf-canary");
+	assert.equal(fired.length, 1);
+	assert.equal(fired[0].endpoint, "fire");
+	assert.equal(fired[0].payload.sessionId, "s1");
 });
 
 test("it is a shipped Pill, like the chips beside it, reading 'Canary'", () => {
@@ -954,27 +977,45 @@ test("it is a shipped Pill, like the chips beside it, reading 'Canary'", () => {
 	assert.equal(element.props.active, false, "idle is the resting pill, not the emphasised one");
 	assert.ok(element.props.children.props.children.includes("Canary"));
 	assert.equal(element.props.children.props.children[0], null, "idle shows no state dot");
-	assert.match(element.props.title, /watch egress denial refuse it/);
+	assert.match(element.props.title, /attempt a real outbound connection/);
 });
 
 test("a denied canary reads as denied and shows the same red the monitor shows", () => {
-	const { exports } = loadClientHalf(hostModulesWithSeatedState("denied"));
+	const { exports } = loadClientHalf(hostModulesWithSeatedState("refused"));
 	const { ctx, registered } = stubSlots();
 	exports.apply(ctx);
 	const element = findCanary(registered).component({ sessionId: "s1" });
 	const dot = element.props.children.props.children[0];
 	assert.equal(dot.type, PRIMITIVES.StateDot);
 	assert.equal(dot.props.state, "error");
-	assert.match(element.props.title, /refused by egress denial and written to the audit log/);
+	assert.match(element.props.title, /Denied by Blind Flange/);
+	assert.match(element.props.title, /written to the audit log/);
 });
 
-test("a canary that was NOT denied says the seal is not holding", () => {
-	const { exports } = loadClientHalf(hostModulesWithSeatedState("allowed"));
+test("a call stopped outside the application is not reported as our denial", () => {
+	// The seal was open, the call genuinely left this process, and a host
+	// firewall discarded it. Red, because an attempt was stopped — but the
+	// sentence must not claim Blind Flange stopped it or wrote a record, because
+	// our waterfall never ran and the counter beside this button will not move.
+	const { exports } = loadClientHalf(hostModulesWithSeatedState("stoppedOutside"));
+	const { ctx, registered } = stubSlots();
+	exports.apply(ctx);
+	const element = findCanary(registered).component({ sessionId: "s1" });
+	assert.equal(element.props.children.props.children[0].props.state, "error");
+	assert.match(element.props.title, /outside this application/);
+	assert.doesNotMatch(element.props.title, /Denied by Blind Flange/);
+});
+
+test("a canary that reached the internet says so on the button itself", () => {
+	// The one outcome that must be legible from the back of the room without
+	// hovering anything, so it is the one outcome named on the label.
+	const { exports } = loadClientHalf(hostModulesWithSeatedState("reached"));
 	const { ctx, registered } = stubSlots();
 	exports.apply(ctx);
 	const element = findCanary(registered).component({ sessionId: "s1" });
 	assert.equal(element.props.children.props.children[0].props.state, "warning");
-	assert.match(element.props.title, /Egress denial is not holding/);
+	assert.match(element.props.title, /REACHED the internet/);
+	assert.ok(element.props.children.props.children.includes("Canary — got out"));
 });
 
 test("it refuses a second press while one is in flight", async () => {
@@ -984,7 +1025,8 @@ test("it refuses a second press while one is in flight", async () => {
 	const element = findCanary(registered).component({ sessionId: "s1" });
 	assert.equal(element.props.disabled, true);
 	await element.props.onClick();
-	assert.equal(canaryCalls.length, 0, "a press while firing must not post again");
+	const fired = canaryCalls.filter((call) => call.channel === "/bf-canary");
+	assert.equal(fired.length, 0, "a press while firing must not post again");
 });
 
 test("it sets no colour of its own — the state dot carries it through theme tokens", () => {
@@ -992,6 +1034,165 @@ test("it sets no colour of its own — the state dot carries it through theme to
 	const canarySection = source.slice(source.indexOf("function buildCanaryButton"), source.indexOf("function holdTabTitle"));
 	assert.doesNotMatch(canarySection, /#[0-9a-fA-F]{3,8}\b/, "the canary must not hand-roll a hex colour");
 	assert.doesNotMatch(canarySection, /rgba?\(/, "the canary must not hand-roll a colour");
+});
+
+/* ---------------------------------------------------------------------------
+ * The seal, on screen
+ *
+ * The host half decides; these cover what the operator sees, and the one thing
+ * this surface must never be able to do — show "sealed" while the machine is
+ * open.
+ * ------------------------------------------------------------------------- */
+
+/** Let the seal's mount-time read of the host resolve before rendering. */
+const settled = () => new Promise((resolve) => setTimeout(resolve, 0));
+
+test("the open-seal band takes no space while the seal is closed", async () => {
+	const { exports } = loadClientHalf((specifier) => healthyHostModules[specifier]);
+	const { ctx, registered } = stubSlots({ sealed: true });
+	exports.apply(ctx);
+	await settled();
+	const band = registered.find((call) => call.options.id === "bf-seal-band");
+	assert.ok(band, "the band took no seat");
+	assert.equal(band.options.name, "shell.overlay");
+	assert.equal(band.component({}), null, "the resting state is silent, not a green reassurance");
+});
+
+test("an open seal changes the shape of the application, not just a colour", async () => {
+	// A control that changes only itself is not telling the truth about what it
+	// did. The band takes space at the top of the window for as long as the seal
+	// is open, and carries the way back.
+	const { exports } = loadClientHalf((specifier) => healthyHostModules[specifier]);
+	const { ctx, registered } = stubSlots({ sealed: false });
+	exports.apply(ctx);
+	await settled();
+	const rendered = registered.find((call) => call.options.id === "bf-seal-band").component({});
+	assert.notEqual(rendered, null, "an open seal must not be possible to miss");
+	const flat = JSON.stringify(rendered);
+	assert.match(flat, /The egress seal is open/);
+	assert.match(flat, /Close the seal/);
+	assert.doesNotMatch(flat, /Dismiss/, "the one state nobody should forget they are in must not be dismissable");
+});
+
+test("the band sets no hand-rolled colour of its own", async () => {
+	const { exports } = loadClientHalf((specifier) => healthyHostModules[specifier]);
+	const { ctx, registered } = stubSlots({ sealed: false });
+	exports.apply(ctx);
+	await settled();
+	const flat = JSON.stringify(registered.find((call) => call.options.id === "bf-seal-band").component({}));
+	assert.doesNotMatch(flat, /#[0-9a-fA-F]{3,8}/, "colours come from ui-theme tokens, never from us (UX-DR7)");
+	assert.ok(!flat.includes("rgb(") && !flat.includes("hsl("), "no hand-rolled colour functions either");
+});
+
+test("the chip stops showing a count while the seal is open", async () => {
+	// A number that keeps reading "0" with enforcement off would be the most
+	// misleading thing on the screen: true, and understood as its opposite.
+	const { exports } = loadClientHalf((specifier) => healthyHostModules[specifier]);
+	const { ctx, registered } = stubSlots({ sealed: false, sessions: stubEgressSessions({ count: 0, latest: null }) });
+	exports.apply(ctx);
+	await settled();
+	const chip = registered.find((call) => call.options.id === "bf-egress-chip").component({ sessionId: "s-1" });
+	const flat = JSON.stringify(chip.props.children);
+	assert.match(flat, /Egress — open/);
+	assert.doesNotMatch(flat, /Egress 0/);
+	assert.match(chip.props.title, /the seal is OPEN/);
+});
+
+test("closing the seal from the band posts close, and the client renders the host's answer", async () => {
+	const { exports } = loadClientHalf((specifier) => healthyHostModules[specifier]);
+	const { ctx, registered, canaryCalls } = stubSlots({ sealed: false });
+	exports.apply(ctx);
+	await settled();
+	const band = registered.find((call) => call.options.id === "bf-seal-band");
+	const button = band.component({}).props.children.props.children[2];
+	await button.props.onClick();
+	await settled();
+
+	const posted = canaryCalls.filter((call) => call.channel === "/bf-seal");
+	assert.equal(posted[posted.length - 1].endpoint, "close");
+	assert.equal(band.component({}), null, "the band goes when the host says the seal is closed");
+});
+
+/**
+ * The seal control, rendered. The panel is closed until the chip opens it, so
+ * this opens it the way a user does rather than reaching past the store.
+ */
+function sealControl(registered) {
+	registered.find((call) => call.options.id === "bf-egress-chip").component({ sessionId: "s-1" }).props.onClick();
+	const panel = registered.find((call) => call.options.id === "bf-egress-panel").component({});
+	assert.ok(panel, "the panel did not open");
+	const seat = panel.props.children.find((child) => child && child.props && child.props.sessionId !== undefined);
+	assert.ok(seat, "the seal control is not in the panel");
+	// The panel yields the component and its props; render it here.
+	return seat.type(seat.props);
+}
+
+test("a press and release does not open the seal — the gesture has to be completed", async () => {
+	// The whole point of the hold. If a tap opened it, the dangerous act and the
+	// safe act would cost the same gesture and the seal would be a switch.
+	const { exports } = loadClientHalf((specifier) => healthyHostModules[specifier]);
+	const { ctx, registered, canaryCalls } = stubSlots({ sessions: stubEgressSessions({ count: 0, latest: null }) });
+	exports.apply(ctx);
+	await settled();
+	const before = canaryCalls.filter((call) => call.channel === "/bf-seal").length;
+
+	const wrapper = sealControl(registered).props.children[0];
+	wrapper.props.onPointerDown();
+	wrapper.props.onPointerUp();
+	await new Promise((resolve) => setTimeout(resolve, 120));
+
+	const after = canaryCalls.filter((call) => call.channel === "/bf-seal").length;
+	assert.equal(after, before, "releasing early must abandon the hold, not open the seal");
+});
+
+test("holding for the full duration is what opens it", async () => {
+	const { exports } = loadClientHalf((specifier) => healthyHostModules[specifier]);
+	const { ctx, registered, canaryCalls } = stubSlots({ sessions: stubEgressSessions({ count: 0, latest: null }) });
+	exports.apply(ctx);
+	await settled();
+
+	const wrapper = sealControl(registered).props.children[0];
+	wrapper.props.onPointerDown();
+	await new Promise((resolve) => setTimeout(resolve, 1100));
+
+	const posted = canaryCalls.filter((call) => call.channel === "/bf-seal");
+	assert.equal(posted[posted.length - 1].endpoint, "open");
+});
+
+test("the seal control says what opening it does, at the moment of deciding", async () => {
+	const { exports } = loadClientHalf((specifier) => healthyHostModules[specifier]);
+	const { ctx, registered } = stubSlots({ sessions: stubEgressSessions({ count: 0, latest: null }) });
+	exports.apply(ctx);
+	await settled();
+	const flat = JSON.stringify(sealControl(registered));
+	assert.match(flat, /Hold to open the seal/);
+	assert.match(flat, /real outbound calls/);
+	assert.match(flat, /recorded/, "the operator should learn the act is logged before doing it");
+	assert.match(flat, /restarting the workbench closes it again/);
+});
+
+test("a call that got out stays on the record after the seal is closed again", async () => {
+	// Re-sealing does not un-send it. The panel keeps saying so for the rest of
+	// the session, because the alternative is a surface that quietly returns to
+	// looking clean after the one event it exists to report.
+	const { exports } = loadClientHalf((specifier) => healthyHostModules[specifier]);
+	const { ctx, registered } = stubSlots({
+		sealed: true,
+		sessions: stubEgressSessions({
+			count: 0,
+			escaped: 1,
+			entries: [{ kind: "escaped", tool: "bf_canary", target: "https://example.com/", reached: true, time: 1787918400000, seq: 4 }],
+			latest: null,
+		}),
+	});
+	exports.apply(ctx);
+	await settled();
+	registered.find((call) => call.options.id === "bf-egress-chip").component({ sessionId: "s-1" }).props.onClick();
+	const flat = JSON.stringify(registered.find((call) => call.options.id === "bf-egress-panel").component({}));
+
+	assert.match(flat, /1 call reached the internet in this session/);
+	assert.match(flat, /Closing the seal does not undo that/);
+	assert.match(flat, /Reached the internet/, "the audit line names it too");
 });
 
 /* ---------------------------------------------------------------------------

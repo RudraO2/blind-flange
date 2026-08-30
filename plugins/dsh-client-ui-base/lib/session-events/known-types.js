@@ -1,12 +1,12 @@
 /**
  * Story 3.9 — register Blind Flange's plugin-owned session event types
- * (`egress/denied`, `router/classified`, `router/routed`) into the harness's
+ * (the four `egress/*` markers and the two `router/*` decisions) into the harness's
  * own read-path vocabulary, so a stored session containing them still opens.
  *
  * `@deepseek-ai/dsh-session-persistence` refuses to reconstruct a stored log
  * containing an event type outside `@deepseek-ai/dsh-session`'s exported
  * `KNOWN_SESSION_EVENT_TYPES` — a mutable `Set` — unless the event carries
- * `ignorable: true`. Adding our three types to that Set before any session is
+ * `ignorable: true`. Adding our types to that Set before any session is
  * read is enough: `Session.append` gives no way to mark an event ignorable,
  * so this is the only way a reopened session avoids
  * `SessionFormatUnsupportedError`.
@@ -46,7 +46,14 @@ import { homedir } from "node:os";
 import { join } from "node:path";
 
 /** Blind Flange's own session event types, kept in one place. */
-export const OUR_SESSION_EVENT_TYPES = ["egress/denied", "router/classified", "router/routed"];
+export const OUR_SESSION_EVENT_TYPES = [
+	"egress/denied",
+	"egress/permitted",
+	"egress/escaped",
+	"egress/seal",
+	"router/classified",
+	"router/routed",
+];
 
 /**
  * Default resolver: `createRequire` anchored at the profile's own installed
@@ -76,14 +83,14 @@ export function registerKnownSessionEventTypes(deps = {}) {
 		dshSession = resolve();
 	} catch (error) {
 		log(
-			`@blind-flange/dsh-client-ui-base: could not reach @deepseek-ai/dsh-session to register our session event types (${error instanceof Error ? error.message : String(error)}) — a reopened session containing egress/denied, router/classified or router/routed will fail with SessionFormatUnsupportedError until this is fixed.`,
+			`@blind-flange/dsh-client-ui-base: could not reach @deepseek-ai/dsh-session to register our session event types (${error instanceof Error ? error.message : String(error)}) — a reopened session containing egress/denied, egress/permitted, egress/escaped, egress/seal, router/classified or router/routed will fail with SessionFormatUnsupportedError until this is fixed.`,
 		);
 		return;
 	}
 	const types = dshSession?.KNOWN_SESSION_EVENT_TYPES;
 	if (!(types instanceof Set)) {
 		log(
-			"@blind-flange/dsh-client-ui-base: @deepseek-ai/dsh-session no longer exports a mutable KNOWN_SESSION_EVENT_TYPES Set — a reopened session containing egress/denied, router/classified or router/routed will fail with SessionFormatUnsupportedError until this is fixed.",
+			"@blind-flange/dsh-client-ui-base: @deepseek-ai/dsh-session no longer exports a mutable KNOWN_SESSION_EVENT_TYPES Set — a reopened session containing egress/denied, egress/permitted, egress/escaped, egress/seal, router/classified or router/routed will fail with SessionFormatUnsupportedError until this is fixed.",
 		);
 		return;
 	}

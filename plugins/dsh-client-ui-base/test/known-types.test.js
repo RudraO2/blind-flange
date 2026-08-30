@@ -14,8 +14,19 @@ import { join } from "node:path";
 import test from "node:test";
 import { OUR_SESSION_EVENT_TYPES, registerKnownSessionEventTypes } from "../lib/session-events/known-types.js";
 
-test("names all three plugin-owned event types this story fixes", () => {
-	assert.deepEqual(OUR_SESSION_EVENT_TYPES, ["egress/denied", "router/classified", "router/routed"]);
+test("names every plugin-owned event type, so a stored session carrying one still opens", () => {
+	// The four egress markers and the two router decisions. A type appended by
+	// this plugin and missing from this list makes every session that contains
+	// it permanently unopenable, so this assertion is exhaustive on purpose:
+	// adding an event type without adding it here should fail here first.
+	assert.deepEqual(OUR_SESSION_EVENT_TYPES, [
+		"egress/denied",
+		"egress/permitted",
+		"egress/escaped",
+		"egress/seal",
+		"router/classified",
+		"router/routed",
+	]);
 });
 
 test("reports a resolver failure to log and does not throw", () => {

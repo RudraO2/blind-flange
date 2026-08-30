@@ -71,6 +71,7 @@ import {
 	createCanaryTool,
 	DEFAULT_CANARY_TARGET,
 } from "./egress/canary.js";
+import { createSealRpcHandler, isSealed, SEAL_CHANNEL } from "./egress/seal.js";
 import { createApprovalNoteTool } from "./deliverables/tool.js";
 import { createReportFindingsTool } from "./findings/tool.js";
 import { createProvenanceHandler, PROVENANCE_ROUTE_PREFIX } from "./findings/provenance.js";
@@ -135,8 +136,13 @@ function replaceOrWarn(html, search, replacement, label) {
  * reason, and it is the only entry whose body genuinely tries: `web_search`
  * and `web_fetch` are names the harness's own `tool-web` would have used, kept
  * here as defence in depth after Story 1.2 removed the package that provides
- * them. Removing `bf_canary` from this set is what would let a real outbound
- * connection out of this machine — which is the point of firing it.
+ * them.
+ *
+ * Membership of this set is not by itself a refusal: the waterfall consults the
+ * seal (`egress/seal.js`) first, and with the seal open a named tool here runs
+ * and is recorded as {@link PERMITTED_EVENT} instead. Opening the seal is what
+ * lets a real outbound connection out of this machine — deliberately, from the
+ * UI, recorded, and closed again by a restart.
  */
 const NETWORK_TOOL_NAMES = new Set(["web_search", "web_fetch", CANARY_TOOL_NAME]);
 
@@ -257,6 +263,20 @@ function sandboxDenialReason(command) {
  * this event.
  */
 const EGRESS_DENIED_EVENT = "egress/denied";
+
+/**
+ * The session-log event the waterfall writes when the seal is OPEN and it
+ * therefore lets a network-reaching call run (`egress/seal.js`).
+ *
+ * It is the counterweight to {@link EGRESS_DENIED_EVENT}, and it exists so the
+ * audit list is not a list of this system's own successes. A seal that could be
+ * opened without leaving a record would make every zero on the monitor
+ * unfalsifiable — the count would be indistinguishable from a count taken while
+ * nothing was being enforced. With this event, an evaluator reading the log can
+ * see both what was stopped and what was waved through, in the order it
+ * happened.
+ */
+const PERMITTED_EVENT = "egress/permitted";
 
 /**
  * The session-log event the router's classifier writes (Story 3.5). It is a
@@ -420,17 +440,46 @@ export function apply(ctx, config) {
 	// stay reopenable regardless of what else this mount does.
 	registerKnownSessionEventTypes();
 
+	// The egress denial waterfall, now consulting the seal.
+	//
+	// Before the seal, this refused every network-reaching call unconditionally
+	// and the only evidence of the refusal was our own panel turning red — a
+	// closed loop nobody outside this codebase can check. `isSealed()` opens
+	// that loop deliberately: with the seal open the call is permitted to run,
+	// so the attempt genuinely leaves this process and whatever stops it next
+	// is not us. See `egress/seal.js` for why that is the point rather than a
+	// weakening.
+	//
+	// Permitting is recorded as loudly as refusing. `egress/permitted` lands on
+	// the same session log the monitor already reads, so the audit list carries
+	// the calls we let through beside the ones we stopped. An audit trail that
+	// records only its own successes is not an audit trail, and a seal whose
+	// opening left no trace would be worse than no seal.
 	ctx.on("tools/pre-execute", (exec, next) => {
+		/**
+		 * Append one egress marker to the attempting session's log.
+		 * Best-effort, exactly as the denial record always was: a verdict with
+		 * no reachable session still takes effect — the seal holds, or does not
+		 * — it simply is not on the on-screen list.
+		 */
+		const record = (type, data) => {
+			try {
+				exec.agent?.session?.append?.(type, data);
+			} catch (error) {
+				console.warn(
+					`@blind-flange/dsh-client-ui-base: egress event not recorded — ${error instanceof Error ? error.message : String(error)}`,
+				);
+			}
+		};
+
 		if (NETWORK_TOOL_NAMES.has(exec.name)) {
 			const target = describeTarget(exec.arguments);
-			// The distinct denial marker the egress monitor counts (Story 2.2).
-			// Best-effort: a denial with no reachable session still fails the
-			// call — the seal holds — it just is not on the on-screen counter.
-			try {
-				exec.agent?.session?.append?.(EGRESS_DENIED_EVENT, { tool: exec.name, target });
-			} catch (error) {
-				console.warn(`@blind-flange/dsh-client-ui-base: egress denial not recorded — ${error instanceof Error ? error.message : String(error)}`);
+			if (!isSealed()) {
+				record(PERMITTED_EVENT, { tool: exec.name, target });
+				return next();
 			}
+			// The distinct denial marker the egress monitor counts (Story 2.2).
+			record(EGRESS_DENIED_EVENT, { tool: exec.name, target });
 			return {
 				kind: "deny",
 				reason: `Blind Flange denies outbound network access: "${exec.name}" attempted to reach ${target}`,
@@ -440,15 +489,15 @@ export function apply(ctx, config) {
 			const command = pwshCommandText(exec.arguments);
 			const denial = command === undefined ? undefined : sandboxDenialReason(command);
 			if (denial !== undefined) {
+				if (!isSealed()) {
+					record(PERMITTED_EVENT, { tool: exec.name, target: command });
+					return next();
+				}
 				// Same distinct denial marker as above (Story 2.2) — the sandbox's
 				// shell is sealed the same way the network canary is (Story 5.3),
 				// and since 30 August 2026 that covers Python as well as
 				// PowerShell, because the coding lane now writes Python.
-				try {
-					exec.agent?.session?.append?.(EGRESS_DENIED_EVENT, { tool: exec.name, target: command });
-				} catch (error) {
-					console.warn(`@blind-flange/dsh-client-ui-base: egress denial not recorded — ${error instanceof Error ? error.message : String(error)}`);
-				}
+				record(EGRESS_DENIED_EVENT, { tool: exec.name, target: command });
 				return {
 					kind: "deny",
 					reason: `Blind Flange denies outbound network access: "${exec.name}" ${denial}`,
@@ -516,7 +565,12 @@ export function apply(ctx, config) {
 		canaryCtx.effect(() => {
 			const dispose = canaryCtx.connection.rpc.handle(
 				CANARY_CHANNEL,
-				createCanaryRpcHandler({ tools: canaryCtx.tools, agents: canaryCtx.agents, target: canaryTarget }),
+				createCanaryRpcHandler({
+					tools: canaryCtx.tools,
+					agents: canaryCtx.agents,
+					target: canaryTarget,
+					sealed: isSealed,
+				}),
 				{ authority: "loopback" },
 			);
 			return () => {
@@ -552,6 +606,25 @@ export function apply(ctx, config) {
 				void dispose();
 			};
 		}, "blind-flange: trace rpc channel");
+	});
+
+	// The seal's own loopback channel. Registered beside the canary's and behind
+	// the same services, with the same `loopback` authority: opening the seal
+	// changes what this machine may do, so it belongs to the operator sitting at
+	// it and never to anything that can merely reach the port.
+	//
+	// `agents` is needed only to write the change onto the session log — the
+	// seal itself is process-wide and takes effect whether or not a session is
+	// reachable.
+	ctx.inject(["connection", "agents"], (sealCtx) => {
+		sealCtx.effect(() => {
+			const dispose = sealCtx.connection.rpc.handle(SEAL_CHANNEL, createSealRpcHandler({ agents: sealCtx.agents }), {
+				authority: "loopback",
+			});
+			return () => {
+				void dispose();
+			};
+		}, "blind-flange: seal rpc channel");
 	});
 
 	const providerName = config?.modelPlane?.provider ?? "replay";
