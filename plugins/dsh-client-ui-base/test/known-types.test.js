@@ -1,5 +1,5 @@
 /**
- * Tests for Story 3.9: registering Blind Flange's plugin-owned session event
+ * Tests for Story 3.9: registering Faraday's plugin-owned session event
  * types into the harness's persistence read-path vocabulary
  * (`session-events/known-types.js`).
  *

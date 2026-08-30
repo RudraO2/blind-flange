@@ -1,4 +1,4 @@
-# Blind Flange (SIH26117) — the harness settings this project owns.
+# Faraday (SIH26117) — the harness settings this project owns.
 #
 # `scripts/start.mjs` MERGES these keys into $DSH_HOME/settings.yaml rather
 # than overwriting the file: the same file also holds settings that belong to
@@ -17,7 +17,7 @@
 ui-onboarding:
   welcomeNoticeVersion: 2026-08-13.1
 
-# Story 1.4: a new session opens on a Blind Flange task type rather than a
+# Story 1.4: a new session opens on a Faraday task type rather than a
 # shipped preset. `document` is the deployment default because the demo opens
 # on the inspection report.
 agent-presets:

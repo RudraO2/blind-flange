@@ -1,4 +1,4 @@
-# The fleet — one file declares every model Blind Flange knows about.
+# The fleet — one file declares every model Faraday knows about.
 #
 # CONTEXT.md "Fleet": the set of open-weight models **installed on the box**.
 # Story 3.3 makes this the single source the UI model list, the router

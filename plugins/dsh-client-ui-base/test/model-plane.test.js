@@ -256,7 +256,7 @@ test("ReplayModelProvider ignores a tool-result message when computing the trigg
 
 test("the shipped 'key findings' replay entry walks create_goal -> bf_report_findings -> update_goal -> a closing reply, citing real provenance (Story 5.1)", async () => {
 	const provider = createModelProvider("replay");
-	const adapter = createLlmAdapter(provider, { displayName: "Blind Flange (replay)" });
+	const adapter = createLlmAdapter(provider, { displayName: "Faraday (replay)" });
 	const trigger = userText("Turn the ingested inspection report into key findings.");
 	let messages = [trigger];
 
@@ -358,9 +358,9 @@ test("createLlmAdapter satisfies the duck-typed registerAdapter contract without
 			yield { type: "text", text: "there" };
 		},
 	};
-	const adapter = createLlmAdapter(stubProvider, { displayName: "Blind Flange (replay)" });
+	const adapter = createLlmAdapter(stubProvider, { displayName: "Faraday (replay)" });
 
-	assert.deepEqual(adapter.providerInfo("replay"), { id: "replay", name: "Blind Flange (replay)" });
+	assert.deepEqual(adapter.providerInfo("replay"), { id: "replay", name: "Faraday (replay)" });
 	assert.equal(adapter.providerRetryPolicy("replay"), undefined);
 
 	// listModels now reads the fleet from registry/models.yaml (Story 3.3): the
@@ -399,7 +399,7 @@ test("createLlmAdapter keeps block-start/block-end balanced even when the provid
 			throw new Error("mid-stream failure");
 		},
 	};
-	const adapter = createLlmAdapter(provider, { displayName: "Blind Flange (replay)" });
+	const adapter = createLlmAdapter(provider, { displayName: "Faraday (replay)" });
 	const chunks = await collect(adapter.stream({ provider: "replay", model: "m", messages: [] }));
 	assert.equal(chunks.filter((c) => c.type === "block-start").length, 1);
 	assert.equal(chunks.filter((c) => c.type === "block-end").length, 1);
@@ -412,7 +412,7 @@ test("createLlmAdapter turns a tool-call piece into a matched block-start/tool-c
 			yield { type: "tool-call", id: "call-1", name: "create_goal", arguments: '{"objective":"x"}' };
 		},
 	};
-	const adapter = createLlmAdapter(provider, { displayName: "Blind Flange (replay)" });
+	const adapter = createLlmAdapter(provider, { displayName: "Faraday (replay)" });
 	const chunks = await collect(adapter.stream({ provider: "replay", model: "m", messages: [] }));
 	assert.deepEqual(chunks, [
 		{ type: "block-start", index: 0, blockType: "tool-call" },
@@ -430,7 +430,7 @@ test("createLlmAdapter closes the open text block before opening a tool-call blo
 			yield { type: "text", text: "after" };
 		},
 	};
-	const adapter = createLlmAdapter(provider, { displayName: "Blind Flange (replay)" });
+	const adapter = createLlmAdapter(provider, { displayName: "Faraday (replay)" });
 	const chunks = await collect(adapter.stream({ provider: "replay", model: "m", messages: [] }));
 	assert.deepEqual(
 		chunks.map((c) => c.type),
@@ -454,7 +454,7 @@ test("createLlmAdapter turns a provider failure into a terminal error finish chu
 			throw new Error("boom");
 		},
 	};
-	const adapter = createLlmAdapter(failingProvider, { displayName: "Blind Flange (replay)" });
+	const adapter = createLlmAdapter(failingProvider, { displayName: "Faraday (replay)" });
 	const chunks = await collect(adapter.stream({ provider: "replay", model: "m", messages: [] }));
 	const finish = chunks.at(-1);
 	assert.equal(finish.type, "finish");

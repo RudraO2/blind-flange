@@ -86,7 +86,7 @@ export function loadFleet(registryPath) {
 			name: member.name,
 			licence,
 			reason:
-				`Blind Flange refuses to load "${member.name}": its licence "${licence}" is outside the ` +
+				`Faraday refuses to load "${member.name}": its licence "${licence}" is outside the ` +
 				`permissive allow-list (${ALLOWED_LICENCES_DISPLAY}). See docs/licence-policy.md (ADR-0006).`,
 		});
 	}

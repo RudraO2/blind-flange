@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// Blind Flange (SIH26117) — record the offline run (Story 6.5).
+// Faraday (SIH26117) — record the offline run (Story 6.5).
 //
 // `npm run record-demo` drives the running workbench through the three demo
 // beats and records what the screen actually did:
@@ -332,7 +332,7 @@ async function main() {
       text: () => document.body.innerText,
       provider: () => {
         const node = [...document.querySelectorAll('[title]')].find((element) =>
-          /Blind Flange is answering from the/.test(element.getAttribute('title')));
+          /Faraday is answering from the/.test(element.getAttribute('title')));
         return node ? { label: node.textContent.trim(), title: node.getAttribute('title') } : null;
       },
       egress: () => {
@@ -436,7 +436,7 @@ async function main() {
     })
     started = Date.now()
     await sleep(3000)
-    await mark('00-workbench', 'Blind Flange, sealed and idle')
+    await mark('00-workbench', 'Faraday, sealed and idle')
 
     // ---------------------------------------------------------------- beat 1: the canary
     //

@@ -1,5 +1,5 @@
 /**
- * Blind Flange base plugin, host half.
+ * Faraday base plugin, host half.
  *
  * Story 1.1 gave this package a host-side row with an empty apply. Story 1.5
  * hung our own tab title and favicon on it, replacing DeepSeek Harness's,
@@ -118,7 +118,7 @@ export const inject = [];
 function replaceOrWarn(html, search, replacement, label) {
 	if (!html.includes(search)) {
 		console.warn(
-			`@blind-flange/dsh-client-ui-base: expected to find ${JSON.stringify(search)} in the served index.html (${label}) and did not — the harness's shipped markup may have changed. Blind Flange's ${label} will not apply until docs/profile-install.md's Story 1.5 section is re-checked against the new markup.`,
+			`@blind-flange/dsh-client-ui-base: expected to find ${JSON.stringify(search)} in the served index.html (${label}) and did not — the harness's shipped markup may have changed. Faraday's ${label} will not apply until docs/profile-install.md's Story 1.5 section is re-checked against the new markup.`,
 		);
 		return html;
 	}
@@ -482,7 +482,7 @@ export function apply(ctx, config) {
 			record(EGRESS_DENIED_EVENT, { tool: exec.name, target });
 			return {
 				kind: "deny",
-				reason: `Blind Flange denies outbound network access: "${exec.name}" attempted to reach ${target}`,
+				reason: `Faraday denies outbound network access: "${exec.name}" attempted to reach ${target}`,
 			};
 		}
 		if (exec.name === PWSH_TOOL_NAME) {
@@ -500,7 +500,7 @@ export function apply(ctx, config) {
 				record(EGRESS_DENIED_EVENT, { tool: exec.name, target: command });
 				return {
 					kind: "deny",
-					reason: `Blind Flange denies outbound network access: "${exec.name}" ${denial}`,
+					reason: `Faraday denies outbound network access: "${exec.name}" ${denial}`,
 				};
 			}
 		}
@@ -637,7 +637,7 @@ export function apply(ctx, config) {
 				console.warn(`@blind-flange/dsh-client-ui-base: model plane not mounted — ${error.message}`);
 				return undefined;
 			}
-			const adapter = createLlmAdapter(modelProvider, { displayName: `Blind Flange (${providerName})` });
+			const adapter = createLlmAdapter(modelProvider, { displayName: `Faraday (${providerName})` });
 			return llmCtx.llm.registerAdapter([providerName], adapter);
 		}, "blind-flange: model plane adapter");
 	});
@@ -681,7 +681,7 @@ export function apply(ctx, config) {
 		web.effect(
 			() =>
 				web.webServer.tapIndex((html) => {
-					const withTitle = replaceOrWarn(html, "<title>DeepSeek Harness</title>", "<title>Blind Flange</title>", "tab title");
+					const withTitle = replaceOrWarn(html, "<title>DeepSeek Harness</title>", "<title>Faraday</title>", "tab title");
 					return replaceOrWarn(withTitle, 'href="/favicon.svg"', `href="${FAVICON_PATH}"`, "favicon link");
 				}),
 			"blind-flange: index title and favicon",

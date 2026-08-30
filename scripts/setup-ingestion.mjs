@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// Blind Flange (SIH26117) — install the Python ingestion service.
+// Faraday (SIH26117) — install the Python ingestion service.
 //
 // `npm run setup-ingestion`. Separate from `npm start` on purpose: the
 // workbench does not call this service at runtime. `findings/tool.js` reads a

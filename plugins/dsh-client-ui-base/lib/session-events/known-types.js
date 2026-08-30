@@ -1,5 +1,5 @@
 /**
- * Story 3.9 — register Blind Flange's plugin-owned session event types
+ * Story 3.9 — register Faraday's plugin-owned session event types
  * (the four `egress/*` markers and the two `router/*` decisions) into the harness's
  * own read-path vocabulary, so a stored session containing them still opens.
  *
@@ -45,7 +45,7 @@ import { createRequire } from "node:module";
 import { homedir } from "node:os";
 import { join } from "node:path";
 
-/** Blind Flange's own session event types, kept in one place. */
+/** Faraday's own session event types, kept in one place. */
 export const OUR_SESSION_EVENT_TYPES = [
 	"egress/denied",
 	"egress/permitted",

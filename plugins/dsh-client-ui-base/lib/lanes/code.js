@@ -254,7 +254,7 @@ export function describeVerdict(result) {
 	if (result.verdict === "AGREES") {
 		return (
 			`AGREES — the model predicted ${JSON.stringify(result.expected)} before the program ran, the sandbox computed ` +
-			`${JSON.stringify(result.actual)}, and Blind Flange compared them. This checks the model against itself, not against ground truth.`
+			`${JSON.stringify(result.actual)}, and Faraday compared them. This checks the model against itself, not against ground truth.`
 		);
 	}
 	return (

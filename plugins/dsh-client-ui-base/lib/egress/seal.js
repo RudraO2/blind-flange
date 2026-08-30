@@ -1,7 +1,7 @@
 /**
  * The seal.
  *
- * Blind Flange is named after the plate bolted over a line to positively
+ * Faraday is named after the plate bolted over a line to positively
  * isolate it. This module is that plate, in software: one boolean the egress
  * denial waterfall consults before it refuses anything, and the loopback RPC
  * channel the operator opens and closes it through.

@@ -1,5 +1,5 @@
 /**
- * Blind Flange base plugin, browser half.
+ * Faraday base plugin, browser half.
  *
  * Written directly in the host loader's module format, so this package ships no
  * React and needs no bundler: `require` inside the factory resolves
@@ -13,7 +13,7 @@
  * `exports["./client"]` points here, and only the host reads that.
  *
  * Story 1.1 mounted the seam and took no slot. Story 1.5 is the first
- * occupant: the Blind Flange mark in `conversation.hero.brand.mark` and
+ * occupant: the Faraday mark in `conversation.hero.brand.mark` and
  * `sidebar.brand.mark`, the two places the DeepSeek whale used to render (see
  * `apply` below for why both, not just the one AC1 names). What Story 1.1 did
  * do is check that the host supplied the React seam every later panel depends
@@ -29,7 +29,7 @@
  * 28 Aug 2026: `agentPreset.list` names all four no matter what this profile's
  * `cordis.patch.yml` configures). This component is an indicator rather than a
  * wrapper around the host's own hero chip: it reads the same roster over the
- * same host RPCs and shows only the presets Blind Flange authored
+ * same host RPCs and shows only the presets Faraday authored
  * (`trust: 'user'`), so "Standard mode" and its shipped siblings never appear
  * here even though the host still lists them elsewhere (Settings > Agent
  * presets, unavoidably, for the same reason).
@@ -53,8 +53,8 @@
  * read-only pill naming the active model-plane provider. When `replay` is the
  * provider it says so in plain words and says the responses are authored, not
  * captured (ADR-0001 amendment, 28 Aug 2026). The provider name is read from
- * the host's `llm.providers` directory — the Blind Flange adapter registered
- * in the host half (`index.js`) surfaces there as `Blind Flange (<provider>)` —
+ * the host's `llm.providers` directory — the Faraday adapter registered
+ * in the host half (`index.js`) surfaces there as `Faraday (<provider>)` —
  * so this indicator reports the configured provider rather than guessing it.
  *
  * Story 3.7 takes the last seat: `conversation.input.model`, a `single` slot,
@@ -112,7 +112,7 @@ window.__ModuleLoader__.load({
 		var exports = module.exports;
 		Object.defineProperty(exports, Symbol.toStringTag, { value: "Module" });
 
-		/** Everything a Blind Flange panel needs from the host's React. */
+		/** Everything a Faraday panel needs from the host's React. */
 		const REQUIRED_JSX_EXPORTS = ["jsx", "jsxs", "Fragment"];
 
 		/**
@@ -121,21 +121,25 @@ window.__ModuleLoader__.load({
 		 * inherits the hero's own text colour rather than a hard-rolled hex,
 		 * which is what makes it correct in both themes without a media query.
 		 */
-		const FLANGE_PATH_D =
-			"M 1.5,12 A 10.5,10.5 0 1,0 22.5,12 A 10.5,10.5 0 1,0 1.5,12 Z" +
-			"M 10.6,4.5 A 1.4,1.4 0 1,0 13.4,4.5 A 1.4,1.4 0 1,0 10.6,4.5 Z" +
-			"M 17.1,8.25 A 1.4,1.4 0 1,0 19.9,8.25 A 1.4,1.4 0 1,0 17.1,8.25 Z" +
-			"M 17.1,15.75 A 1.4,1.4 0 1,0 19.9,15.75 A 1.4,1.4 0 1,0 17.1,15.75 Z" +
-			"M 10.6,19.5 A 1.4,1.4 0 1,0 13.4,19.5 A 1.4,1.4 0 1,0 10.6,19.5 Z" +
-			"M 4.1,15.75 A 1.4,1.4 0 1,0 6.9,15.75 A 1.4,1.4 0 1,0 4.1,15.75 Z" +
-			"M 4.1,8.25 A 1.4,1.4 0 1,0 6.9,8.25 A 1.4,1.4 0 1,0 4.1,8.25 Z";
+		/**
+		 * The Faraday mark, from `Logo.svg`.
+		 *
+		 * Authored at 1254pt and drawn through the group transform below, which is
+		 * how the artwork was exported. Rescaling the coordinates by hand would risk
+		 * shifting the curves for no gain, and the transform costs nothing.
+		 * `favicon.svg` carries the same two paths for the browser tab.
+		 */
+		const MARK_PATHS = [
+			"M5985 10174 c-371 -82 -622 -388 -707 -864 -9 -54 -13 -182 -13 -460 l0 -385 27 -57 c34 -74 95 -132 166 -159 46 -17 72 -20 137 -17 100 6 163 35 228 108 73 81 77 104 77 454 0 328 9 441 46 556 31 98 73 161 127 190 41 22 44 22 105 6 180 -46 402 -275 519 -536 63 -140 110 -308 139 -495 14 -92 16 -180 15 -530 -2 -461 2 -503 57 -575 38 -50 60 -68 122 -98 74 -36 209 -39 282 -5 66 30 132 95 157 154 22 49 22 60 22 512 0 587 -17 737 -116 1056 -122 393 -345 734 -614 936 -105 80 -278 167 -386 195 -108 29 -295 35 -390 14z m396 -140 c70 -21 217 -94 283 -140 315 -226 564 -651 661 -1130 47 -231 56 -370 53 -832 -3 -409 -4 -421 -24 -449 -26 -35 -81 -73 -105 -73 -18 0 -19 19 -19 473 0 601 -14 750 -101 1052 -140 490 -446 918 -776 1085 -65 33 -54 38 28 14z m-376 -396 c-41 -22 -104 -98 -133 -160 -67 -142 -82 -258 -82 -651 0 -264 -3 -324 -15 -355 -17 -39 -52 -82 -68 -82 -5 0 -7 166 -5 403 4 379 6 407 27 487 48 177 132 305 234 354 49 23 84 27 42 4z",
+			"M4210 7427 l0 -982 138 -85 c75 -46 389 -239 697 -429 308 -189 619 -380 690 -424 72 -44 273 -169 447 -278 572 -358 909 -561 923 -555 12 4 282 168 688 418 70 43 129 78 132 78 3 0 5 -127 5 -282 l0 -283 -183 -111 c-100 -61 -286 -175 -414 -253 -128 -77 -235 -141 -239 -141 -4 0 -39 20 -78 44 -427 263 -1515 938 -1906 1181 -272 169 -574 356 -671 415 -97 59 -188 115 -202 125 l-27 17 0 -358 0 -359 123 -74 c302 -184 941 -580 1492 -926 752 -472 1213 -760 1241 -777 l31 -18 189 118 c104 65 340 212 524 326 184 115 408 254 497 310 l163 101 0 988 c0 543 -2 987 -5 987 -6 0 -42 -22 -700 -425 -258 -158 -514 -314 -568 -347 -60 -37 -104 -57 -114 -54 -9 4 -203 123 -432 265 -408 253 -783 485 -1091 673 -434 266 -747 456 -767 467 l-23 12 0 284 c0 157 2 285 5 285 3 0 121 -71 263 -159 256 -158 527 -325 972 -599 246 -151 367 -226 790 -487 140 -87 265 -162 277 -168 25 -11 32 -6 743 433 228 141 467 288 530 327 l115 70 3 348 c2 286 0 346 -11 342 -7 -3 -177 -106 -378 -229 -502 -310 -976 -598 -982 -598 -4 0 -178 106 -389 236 -1000 618 -2318 1427 -2449 1505 l-49 28 0 -982z",
+		];
 
 		/**
-		 * The Blind Flange mark. Same `size`/`className` shape the host's own
+		 * The Faraday mark. Same `size`/`className` shape the host's own
 		 * `OfficialBrandMark` takes, since `conversation.hero.brand.mark` is a
 		 * `single` slot and this occupies it outright.
 		 */
-		function BlindFlangeMark({ size, className }) {
+		function FaradayMark({ size, className }) {
 			let jsxRuntime;
 			try {
 				jsxRuntime = require("react/jsx-runtime");
@@ -143,15 +147,18 @@ window.__ModuleLoader__.load({
 				return null;
 			}
 			if (typeof jsxRuntime?.jsx !== "function") return null;
-			return jsxRuntime.jsx("svg", {
+			return jsxRuntime.jsxs("svg", {
 				xmlns: "http://www.w3.org/2000/svg",
-				viewBox: "0 0 24 24",
+				viewBox: "0 0 1254 1254",
 				width: size,
 				height: size,
 				className,
 				"aria-hidden": true,
 				focusable: "false",
-				children: jsxRuntime.jsx("path", { d: FLANGE_PATH_D, fill: "currentColor", fillRule: "evenodd" }),
+				children: jsxRuntime.jsx("g", {
+					transform: "translate(0,1254) scale(0.1,-0.1)",
+					children: MARK_PATHS.map((d, index) => jsxRuntime.jsx("path", { d, fill: "currentColor", fillRule: "evenodd" }, `m${index}`)),
+				}),
 			});
 		}
 
@@ -167,7 +174,7 @@ window.__ModuleLoader__.load({
 				jsxRuntime = require("react/jsx-runtime");
 			} catch (error) {
 				console.error(
-					"@blind-flange/dsh-client-ui-base: the host did not supply react/jsx-runtime — no Blind Flange panel can render",
+					"@blind-flange/dsh-client-ui-base: the host did not supply react/jsx-runtime — no Faraday panel can render",
 					error,
 				);
 				return false;
@@ -175,7 +182,7 @@ window.__ModuleLoader__.load({
 			const missing = REQUIRED_JSX_EXPORTS.filter((name) => jsxRuntime?.[name] === undefined);
 			if (missing.length > 0) {
 				console.error(
-					`@blind-flange/dsh-client-ui-base: the host's react/jsx-runtime is missing ${missing.join(", ")} — Blind Flange panels will not render correctly`,
+					`@blind-flange/dsh-client-ui-base: the host's react/jsx-runtime is missing ${missing.join(", ")} — Faraday panels will not render correctly`,
 				);
 				return false;
 			}
@@ -240,7 +247,7 @@ window.__ModuleLoader__.load({
 			 * element inherits the hero's own typography and density, which is what the
 			 * design rule asks for and costs no hand-rolled colour, radius or spacing.
 			 * @returns the indicator, or null while loading and when the deployment
-			 * authors no Blind Flange preset.
+			 * authors no Faraday preset.
 			 */
 			function TaskTypeIndicator() {
 				const [state, setState] = useState(INITIAL);
@@ -264,7 +271,7 @@ window.__ModuleLoader__.load({
 				if (state.status !== "ready") return null;
 
 				return jsxs("span", {
-					title: "Task type, selected by the router. Blind Flange classifies the request; there is nothing here to set.",
+					title: "Task type, selected by the router. Faraday classifies the request; there is nothing here to set.",
 					children: [jsx(IconAgentPresetOutline16, {}), " ", state.label],
 				});
 			}
@@ -287,17 +294,17 @@ window.__ModuleLoader__.load({
 			replay: {
 				label: "Replay — authored responses",
 				title:
-					"Blind Flange is answering from the replay provider: stored responses authored by hand for this Phase 0 build, served in place of live model inference and disclosed here as the operating mode. Per the 28 August 2026 amendment to ADR-0001 there is no local run to capture from yet, so replacing an authored response with a captured one later is a data change, not a code change.",
+					"Faraday is answering from the replay provider: stored responses authored by hand for this Phase 0 build, served in place of live model inference and disclosed here as the operating mode. Per the 28 August 2026 amendment to ADR-0001 there is no local run to capture from yet, so replacing an authored response with a captured one later is a data change, not a code change.",
 			},
 			local: {
 				label: "Local — offline inference",
 				title:
-					"Blind Flange is answering from the local provider: llama.cpp on this machine, with no network path off the box.",
+					"Faraday is answering from the local provider: llama.cpp on this machine, with no network path off the box.",
 			},
 			remote: {
 				label: "Remote — development only",
 				title:
-					"Blind Flange is answering from the remote provider: a rented GPU used only during development. ADR-0001 keeps it out of every demo and recording.",
+					"Faraday is answering from the remote provider: a rented GPU used only during development. ADR-0001 keeps it out of every demo and recording.",
 			},
 		};
 
@@ -319,7 +326,7 @@ window.__ModuleLoader__.load({
 			 * The active model-plane provider, named without a menu.
 			 *
 			 * Reads the host's `llm.providers` directory and finds the Blind
-			 * Flange adapter by its `Blind Flange (<provider>)` display name — the
+			 * Flange adapter by its `Faraday (<provider>)` display name — the
 			 * shape `createLlmAdapter` gives it in `model-plane/llm-adapter.js`.
 			 * Renders nothing until that lookup resolves and nothing if it fails:
 			 * an unproven provider name is worse than an absent pill (NFR8).
@@ -335,7 +342,7 @@ window.__ModuleLoader__.load({
 						const ours = result.value.providers.find(
 							(row) =>
 								typeof row.displayName === "string" &&
-								row.displayName.startsWith("Blind Flange (") &&
+								row.displayName.startsWith("Faraday (") &&
 								row.active === true,
 						);
 						if (ours) setProvider(ours.provider);
@@ -349,7 +356,7 @@ window.__ModuleLoader__.load({
 
 				const disclosure = PROVIDER_DISCLOSURE[provider] ?? {
 					label: `Model plane — ${provider}`,
-					title: `Blind Flange is answering from the ${provider} provider.`,
+					title: `Faraday is answering from the ${provider} provider.`,
 				};
 
 				return jsx(Pill, {
@@ -964,7 +971,7 @@ window.__ModuleLoader__.load({
 					return entry.sealed === false
 						? {
 								headline: "Seal opened",
-								detail: "Blind Flange stopped denying outbound calls. Recorded here because the operator did it.",
+								detail: "Faraday stopped denying outbound calls. Recorded here because the operator did it.",
 							}
 						: { headline: "Seal closed", detail: "Outbound calls are denied again." };
 				case "permitted":
@@ -982,12 +989,12 @@ window.__ModuleLoader__.load({
 								headline: "Left the application — stopped outside it",
 								detail: `${target} was attempted and nothing came back. ${
 									typeof entry.detail === "string" && entry.detail !== "" ? entry.detail : "No response."
-								} Whatever refused this was not Blind Flange.`,
+								} Whatever refused this was not Faraday.`,
 							};
 				default:
 					return {
 						headline: "Denied",
-						detail: `${tool} tried to reach ${target}. Blind Flange denied it before it ran.`,
+						detail: `${tool} tried to reach ${target}. Faraday denied it before it ran.`,
 					};
 			}
 		}
@@ -1197,7 +1204,7 @@ function auditLine(entry) {
 										}
 									},
 									title: open
-										? "Close the seal. Blind Flange goes back to denying every outbound call."
+										? "Close the seal. Faraday goes back to denying every outbound call."
 										: "Open the seal. This workbench will be allowed to make real outbound calls, and each one is recorded.",
 									style: {
 										position: "relative",
@@ -1305,7 +1312,7 @@ function auditLine(entry) {
 					? "Checking whether the seal is closed."
 					: sealState.sealed
 						? "Sealed. Outbound calls are denied before they run."
-						: "The seal is OPEN. Outbound calls are not being denied by Blind Flange.";
+						: "The seal is OPEN. Outbound calls are not being denied by Faraday.";
 				const body = !ready
 					? jsx("span", { style: SECONDARY, children: "Waiting for a session." })
 					: jsxs("div", {
@@ -1501,7 +1508,7 @@ function auditLine(entry) {
 								style: { flex: "1 1 auto" },
 								children: [
 									jsx("strong", { children: "The egress seal is open." }),
-									" Outbound calls are not being blocked by Blind Flange.",
+									" Outbound calls are not being blocked by Faraday.",
 								],
 							}),
 							jsx(Button, {
@@ -1657,7 +1664,7 @@ function auditLine(entry) {
 				} else if (ready.length > 0) {
 					tone = "success";
 					label = `VRAM ${ready.map(shown).join(", ")}`;
-					title = `Resident in GPU memory: ${ready.map(shown).join(", ")}. Read from llama-swap, not tracked by Blind Flange.`;
+					title = `Resident in GPU memory: ${ready.map(shown).join(", ")}. Read from llama-swap, not tracked by Faraday.`;
 				}
 
 				const items = [];
@@ -1877,7 +1884,7 @@ function auditLine(entry) {
 			 *
 			 * `refused` and `stoppedOutside` are both good news and both red, but
 			 * they are emphatically not the same fact, and the button must never
-			 * report one as the other: in the first, Blind Flange stopped the call
+			 * report one as the other: in the first, Faraday stopped the call
 			 * and wrote the record; in the second the call genuinely left this
 			 * process and something outside it — a host firewall, an unplugged
 			 * cable — refused it, and we can claim no credit and no record. The
@@ -1893,9 +1900,9 @@ function auditLine(entry) {
 			const COPY = {
 				idle: "Fire the canary: attempt a real outbound connection and watch what happens to it.",
 				firing: "Firing the canary — attempting an outbound connection.",
-				refused: "Denied by Blind Flange before the call ran, and written to the audit log.",
+				refused: "Denied by Faraday before the call ran, and written to the audit log.",
 				stoppedOutside:
-					"The call left Blind Flange and nothing came back within three seconds. Whatever refused it was outside this application — Blind Flange did not.",
+					"The call left Faraday and nothing came back within three seconds. Whatever refused it was outside this application — Faraday did not.",
 				reached: "The call REACHED the internet. The seal was open and nothing stopped it.",
 				failed: "The canary could not be fired. The host did not answer.",
 			};
@@ -1996,7 +2003,7 @@ function auditLine(entry) {
 		 */
 		function holdTabTitle() {
 			const HOST_PRODUCT_TITLE = "DeepSeek Harness";
-			const OUR_PRODUCT_TITLE = "Blind Flange";
+			const OUR_PRODUCT_TITLE = "Faraday";
 
 			function correct() {
 				const current = document.title;
@@ -2557,10 +2564,10 @@ function auditLine(entry) {
 			const SealBand = buildSealBand(ctx);
 			const ProvenanceView = buildProvenanceView();
 			const disposeSidebarMark = ctx.slots.inject("sidebar.brand.mark", function* () {
-				yield ctx.slots.register({ name: "sidebar.brand.mark" }, BlindFlangeMark);
+				yield ctx.slots.register({ name: "sidebar.brand.mark" }, FaradayMark);
 			});
 			const disposeHeroMark = ctx.slots.inject("conversation.hero.brand.mark", function* () {
-				yield ctx.slots.register({ name: "conversation.hero.brand.mark" }, BlindFlangeMark);
+				yield ctx.slots.register({ name: "conversation.hero.brand.mark" }, FaradayMark);
 			});
 			// `conversation.hero.agentPreset` is a child slot the hero declares once
 			// it renders, not a standing seam: registering before that declaration

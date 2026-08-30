@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// Blind Flange (SIH26117) — bring the workbench up from a clean clone.
+// Faraday (SIH26117) — bring the workbench up from a clean clone.
 //
 // One command, `npm start`, from the repository root. It installs the pinned
 // harness if it is missing, points both profiles at this checkout's plugin
@@ -80,7 +80,7 @@ function portIsBusy(candidate) {
 
 /** Stop with a message a human can act on rather than a stack trace. */
 function fail(message) {
-  console.error(`\nBlind Flange setup stopped: ${message}\n`)
+  console.error(`\nFaraday setup stopped: ${message}\n`)
   process.exit(1)
 }
 
@@ -236,13 +236,13 @@ function seedWorkspace() {
     global: { initialized: true, workspaceIds: [id], archivedSessionIds: [] },
     tables: {
       workspaces: {
-        [id]: { path: realpathSync(repoRoot), title: 'Blind Flange', sessionIds: [], createdAt: now, updatedAt: now },
+        [id]: { path: realpathSync(repoRoot), title: 'Faraday', sessionIds: [], createdAt: now, updatedAt: now },
       },
     },
   }
   mkdirSync(dirname(target), { recursive: true })
   writeFileSync(target, `${JSON.stringify(registry, null, 2)}\n`, 'utf8')
-  say(`  one workspace, "Blind Flange", at ${registry.tables.workspaces[id].path}`)
+  say(`  one workspace, "Faraday", at ${registry.tables.workspaces[id].path}`)
 }
 
 // ── 1. prerequisites ────────────────────────────────────────────────────────
@@ -352,7 +352,7 @@ const port = forwarded.includes('--port') ? forwarded[forwarded.indexOf('--port'
 if (await portIsBusy(port)) {
   fail(
     `something is already listening on 127.0.0.1:${port}.\n\n` +
-      '  Almost always Blind Flange itself, still running from an earlier start — try\n' +
+      '  Almost always Faraday itself, still running from an earlier start — try\n' +
       `  opening http://127.0.0.1:${port} before starting another one.\n\n` +
       '  Otherwise: close the other window, or start this one on a different port with\n' +
       `  \`npm start -- --port ${Number(port) + 1}\`.`,

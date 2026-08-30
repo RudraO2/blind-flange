@@ -88,7 +88,7 @@ class _SealedHTTPError(RuntimeError):
 
 def _sealed_get(*_args, **_kwargs):
     raise _SealedHTTPError(
-        "Blind Flange sealed `requests` out of the OCR path. RapidOCR reached for the "
+        "Faraday sealed `requests` out of the OCR path. RapidOCR reached for the "
         "network — its model downloader or its load-from-URL branch. Neither is reachable "
         "here: the models ship inside the wheel and images arrive as PIL objects. See "
         "docs/licence-policy.md and services/ingestion/LICENCES.md."
@@ -135,7 +135,7 @@ def _seal_out_http() -> None:
 
             def __init__(self, *_args, **_kwargs):
                 raise _SealedHTTPError(
-                    "Blind Flange sealed `tqdm` out of the OCR path — it is only reached "
+                    "Faraday sealed `tqdm` out of the OCR path — it is only reached "
                     "from RapidOCR's model downloader, which never runs here."
                 )
 

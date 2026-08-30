@@ -58,7 +58,7 @@ export function lastGenuineUserMessage(messages) {
  * never typed.
  *
  * Two kinds, and both had to go. The skill catalogue (`skill-catalog`) came
- * first: Blind Flange disables every skill row it can, so a catalogue is
+ * first: Faraday disables every skill row it can, so a catalogue is
  * describing capabilities this workbench does not offer, and on 30 August 2026
  * "summarise the findings in the inspection report" came back as a summary of
  * the skill list.
@@ -71,7 +71,7 @@ export function lastGenuineUserMessage(messages) {
  * approval policy and presented it as the contents of the document. Removing
  * one source of unrequested text and leaving the other just moved the failure.
  *
- * Blind Flange can afford to drop it where a general agent could not. Its lanes
+ * Faraday can afford to drop it where a general agent could not. Its lanes
  * do not browse a filesystem: the coding lane is constrained to a JSON schema
  * and runs one command, and the document lane is fed OCR text. Neither reasons
  * about the workspace path.

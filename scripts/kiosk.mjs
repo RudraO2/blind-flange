@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// Blind Flange (SIH26117) — start the workbench in kiosk mode.
+// Faraday (SIH26117) — start the workbench in kiosk mode.
 //
 // `npm run kiosk`, which is what `run.bat` does when double-clicked. Starts
 // the workbench, waits for it to actually answer, and opens it fullscreen with
@@ -75,7 +75,7 @@ async function waitForWorkbench(deadlineMs = 120_000) {
 
 // ── the server ──────────────────────────────────────────────────────────────
 
-say('\n  Starting Blind Flange. The workbench will open fullscreen when it is ready.')
+say('\n  Starting Faraday. The workbench will open fullscreen when it is ready.')
 say('  Close it with Alt+F4, or stop everything here with Ctrl+C.\n')
 
 const server = spawn(

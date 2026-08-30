@@ -239,7 +239,7 @@ test("taps index.html to swap the shipped title and favicon link for ours", () =
 	apply(ctx);
 	const shipped = '<head><link rel="icon" type="image/svg+xml" href="/favicon.svg" /><title>DeepSeek Harness</title></head>';
 	const rendered = renderThroughTaps(taps, shipped);
-	assert.ok(rendered.includes("<title>Blind Flange</title>"), "title was not swapped");
+	assert.ok(rendered.includes("<title>Faraday</title>"), "title was not swapped");
 	assert.ok(!rendered.includes("DeepSeek Harness"), "the DeepSeek Harness title text is still present");
 	assert.ok(rendered.includes('href="/blind-flange/favicon.svg"'), "favicon href was not swapped");
 });

@@ -98,7 +98,7 @@ test("announceRefusals states one error line per refusal and returns the array",
 	announceRefusals.reset();
 	const lines = [];
 	const refused = [
-		{ name: "acme/x", licence: "AGPL-3.0", reason: "Blind Flange refuses to load \"acme/x\": its licence \"AGPL-3.0\" ..." },
+		{ name: "acme/x", licence: "AGPL-3.0", reason: "Faraday refuses to load \"acme/x\": its licence \"AGPL-3.0\" ..." },
 	];
 	const returned = announceRefusals(refused, (m) => lines.push(m));
 	assert.equal(lines.length, 1);

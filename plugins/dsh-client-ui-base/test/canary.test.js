@@ -40,7 +40,7 @@ function stubTools(result) {
 }
 
 /** A denial, shaped the way the harness materialises a `{ kind: 'deny' }` verdict. */
-const DENIED = { isError: true, error: { message: "Blind Flange denies outbound network access" }, content: [] };
+const DENIED = { isError: true, error: { message: "Faraday denies outbound network access" }, content: [] };
 
 test("the default target is a real address, not a placeholder the seal would never be tested against", () => {
 	const url = new URL(DEFAULT_CANARY_TARGET);

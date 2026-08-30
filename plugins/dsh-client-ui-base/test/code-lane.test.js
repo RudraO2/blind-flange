@@ -158,7 +158,7 @@ test("describeVerdict says who decided, so a reader can check it", () => {
 	const agreed = describeVerdict(verdictFor("5050", "5050"));
 	assert.match(agreed, /predicted "5050"/);
 	assert.match(agreed, /sandbox computed "5050"/);
-	assert.match(agreed, /Blind Flange compared them/);
+	assert.match(agreed, /Faraday compared them/);
 	assert.match(describeVerdict(verdictFor("5050", "1")), /predicted "5050" but the sandbox computed "1"/);
 });
 

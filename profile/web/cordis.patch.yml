@@ -2,7 +2,7 @@
 # a top-level YAML array of loader patch entries (id-targeted config
 # overrides, disables, and insert lists; `!!js` expressions allowed).
 #
-# Blind Flange (SIH26117). THIS COPY, in the project repo under `profile/`, is
+# Faraday (SIH26117). THIS COPY, in the project repo under `profile/`, is
 # the source of truth. `npm start` (scripts/start.mjs) copies it over the
 # profile's own file, so an edit made here reaches the next start and an edit
 # made in $DSH_HOME is overwritten by it. docs/profile-install.md explains what
@@ -27,7 +27,7 @@
 
 # Story 1.2: no network-capable tool anywhere in the tool list. The tool
 # itself (`tool-web`) is mounted per agent preset, not here — sealing it took
-# Blind Flange copies of every built-in preset that carried it (see
+# Faraday copies of every built-in preset that carried it (see
 # ~/.dsh/.agent-presets/blind-flange-*). These two rows close the host-side
 # surface the presets' tool-web used to reach: no search provider left
 # configured, no "Add an API key" prompt, nothing live in Settings > Plugins.
@@ -52,7 +52,7 @@
 - id: llm-pi-ai
   disabled: true
 
-# Story 1.4: the workbench introduces itself as Blind Flange. The host-level
+# Story 1.4: the workbench introduces itself as Faraday. The host-level
 # persona row (`packages/bundle/web-app/cordis.patch.yml`'s `system-prompt`
 # id) is the deployment default a rosterless session would fall back to, and
 # it is what `dsh --profile web --dump-config` actually shows — the four
@@ -64,7 +64,7 @@
 - id: system-prompt
   config:
     persona: >-
-      You are Blind Flange, a sovereign industrial knowledge-work workbench running
+      You are Faraday, a sovereign industrial knowledge-work workbench running
       entirely offline on the {{model}} model within the DeepSeek Harness. Your working
       directory is {{cwd}}.
 
@@ -78,7 +78,7 @@
 # on boot — intermittent, since load order between an inserted row and the
 # bundle's own isn't guaranteed. Disabling this row removes the race outright
 # rather than winning it by luck. Side-effect: the "default preset" row in
-# Settings > General disappears. That is safe here: Blind Flange routes
+# Settings > General disappears. That is safe here: Faraday routes
 # automatically and the operator never picks a preset manually.
 - id: ui-agent-preset
   disabled: true
@@ -121,7 +121,7 @@
 # was the only substantial text in its window. It was not hallucinating; it
 # answered about what it was given.
 #
-# Blind Flange offers no skills, so a catalogue of them is describing
+# Faraday offers no skills, so a catalogue of them is describing
 # capabilities this workbench does not have. Both remaining rows go off. The
 # plugin also filters the injection in `lib/model-plane/injected.js`, because a
 # profile row is a deployment choice and the seal should not depend on one.

@@ -135,7 +135,7 @@ const NPM_ROOTS = [
 	},
 	{
 		id: "ours",
-		label: "Blind Flange's own packages",
+		label: "Faraday's own packages",
 		path: join(PROJECT_ROOT, "plugins"),
 		role: "runtime",
 	},

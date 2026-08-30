@@ -104,7 +104,7 @@ export function createCanaryTool(target, fetchImpl) {
 		name: CANARY_TOOL_NAME,
 		description:
 			"Deliberately attempt an outbound network connection so the egress denial can be watched refusing it. " +
-			"Blind Flange denies this call; it exists as the calibration for the egress monitor, not as a way to reach the network.",
+			"Faraday denies this call; it exists as the calibration for the egress monitor, not as a way to reach the network.",
 		parameters: {
 			type: "object",
 			properties: {

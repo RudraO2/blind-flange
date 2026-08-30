@@ -1,4 +1,4 @@
-# Blind Flange (SIH26117): the `code` task-type preset, mounted once per
+# Faraday (SIH26117): the `code` task-type preset, mounted once per
 # process. Story 1.4 replaces the generic "PTC mode" identity with this task
 # type; the underlying composition below is unchanged from the sealed
 # `blind-flange-ptc` preset it superseded.
@@ -35,7 +35,7 @@
   name: '@deepseek-ai/dsh-persona'
   config:
     text: >-
-      You are Blind Flange, a sovereign industrial knowledge-work workbench running entirely
+      You are Faraday, a sovereign industrial knowledge-work workbench running entirely
       offline on the {{model}} model within the DeepSeek Harness. Your working directory is
       {{cwd}}. This session handles code work, presented through the Code Mode SDK so you can
       combine multi-step operations into one TypeScript program.
@@ -250,7 +250,7 @@
   config:
     allowParallelInProgress: true
 
-# Blind Flange (SIH26117): sealed workbench, no network-capable tool. Disabling
+# Faraday (SIH26117): sealed workbench, no network-capable tool. Disabling
 # the row (not just fetch: false) removes it from the tool list entirely,
 # rather than leaving a listed tool that fails at execution.
 - id: tool-web

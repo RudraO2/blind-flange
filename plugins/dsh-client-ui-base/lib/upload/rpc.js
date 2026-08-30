@@ -89,7 +89,7 @@ export function createUploadRpcHandler({ endpoint = DEFAULT_INGESTION_ENDPOINT, 
 		if (ingestionTargetFor(filename) === null) {
 			return failure(
 				"unsupported-type",
-				`Blind Flange reads scanned PDFs and images. "${filename}" is neither ` +
+				`Faraday reads scanned PDFs and images. "${filename}" is neither ` +
 					`(accepted: ${ACCEPTED_UPLOAD_EXTENSIONS.join(", ")}).`,
 			);
 		}

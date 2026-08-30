@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// Blind Flange (SIH26117) — is this install actually working?
+// Faraday (SIH26117) — is this install actually working?
 //
 // `npm run doctor`. Written for the person who just cloned this and wants to
 // know whether it is set up correctly before trusting anything it shows them.
@@ -73,7 +73,7 @@ function versionAtLeast(actual, minimum) {
   return true
 }
 
-console.log('Blind Flange — checking this install')
+console.log('Faraday — checking this install')
 console.log(`  repository   ${repoRoot}`)
 console.log(`  harness home ${dshHome}${process.env.DSH_HOME ? ' (from DSH_HOME)' : ''}`)
 

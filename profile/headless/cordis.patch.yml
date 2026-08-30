@@ -2,7 +2,7 @@
 # a top-level YAML array of loader patch entries (id-targeted config
 # overrides, disables, and insert lists; `!!js` expressions allowed).
 #
-# Blind Flange (SIH26117). THIS COPY, in the project repo under `profile/`, is
+# Faraday (SIH26117). THIS COPY, in the project repo under `profile/`, is
 # the source of truth. `npm start` (scripts/start.mjs) copies it over the
 # profile's own file, so an edit made here reaches the next start and an edit
 # made in $DSH_HOME is overwritten by it. docs/profile-install.md explains what
@@ -30,7 +30,7 @@
 #
 # `tool-web` must be disabled here as well, which the web profile does not
 # need: there, the tool is mounted per agent preset and sealing it meant
-# Blind Flange copies of the presets that carried it. The headless profile has
+# Faraday copies of the presets that carried it. The headless profile has
 # no presets — dsh-base mounts `tool-web` directly — and disabling only the
 # `web` service it depends on makes it hang the boot with
 # "dsh-tool-web: pending (waiting for service: web)" rather than going away.

@@ -234,7 +234,7 @@ function loadProvenanceView(states) {
 
 	let registered;
 	const context = {
-		document: { title: "Blind Flange", querySelector: () => null },
+		document: { title: "Faraday", querySelector: () => null },
 		console: { error: () => {}, warn: () => {} },
 		window: { __ModuleLoader__: { load: (entry) => { registered = entry; } } },
 	};

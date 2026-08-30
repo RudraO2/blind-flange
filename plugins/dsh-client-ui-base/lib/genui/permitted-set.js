@@ -5,7 +5,7 @@
  * the model a ```dsh-ui fence and renders the fenced JSON inline in the reply.
  * The plugin's own whitelist is 30-odd component types wide: quizzes, forms,
  * media players, mermaid diagrams and WebGL scenes among them. This file is
- * the narrower list Blind Flange allows, and the check that holds us to it.
+ * the narrower list Faraday allows, and the check that holds us to it.
  *
  * **Tables, charts and plots only.** The reasoning is the story's own: a
  * component type nobody demos is a component type nobody audited, and every
@@ -35,7 +35,7 @@
  */
 
 /**
- * The component types a Blind Flange fence may use.
+ * The component types a Faraday fence may use.
  *
  * `table` carries the key findings; `chart` (bars/line/donut) and `plot` are
  * the two shapes the story's acceptance criteria name beside it. All three

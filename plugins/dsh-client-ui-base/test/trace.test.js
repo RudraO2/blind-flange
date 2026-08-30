@@ -42,7 +42,7 @@ async function startStub(running, { health = true } = {}) {
 	};
 }
 
-const READY = [{ model: "bf-coder", state: "ready", ttl: 300, name: "Blind Flange — coder (1.5B)", cmd: "D:/ai/... --model x.gguf", proxy: "" }];
+const READY = [{ model: "bf-coder", state: "ready", ttl: 300, name: "Faraday — coder (1.5B)", cmd: "D:/ai/... --model x.gguf", proxy: "" }];
 
 test("turn state records how the text was obtained and what ran, in order", () => {
 	clearTurn();
@@ -71,7 +71,7 @@ test("the channel reports what is resident, dropping the fields that would misle
 		assert.equal(result.ok, true);
 		assert.equal(result.value.runtimeReachable, true);
 		assert.deepEqual(result.value.residency, [
-			{ model: "bf-coder", state: "ready", name: "Blind Flange — coder (1.5B)", ttl: 300 },
+			{ model: "bf-coder", state: "ready", name: "Faraday — coder (1.5B)", ttl: 300 },
 		]);
 		// `cmd` carries absolute weights paths that are noise on screen, and `proxy`
 		// is llama-swap's *configured* value — the empty string whenever the config

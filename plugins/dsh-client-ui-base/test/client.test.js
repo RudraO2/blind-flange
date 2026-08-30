@@ -392,7 +392,7 @@ test("the provider disclosure names an unrecognised provider rather than guessin
 	assert.match(JSON.stringify(span.props.children), /Local/);
 });
 
-test("the registered mark renders an svg path with fill=currentColor, not a hand-rolled hex", () => {
+test("the registered mark renders the Faraday paths in currentColor, not a hand-rolled hex", () => {
 	const { exports } = loadClientHalf((specifier) => healthyHostModules[specifier]);
 	const { ctx, registered } = stubSlots();
 	exports.apply(ctx);
@@ -401,8 +401,19 @@ test("the registered mark renders an svg path with fill=currentColor, not a hand
 	assert.equal(svg.type, "svg");
 	assert.equal(svg.props.width, 20);
 	assert.equal(svg.props.className, "hero-mark");
-	assert.equal(svg.props.children.type, "path");
-	assert.equal(svg.props.children.props.fill, "currentColor");
+	assert.equal(svg.props.viewBox, "0 0 1254 1254");
+	// The artwork is authored at 1254pt and drawn through the exported group
+	// transform; rescaling the coordinates by hand would risk shifting the curves.
+	const group = svg.props.children;
+	assert.equal(group.type, "g");
+	assert.match(group.props.transform, /translate\(0,1254\) scale\(0\.1,-0\.1\)/);
+	const paths = group.props.children;
+	assert.ok(Array.isArray(paths) && paths.length > 0, "the mark should draw at least one path");
+	for (const path of paths) {
+		assert.equal(path.type, "path");
+		assert.equal(path.props.fill, "currentColor", "the mark takes the theme foreground, never a colour of ours");
+		assert.ok(path.props.d.length > 0);
+	}
 });
 
 test("registers the task-type indicator into conversation.hero.agentPreset once the slot is declared", () => {
@@ -862,7 +873,7 @@ test("puts the tab title back when the harness rewrites it after hydration", () 
 		initialTitle: "DeepSeek Harness",
 	});
 	exports.apply(stubSlots().ctx);
-	assert.equal(document.title, "Blind Flange");
+	assert.equal(document.title, "Faraday");
 });
 
 test("keeps the session title and replaces only the product half", () => {
@@ -870,7 +881,7 @@ test("keeps the session title and replaces only the product half", () => {
 		initialTitle: "Inspection report — DeepSeek Harness",
 	});
 	exports.apply(stubSlots().ctx);
-	assert.equal(document.title, "Inspection report — Blind Flange");
+	assert.equal(document.title, "Inspection report — Faraday");
 });
 
 test("warns rather than failing silently when there is no MutationObserver to watch with", () => {
@@ -988,14 +999,14 @@ test("a denied canary reads as denied and shows the same red the monitor shows",
 	const dot = element.props.children.props.children[0];
 	assert.equal(dot.type, PRIMITIVES.StateDot);
 	assert.equal(dot.props.state, "error");
-	assert.match(element.props.title, /Denied by Blind Flange/);
+	assert.match(element.props.title, /Denied by Faraday/);
 	assert.match(element.props.title, /written to the audit log/);
 });
 
 test("a call stopped outside the application is not reported as our denial", () => {
 	// The seal was open, the call genuinely left this process, and a host
 	// firewall discarded it. Red, because an attempt was stopped — but the
-	// sentence must not claim Blind Flange stopped it or wrote a record, because
+	// sentence must not claim Faraday stopped it or wrote a record, because
 	// our waterfall never ran and the counter beside this button will not move.
 	const { exports } = loadClientHalf(hostModulesWithSeatedState("stoppedOutside"));
 	const { ctx, registered } = stubSlots();
@@ -1003,7 +1014,7 @@ test("a call stopped outside the application is not reported as our denial", () 
 	const element = findCanary(registered).component({ sessionId: "s1" });
 	assert.equal(element.props.children.props.children[0].props.state, "error");
 	assert.match(element.props.title, /outside this application/);
-	assert.doesNotMatch(element.props.title, /Denied by Blind Flange/);
+	assert.doesNotMatch(element.props.title, /Denied by Faraday/);
 });
 
 test("a canary that reached the internet says so on the button itself", () => {

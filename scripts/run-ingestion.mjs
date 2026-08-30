@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// Blind Flange (SIH26117) — start the Python ingestion service.
+// Faraday (SIH26117) — start the Python ingestion service.
 //
 // `npm run ingestion`. A thin launcher so the service starts the same way on
 // every machine without anyone having to remember where the virtual
