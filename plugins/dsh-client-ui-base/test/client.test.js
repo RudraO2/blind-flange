@@ -373,10 +373,11 @@ test("occupies both places the DeepSeek whale used to render, and the hero's tas
 		"conversation.hero.agentPreset",
 		"conversation.hero.brand.mark",
 		// The composer menu, at the head of the tool row, standing in for the
-		// harness's own `+`: the document first, the commands under one row that
-		// opens on hover. Nothing of ours is left at the send-button end of the
-		// row — the canary went on 30 August 2026 (ADR-0007) and the upload
-		// control moved into this menu.
+		// harness's own `+`: attach an image first, the commands under one row
+		// that opens on hover. Nothing of ours is left at the send-button end of
+		// the row — the canary went on 30 August 2026 (ADR-0007) and the upload
+		// control moved into this menu, then became an attach row on the 31st
+		// when ADR-0008 handed the file to the harness's own attachment draft.
 		"conversation.input.left",
 		"conversation.input.model",
 		// One chip left in the session header: the provider disclosure, which
@@ -384,8 +385,9 @@ test("occupies both places the DeepSeek whale used to render, and the hero's tas
 		// monitor moved to the sidebar foot (root-scoped, so it survives a new
 		// chat) and residency moved into the drawer.
 		"conversation.session.header.utilities",
-		// Story 4.5's crop viewer — a whole tab, not a chip.
-		"conversation.view",
+		// Story 4.5's crop viewer took a `conversation.view` tab until
+		// 31 August 2026; ADR-0008 removed it with the OCR service it read from,
+		// so no tab of ours is registered any more.
 		// Three overlay seats: the Sovereignty drawer, the notice that announces a
 		// denial for eight seconds, and the band that takes space at the top of
 		// the window for as long as the seal is open.
@@ -1265,6 +1267,36 @@ test("a seal change landing in the same instant is not announced as a refusal", 
 	assert.match(JSON.stringify(findNotice(registered).component({})), /web\.whatsapp\.com/);
 });
 
+test("opening a session that already carried denials announces none of them", () => {
+	// The defect this covers, observed 31 August 2026: the notice watched the
+	// session's denial *count*, and a count is a property of one session. Opening
+	// or switching to a conversation that already carried denials read as a rise
+	// — 0 to 2 — and an "Outbound call denied … web.whatsapp.com" card appeared
+	// over a session that had made no such call. A session's log streaming in
+	// after first render did the same thing.
+	//
+	// The fix watches the log's own monotonic `seq` and re-seats its baseline
+	// when the session changes, so "have I announced this one?" has an answer
+	// that does not depend on how many there are or which session is open.
+	const source = readFileSync(join(packageDir, "lib", "client.js"), "utf8");
+	const section = source.slice(source.indexOf("function buildDenialNotice"), source.indexOf("function holdTabTitle"));
+	// Freshness, not arithmetic on a count. Re-seating a baseline against the
+	// session id was tried first and still fired: `current` and the session's own
+	// snapshot do not arrive in the same render, so the new session's log lands
+	// one render later looking exactly like a jump.
+	assert.match(section, /Date\.now\(\) - time > NOTICE_FRESH_MS/, "a denial must be announced on when it happened");
+	assert.match(section, /announced\.current === latestSeq/, "one denial must be announced once, not on every render in the window");
+	assert.doesNotMatch(section, /count <= before/, "watching the count is the defect this replaced");
+	assert.match(source, /const NOTICE_FRESH_MS = \d+;/, "the freshness window must be a named constant");
+});
+
+test("the seal row's own flash is scoped to a session for the same reason", () => {
+	const source = readFileSync(join(packageDir, "lib", "client.js"), "utf8");
+	assert.match(source, /function useRecentIncrease\(value, scope\)/, "the hook must take the session it is counting for");
+	assert.match(source, /useRecentIncrease\(count, current\)/, "the seal row must pass its session");
+	assert.match(source, /if \(before\.scope !== scope\) return undefined;/, "a change of session must re-seat rather than flash");
+});
+
 test("the notice sets no colour of its own — the state dot carries it through theme tokens", () => {
 	const source = readFileSync(join(packageDir, "lib", "client.js"), "utf8");
 	const section = source.slice(source.indexOf("function buildDenialNotice"), source.indexOf("function holdTabTitle"));
@@ -1484,7 +1516,7 @@ test("the composer menu takes the head of the tool row, where the shipped + was"
 	);
 });
 
-test("it opens the shipped Menu with the document first and the commands under one row", () => {
+test("it opens the shipped Menu with the attach row first and the commands under one row", () => {
 	const { exports } = loadClientHalf((specifier) => healthyHostModules[specifier]);
 	const { ctx, registered } = stubSlots();
 	exports.apply(ctx);
@@ -1498,8 +1530,8 @@ test("it opens the shipped Menu with the document first and the commands under o
 	// `join` rather than deepEqual: the client half runs in a `vm` context, so an
 	// array it built has a different Array.prototype and deepStrictEqual rejects
 	// it as "not reference-equal" however identical the contents are.
-	assert.equal(menu.props.items.map((item) => item.id).join(","), "bf-upload,bf-sep,bf-commands");
-	assert.equal(menu.props.items[0].label, "Upload a document");
+	assert.equal(menu.props.items.map((item) => item.id).join(","), "bf-attach,bf-sep,bf-commands");
+	assert.equal(menu.props.items[0].label, "Attach an image");
 	assert.equal(menu.props.items[1].type, "separator");
 	assert.equal(menu.props.items[2].label, "Commands");
 });
@@ -1539,7 +1571,7 @@ test("with no commands in the directory the row is disabled rather than opening 
 	assert.equal(row.disabled, true);
 });
 
-test("choosing the document opens the file picker rather than sending anything", () => {
+test("choosing attach opens the file picker rather than sending anything", () => {
 	const { exports } = loadClientHalf((specifier) => healthyHostModules[specifier]);
 	const { ctx, registered } = stubSlots();
 	exports.apply(ctx);
@@ -1551,7 +1583,23 @@ test("choosing the document opens the file picker rather than sending anything",
 	const flat = JSON.stringify(menu.props.anchor);
 	assert.match(flat, /"type":"file"/);
 	assert.match(flat, /"aria-hidden":"true"/);
-	assert.match(flat, /\.pdf/, "every accepted extension is offered");
+	// Only what the harness's own attachment path admits — PNG, JPEG, WebP, GIF
+	// (ADR-0008). PDF was accepted while we ran our own OCR service; offering it
+	// now would put the refusal after the picker instead of inside it.
+	assert.match(flat, /image\/png/);
+	assert.doesNotMatch(flat, /\.pdf/, "the OCR service that read PDFs is gone");
+});
+
+test("the picked image is handed to the harness's own draft rather than uploaded by us", () => {
+	// The harness already validates, commits, thumbnails and renders attached
+	// images; it listens for `paste` on the composer and takes any image it finds
+	// there. This control exists to make that discoverable, not to duplicate it,
+	// so it synthesises the event the harness is already listening for — the same
+	// choice `typeIntoComposer` makes for commands.
+	const source = readFileSync(join(packageDir, "lib", "client.js"), "utf8");
+	assert.match(source, /function handToComposer/);
+	assert.match(source, /new ClipboardEvent\("paste"/);
+	assert.doesNotMatch(source, /bf-upload/, "no upload channel of ours may remain");
 });
 
 test("picking a command types it on the composer's line rather than executing it", () => {

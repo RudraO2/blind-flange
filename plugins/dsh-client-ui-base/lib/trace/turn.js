@@ -18,36 +18,37 @@
  * egress rather than saying something from a different source.
  *
  * ponytail: one turn for the whole process, the same ceiling and upgrade path as
- * `router/dispatch.js`, `lanes/code.js` and `findings/attached.js` — Phase 0 is
- * single-session by the product brief's cut line. Four modules now share that
- * assumption, which is itself the argument for a single per-session context
- * object the moment the harness offers a session id at these seams.
+ * `router/dispatch.js` and `lanes/code.js` — Phase 0 is single-session by the
+ * product brief's cut line. Three modules now share that assumption, which is
+ * itself the argument for a single per-session context object the moment the
+ * harness offers a session id at these seams.
  */
 
-/** @type {{ report?: string, source?: string, seconds?: number, findings?: number, detail?: string } | null} */
-let ingestion = null;
+/**
+ * How many pictures the operator attached to this turn.
+ *
+ * This slot held the OCR ingestion result until 31 August 2026, when ADR-0008
+ * removed the OCR service. What replaced it answers the question that actually
+ * matters to somebody reading the trace: did the vision model get the picture,
+ * or is it answering about an image it never saw?
+ * @type {number}
+ */
+let images = 0;
 
 /** @type {Array<{ name: string, outcome?: string, seconds?: number }>} */
 let tools = [];
 
 /**
- * Record how the source text was obtained. Called by the findings tool, which is
- * the only thing that knows whether the service answered or the capture did.
- * @param {{ report?: string, source?: string, seconds?: number, findings?: unknown[], detail?: string }} result
+ * Record how many attached images went to the model this turn.
+ * @param {number} count
  */
-export function recordIngestion(result) {
-	ingestion = {
-		report: result?.report,
-		source: result?.source,
-		seconds: result?.seconds,
-		findings: Array.isArray(result?.findings) ? result.findings.length : undefined,
-		detail: result?.detail,
-	};
+export function recordImages(count) {
+	images = Number.isFinite(count) && count > 0 ? count : 0;
 }
 
-/** How the source text was obtained, or `null` when nothing has read a document this turn. */
-export function lastIngestion() {
-	return ingestion;
+/** How many attached images went to the model this turn; `0` when none did. */
+export function imagesThisTurn() {
+	return images;
 }
 
 /**
@@ -66,6 +67,6 @@ export function toolsRunThisTurn() {
 
 /** Forget it. For tests, and at the start of a fresh turn. */
 export function clearTurn() {
-	ingestion = null;
+	images = 0;
 	tools = [];
 }

@@ -155,8 +155,14 @@ const webPatch = join(dshHome, 'profiles', 'web', 'cordis.patch.yml')
 if (existsSync(webPatch)) {
   const patch = readFileSync(webPatch, 'utf8')
   const provider = patch.match(/provider:\s*(\w+)/)?.[1]
-  if (provider === 'replay') ok('the model plane is set to the replay provider')
-  else if (provider) bad(`the model plane is set to "${provider}", not replay`, 'ADR-0001 keeps `remote` out of every demo. Check profile/web/cordis.patch.yml.')
+  // `local` and `replay` are both sealed: one runs open-weight models on this
+  // machine's GPU through llama-swap, the other answers from the authored cache.
+  // Only `remote` reaches off the box, and ADR-0001 keeps it out of every demo.
+  // This check asserted `replay` until 31 August 2026, which had it failing on
+  // every machine running the local inference lanes it was meant to reassure.
+  if (provider === 'local') ok('the model plane is set to the local provider — real inference on this GPU')
+  else if (provider === 'replay') ok('the model plane is set to the replay provider — answers come from the authored cache')
+  else if (provider) bad(`the model plane is set to "${provider}", which reaches off this machine`, 'ADR-0001 keeps `remote` out of every demo. Check profile/web/cordis.patch.yml.')
   else warn('could not read which model provider the profile selects', 'Check profile/web/cordis.patch.yml by hand.')
 
   if (/web-search/.test(patch) && /disabled:\s*true/.test(patch)) ok('the web-search tool is disabled in the profile')
@@ -181,30 +187,6 @@ if (audit.status === 0) {
   ok(`the licence audit passes — ${count ?? 'all'} components enumerated, every one decided`)
 } else {
   bad('the licence audit fails', `Run \`npm run licence-audit\` to see why.\n         ${(audit.stdout || audit.stderr || '').split('\n').filter(Boolean).slice(-2).join('\n         ')}`)
-}
-
-// ── the optional half ───────────────────────────────────────────────────────
-
-heading('Ingestion service (optional)')
-
-const venvPython = [
-  join(repoRoot, 'services', 'ingestion', '.venv', 'Scripts', 'python.exe'),
-  join(repoRoot, 'services', 'ingestion', '.venv', 'bin', 'python'),
-].find((exe) => existsSync(exe))
-
-if (!venvPython) {
-  warn('not installed — the workbench does not need it', 'Install it with `npm run setup-ingestion` if you want to re-run the OCR yourself.')
-} else {
-  const listed = capture(venvPython, ['-m', 'pip', 'list', '--format=freeze'])
-  const packages = listed.stdout.toLowerCase().split('\n')
-  ok(`installed, ${packages.filter(Boolean).length} packages`)
-  if (packages.some((line) => line.startsWith('shapely=='))) {
-    bad('shapely is installed — its bundled GEOS is LGPL-2.1, outside the allow-list', 'Run `npm run setup-ingestion` again; it removes it deliberately.')
-  } else {
-    ok('shapely is absent, as the licence policy requires')
-  }
-  if (packages.some((line) => line.startsWith('rapidocr=='))) ok('the OCR engine is installed (models ship inside its wheel)')
-  else bad('rapidocr is missing from the virtual environment', 'Run `npm run setup-ingestion`.')
 }
 
 // ── is it up? ───────────────────────────────────────────────────────────────

@@ -22,10 +22,32 @@
  * Each task type owns a list of named rules (a word or a small regex). Every
  * rule that matches the request text contributes one point to its type. The
  * type with the most points wins; ties break by {@link TASK_TYPE_PRIORITY}, a
- * fixed order, so the same request always classifies the same way. A request
- * that matches no rule at all falls back to `document` — the workbench's most
- * common job is reading a report — and the result says so (`matchedRuleCount`
- * is 0).
+ * fixed order, so the same request always classifies the same way.
+ *
+ * **Two things outrank the keywords, because they are facts rather than
+ * guesses.**
+ *
+ * *An attached image.* The fleet has one member that can see
+ * (`modalities: [text, image]`) and one that cannot. If the operator attached a
+ * picture, routing to the text-only coder does not produce a worse answer — it
+ * produces an answer about an image nobody could look at. So an image confines
+ * the decision to the two types the vision member serves, and the keywords only
+ * choose between `document` and `drawing` inside that. `score.js` has always had
+ * the same gate on the far side (`requires: { modality: "image" }`); this is the
+ * near side of it, and until 31 August 2026 the classifier could not see an
+ * attachment at all.
+ *
+ * *A request with no keyword hit at all.* This fell back to `document` until
+ * 31 August 2026, which sent it to the vision member — and the vision member is
+ * not the lane that builds a tool call. Measured that day: "Open WhatsApp and
+ * check the vendor thread" and "Run a shell command in the sandbox that opens
+ * https://web.whatsapp.com" both matched zero rules, both landed on the vision
+ * member, and both were answered conversationally with no tool call — so the
+ * egress waterfall, which is the whole point of that request, was never reached.
+ * An unclassifiable request now falls back to `code`, which is the lane that
+ * reaches for the sandbox. Reading a report is what the *rules* are for, and the
+ * document rules are the broadest set here; a request that trips none of them is
+ * not usually a document question.
  *
  * The output is structured data, not prose: a caller — the session log (Story
  * 3.5), the routing chip (Story 3.7) — renders it, it is never a sentence the
@@ -47,8 +69,26 @@ export const TASK_TYPES = ["document", "drawing", "calculation", "code"];
  */
 export const TASK_TYPE_PRIORITY = ["code", "drawing", "calculation", "document"];
 
-/** The task type a request with no rule hits resolves to. */
-export const FALLBACK_TASK_TYPE = "document";
+/**
+ * The task type a request with no rule hits resolves to when no image is
+ * attached. See the header for why this is `code` rather than `document`.
+ */
+export const FALLBACK_TASK_TYPE = "code";
+
+/**
+ * The fallback when an image *is* attached. Both of these are served by the
+ * vision member; `document` is the more common of the two by a wide margin, and
+ * a drawing question reliably trips the `drawing` rules.
+ */
+export const IMAGE_FALLBACK_TASK_TYPE = "document";
+
+/**
+ * The task types the vision member serves — the only ones a turn carrying an
+ * image may resolve to. Kept here rather than in `score.js` because it is the
+ * same fact stated on the near side of the decision: `score.js` gates on a
+ * member's declared modality, this gates on the request's.
+ */
+export const IMAGE_TASK_TYPES = ["document", "drawing"];
 
 /**
  * Rule sets, one per task type. Each entry is `[name, test]` where `test` is a
@@ -85,6 +125,17 @@ const RULES = {
 		["wall-thickness", /\b(wall\s+thickness|minimum\s+thickness|t-?min|corrosion\s+allowance)\b/],
 		["formula", /\b(formula|equation)\b/],
 		["units", /\b(psi|bar\b|kpa|mpa|m3\/h|kg\/s|kg\/h|mm\/yr|°c|deg\s?c)\b/],
+		// Bare arithmetic, which `docs/router-handoff.md` records as the router's
+		// largest hole: "Sum the integers from 1 to 100" tripped nothing at all and
+		// went to the vision member, which answered it *from memory* instead of
+		// computing it. A confident wrong number in an approval note is worse than
+		// a slow one, and the coding lane exists precisely because a small model is
+		// bad at arithmetic and good at writing `print(sum(range(1, 101)))`.
+		//
+		// `\bsum\b` does not match "summarise" — the boundary is what keeps this
+		// off the document lane's most common verb.
+		["arithmetic-verb", /\b(sum|count|total|average|mean|median|minimum|maximum|round|divisible|percentage)\b/],
+		["how-many", /\bhow\s+many\b/],
 	],
 	code: [
 		["code-noun", /\bcode\b|\bsource\s+code\b/],
@@ -94,6 +145,23 @@ const RULES = {
 		["unit-test", /\bunit\s+tests?\b|\btest\s+coverage\b/],
 		["api-or-cli", /\b(api\s+endpoint|cli\s+command|command-?line\s+tool)\b/],
 		["code-fence", /```/],
+		// The shell itself, however it is named. `api-or-cli` above only ever
+		// matched the exact phrases "cli command" and "command-line tool", so
+		// "run a shell command" scored zero — measured 31 August 2026.
+		["shell", /\b(shell|terminal|powershell|pwsh|cmd|sandbox)\b/],
+		["command-noun", /\bcommands?\b/],
+		// NOT A RULE, DELIBERATELY: a bare action verb — run, open, launch,
+		// execute, install. It was one for about ten minutes on 31 August 2026 and
+		// the bleed was immediate: "open the report" and "run through the
+		// findings" both scored 1-1 against `document` and lost the tie to `code`,
+		// because `code` leads TASK_TYPE_PRIORITY. "open the drawing" was worse —
+		// it routed a drawing question away from the only member that can see.
+		//
+		// Those verbs are ordinary English and too weak to be worth a point. The
+		// case they were added for — "open WhatsApp", "launch the browser",
+		// "install the package" — needs no rule at all, because it trips nothing
+		// else either and the fallback is now `code`. The fallback carries it, and
+		// carries it without taxing every sentence that happens to say "open".
 	],
 };
 
@@ -103,17 +171,21 @@ const RULES = {
  * @property {Record<string, number>} scores           - points per task type, every type present (0 when nothing matched).
  * @property {Record<string, string[]>} matchedRules   - the rule names that fired, grouped by task type.
  * @property {number}                 matchedRuleCount - total rules that fired; 0 means the result is the fallback.
- * @property {boolean}                fallback         - true when no rule fired and `taskType` is {@link FALLBACK_TASK_TYPE}.
+ * @property {boolean}                fallback         - true when no *eligible* rule fired and `taskType` is the fallback.
+ * @property {boolean}                hasImage         - true when the turn carried an attached image, which confined the result to {@link IMAGE_TASK_TYPES}.
  * @property {boolean}                tied             - true when the top score was shared and {@link TASK_TYPE_PRIORITY} broke it.
  */
 
 /**
  * Classify one request into a task type.
  * @param {string} text - the request's plain text (a non-string is treated as empty).
+ * @param {{ hasImage?: boolean }} [options] - `hasImage` when the turn carries an
+ *   attached picture, which confines the result to {@link IMAGE_TASK_TYPES}.
  * @returns {TaskClassification}
  */
-export function classifyRequest(text) {
+export function classifyRequest(text, options = {}) {
 	const haystack = (typeof text === "string" ? text : "").toLowerCase();
+	const hasImage = options?.hasImage === true;
 
 	/** @type {Record<string, number>} */
 	const scores = {};
@@ -131,19 +203,27 @@ export function classifyRequest(text) {
 		matchedRuleCount += hits.length;
 	}
 
-	if (matchedRuleCount === 0) {
+	// An attached image confines the decision to what the vision member serves.
+	// The scores are still reported in full — the routing chip shows the working,
+	// and hiding the excluded types would make the decision less inspectable, not
+	// more.
+	const eligible = hasImage ? IMAGE_TASK_TYPES : TASK_TYPES;
+	const eligibleHits = eligible.reduce((total, type) => total + scores[type], 0);
+
+	if (eligibleHits === 0) {
 		return {
-			taskType: FALLBACK_TASK_TYPE,
+			taskType: hasImage ? IMAGE_FALLBACK_TASK_TYPE : FALLBACK_TASK_TYPE,
 			scores,
 			matchedRules,
-			matchedRuleCount: 0,
+			matchedRuleCount,
 			fallback: true,
 			tied: false,
+			hasImage,
 		};
 	}
 
-	const topScore = Math.max(...TASK_TYPES.map((type) => scores[type]));
-	const leaders = TASK_TYPE_PRIORITY.filter((type) => scores[type] === topScore);
+	const topScore = Math.max(...eligible.map((type) => scores[type]));
+	const leaders = TASK_TYPE_PRIORITY.filter((type) => eligible.includes(type) && scores[type] === topScore);
 	const taskType = leaders[0];
 
 	return {
@@ -153,6 +233,7 @@ export function classifyRequest(text) {
 		matchedRuleCount,
 		fallback: false,
 		tied: leaders.length > 1,
+		hasImage,
 	};
 }
 

@@ -34,7 +34,8 @@ run.bat            set up if needed, then open fullscreen
 run.bat windowed   the same, in an ordinary browser tab
 run.bat check      check the install and stop
 run.bat setup      set up and stop
-run.bat ingestion  install the optional Python OCR service
+run.bat models     download the inference runtime and the two models
+run.bat stop       stop the workbench and the inference runtime
 ```
 
 From a terminal, on any platform, in the repository root:
@@ -61,32 +62,32 @@ npm start -- --port 3081      # any other flag is passed through to the harness
 npm test                      # the plugin package's own tests
 npm run doctor                # check this install and say what, if anything, is wrong
 npm run record-demo           # record the three demo beats from a running workbench
-npm run setup-ingestion       # optional: install the Python OCR service (see below)
-npm run ingestion             # optional: run it
+npm run evaluate              # score the coding lane against hand-written ground truth
 ```
 
 ## What actually runs, and what is replayed
 
 Worth being straight about before you judge what you are looking at.
 
-**Real.** The egress seal and the audit record. The router — it genuinely classifies
-each request and scores the fleet. The sandbox: a coding task really executes. The approval
-note is really written to disk as a `.docx`. The OCR is real PP-OCRv6 inference on the scanned
-report.
+**Real, and running on this machine.** The egress seal and the audit record. The router — it
+genuinely classifies each request and scores the fleet. The sandbox: a coding task really
+executes. The approval note is really written to disk as a `.docx`. And since 30 August 2026
+the model plane is `local`: open-weight models on this box's GPU through llama-swap, which
+loads one at a time and evicts to make room because a GTX 1650 Ti does not hold two. An image
+you attach goes to the vision member as pixels.
 
-**Replayed.** The agent's own prose. Phase 0 answers from the `replay` provider —
-stored responses, disclosed on screen as *Replay — authored responses* the entire time. There
-is no local inference yet: `model-plane/model-provider.js` declares `local` and `remote` and
-both throw, by design, so selecting one later is a config change rather than a rewrite. **No
-model weights are downloaded by anything here, and a GPU changes nothing yet.**
+**Replayed, if you ask for it.** `replay` is still there as the escape hatch — set
+`modelPlane.provider` back to `replay` in the profile patch and restart. Answers then come from
+a hand-authored cache, disclosed on screen as *Replay — authored responses* the whole time.
+Everything except live generation still works, because nothing else depends on which provider
+answered.
 
 That split is deliberate and it is on screen, never hidden. See ADR-0001.
 
 The key findings arrive as a table rather than a paragraph. The table is a **rendering of that
 same replayed text** — the reply carries a `dsh-ui` fence and an adopted plugin
 (`@changfenhuang/dsh-genui`, MIT, pinned at 0.9.3) draws it. Nothing in it is computed live,
-the provider pill still reads *Replay — authored responses* while it is on screen, and each row
-names the page and region it was read from so the Provenance tab can show you the crop.
+the provider pill names the provider that answered while it is on screen.
 
 ## What you should see
 
@@ -107,8 +108,8 @@ Then throw the switch and ask again. The same request reaches the internet, and 
 recorded too. An instrument that can only ever return one answer is not an instrument.
 
 That is the first demo beat. From there the routing chip at the end of the composer names the
-fleet member that answered and why, and the Provenance tab shows the image region each finding
-was actually read from.
+fleet member that answered and why, and an image you paste, drop or attach appears above your
+own message and goes to the vision member as pixels.
 
 ## What the start command does, and what touches the network
 
@@ -141,16 +142,14 @@ the active provider is named on screen at all times.
 
 | Path | What it is |
 |---|---|
-| `run.bat` | The front door on Windows. Double-click it. `run.bat check` / `setup` / `ingestion` for the other paths |
+| `run.bat` | The front door on Windows. Double-click it. `run.bat check` / `setup` / `models` / `stop` for the other paths |
 | `scripts/start.mjs` | The start command. Node builtins only — no dependencies |
 | `scripts/doctor.mjs` | `npm run doctor` — checks the toolchain, the wiring, the seal, the tests and the licence audit |
-| `scripts/setup-ingestion.mjs` | `npm run setup-ingestion` — the optional Python OCR service, in its own virtual environment |
 | `scripts/record-demo.mjs` | `npm run record-demo` — drives a running workbench through the three demo beats and records them. Needs `ffmpeg` on `PATH` |
 | `videos/recorded-offline-run/` | The recording itself, and what it shows second by second |
 | `profile/` | The harness profile's configuration, tracked. The source of truth for what `npm start` writes |
-| `plugins/dsh-client-ui-base/` | Blind Flange itself: the egress seal, model plane, router, provenance viewer and deliverable factory, as one out-of-tree harness plugin |
+| `plugins/dsh-client-ui-base/` | Blind Flange itself: the egress seal, model plane, router, attached-image path and deliverable factory, as one out-of-tree harness plugin |
 | `registry/models.yaml` | The fleet, one row per model, each with the licence it was verified under |
-| `services/ingestion/` | The Python OCR service that turns a scanned report into text with regions |
 | `docs/licence-policy.md` | The licence allow-list, and why it is absolute |
 | `docs/profile-install.md` | Every profile change explained, and how to do it by hand |
 | `CONTEXT.md` | The vocabulary this project uses, and the words it avoids |
@@ -158,26 +157,6 @@ the active provider is named on screen at all times.
 Nothing under the harness's own installation is ever edited. Every change Blind Flange makes is
 a profile patch row or an out-of-tree plugin, which is why an operator's own IT department can
 audit it and why removing it is a config edit rather than a rebuild.
-
-## The ingestion service (optional)
-
-The Python OCR service that turns a scanned report into text with regions. **You do not need it
-to run the demo** — the workbench reads a committed capture of a real response the service
-produced (`plugins/dsh-client-ui-base/lib/findings/sample-report-findings.json`), because the
-two are separate trees and reaching across them at runtime would be a lie about the seam.
-
-Install it if you want to see that capture reproduced on your own machine:
-
-```sh
-npm run setup-ingestion       # needs Python 3.11+ on PATH
-```
-
-It builds a virtual environment under `services/ingestion/.venv`, installs the pinned
-dependencies, and runs the service's own tests. It also **uninstalls `shapely`**, which is not
-housekeeping: RapidOCR pulls it in, its wheel bundles the LGPL-2.1 GEOS libraries, and `ocr.py`
-supplies the two properties RapidOCR actually uses instead. A plain `pip install -r
-requirements.txt` leaves the real package on disk and quietly breaks the licence claim, so the
-installer removes it and `npm run doctor` fails if it ever comes back.
 
 ## If it does not start
 

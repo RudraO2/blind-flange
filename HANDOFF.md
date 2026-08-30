@@ -91,7 +91,7 @@ Five decisions are recorded in `docs/adr/` and the artifact does not yet reflect
   plays a recorded `local` run with the cable pulled as the sovereignty proof. `remote` is
   never active during a demo or a recording.
 - **ADR-0002** — panels before inference. Every differentiator (routing explainer,
-  provenance crops, egress monitor, fan-out, `.docx` factory) needs no large model.
+  attached-image path, egress monitor, fan-out, `.docx` factory) needs no large model.
   Build those first; inference is a swappable dependency. This is what answers "why not
   just Ollama with Open WebUI?" — and it has to answer it visually, in thirty seconds.
 - **ADR-0003** — DeepSeek Harness adopted as the runtime, not just its plugin pattern. MIT,
@@ -107,6 +107,10 @@ Five decisions are recorded in `docs/adr/` and the artifact does not yet reflect
   widens from two to four. Docling's models are CDLA-Permissive-2.0, which is genuinely
   permissive and legally safe but outside the list; the Tesseract stack is Apache-2.0
   throughout and far lighter. `PyMuPDF` is AGPL-3.0 and banned by name — use `pypdfium2`.
+
+**ADR-0005 and its amendment are superseded by ADR-0008 (31 Aug 2026):** the OCR service is
+deleted and an attached image goes to the vision member as pixels. The paragraph below is kept
+because the licence reasoning it records still applies to anything that reintroduces OCR.
 
 **ADR-0005 carries a 28 Aug amendment**: RapidOCR replaced Tesseract as the ingestion engine.
 Tesseract read the degraded fixture at 0.89–0.96 confidence and mangled reference numbers and
@@ -129,8 +133,8 @@ cold clone, and a recorded offline run.
 
 ## Decisions already made — do not reopen
 
-- Own thin frontend, not Open WebUI. The routing explainer, provenance crops and egress
-  monitor do not exist in any off-the-shelf shell and they are the differentiators.
+- Own thin frontend, not Open WebUI. The routing explainer and the egress monitor do not
+  exist in any off-the-shelf shell and they are the differentiators.
 - Fleet constrained to Apache-2.0 / MIT / BSD-2-Clause / BSD-3-Clause licences only. The
   loader refuses anything else. Widened from two licences to four on 28 Aug 2026 by ADR-0005.
 - No fine-tuning. No custom inference engine. No 120B-class model (R11 excuses it).

@@ -29,17 +29,8 @@
 			{
 				"blocks": [
 					{
-						"type": "tool-call",
-						"name": "bf_report_findings",
-						"arguments": {}
-					}
-				]
-			},
-			{
-				"blocks": [
-					{
 						"type": "text",
-						"text": "156 OCR lines came back across 2 pages. Two carry Major severity in Section 3 and are both named again in the Conclusion — those are the key findings:\n\n```dsh-ui\n{\"title\":\"Key findings — sample-inspection-report.pdf\",\"items\":[{\"type\":\"table\",\"columns\":[\"Tag\",\"Finding\",\"Severity\",\"Read from\"],\"rows\":[[\"E-1104A\",\"Cladding open, corrosion under insulation suspected\",\"Major\",\"p1 · 560, 2048 · 814 × 58\"],[\"PSV-2207A\",\"Test tag expired 04-2026, no bench certificate\",\"Major\",\"p1 · 560, 2171 · 876 × 60\"]]}]}\n```\n\nE-1104A: the cladding is open at the channel end and corrosion under insulation is suspected over a 1.2 m run — strip the cladding and UT scan before restart. PSV-2207A: the relief-valve test tag expired 04-2026 and the register holds no current bench certificate against it — withdraw and bench test, fit the spare.\n\nRead from is the page and the region on it each row was read from, written the way the Provenance tab writes it — open that tab and click the finding to see the crop the text came out of.\n\nBoth are cross-referenced in the report's own Conclusion (page 2, region left 178 top 1342 width 2030 height 65): a non-conformance report is to be raised against PSV-2207A, which is operating outside its certification interval."
+						"text": "156 OCR lines came back across 2 pages. Two carry Major severity in Section 3 and are both named again in the Conclusion — those are the key findings:\n\n```dsh-ui\n{\"title\":\"Key findings — sample-inspection-report.pdf\",\"items\":[{\"type\":\"table\",\"columns\":[\"Tag\",\"Finding\",\"Severity\",\"Read from\"],\"rows\":[[\"E-1104A\",\"Cladding open, corrosion under insulation suspected\",\"Major\",\"p1 · 560, 2048 · 814 × 58\"],[\"PSV-2207A\",\"Test tag expired 04-2026, no bench certificate\",\"Major\",\"p1 · 560, 2171 · 876 × 60\"]]}]}\n```\n\nE-1104A: the cladding is open at the channel end and corrosion under insulation is suspected over a 1.2 m run — strip the cladding and UT scan before restart. PSV-2207A: the relief-valve test tag expired 04-2026 and the register holds no current bench certificate against it — withdraw and bench test, fit the spare.\n\nRead from is the page and the region on it each row was read from.\n\nBoth are cross-referenced in the report's own Conclusion (page 2, region left 178 top 1342 width 2030 height 65): a non-conformance report is to be raised against PSV-2207A, which is operating outside its certification interval."
 					},
 					{
 						"type": "tool-call",
@@ -195,11 +186,6 @@
 					{
 						"type": "text",
 						"text": "I'll pull the report's findings and their provenance before drafting the approval note."
-					},
-					{
-						"type": "tool-call",
-						"name": "bf_report_findings",
-						"arguments": {}
 					}
 				]
 			},
@@ -220,13 +206,23 @@
 								{
 									"text": "E-1104A — insulation cladding open at the channel end, corrosion under insulation suspected over a 1.2 m run. Major. Recommended action: strip cladding and UT scan before restart.",
 									"page": 1,
-									"region": { "left": 560, "top": 2048, "width": 814, "height": 58 },
+									"region": {
+										"left": 560,
+										"top": 2048,
+										"width": 814,
+										"height": 58
+									},
 									"tag": "E-1104A"
 								},
 								{
 									"text": "PSV-2207A — relief-valve test tag expired 04-2026, no current bench certificate held against this tag in the register. Major. Recommended action: withdraw and bench test; fit spare.",
 									"page": 1,
-									"region": { "left": 560, "top": 2171, "width": 876, "height": 60 },
+									"region": {
+										"left": 560,
+										"top": 2171,
+										"width": 876,
+										"height": 60
+									},
 									"tag": "PSV-2207A"
 								}
 							]

@@ -15,9 +15,8 @@ rem   run.bat            set up if needed, then open FULLSCREEN (kiosk)
 rem   run.bat windowed   the same, in an ordinary browser tab
 rem   run.bat check      check the install and stop, starting nothing
 rem   run.bat setup      set up and stop, starting nothing
-rem   run.bat ingestion  install the Python OCR service
 rem   run.bat models     download the inference runtime and the two models
-rem   run.bat stop       stop the workbench, the runtime and the OCR service
+rem   run.bat stop       stop the workbench and the inference runtime
 
 cd /d "%~dp0"
 
@@ -77,10 +76,9 @@ set "PS=pwsh"
 where pwsh >nul 2>nul || set "PS=powershell"
 
 if /i "%~1"=="stop" (
-  echo   Stopping the workbench, the inference runtime and the OCR service...
+  echo   Stopping the workbench and the inference runtime...
   for /f "tokens=5" %%p in ('netstat -ano ^| findstr /r /c:"127.0.0.1:3080 .*LISTENING"') do taskkill /f /pid %%p >nul 2>nul
   for /f "tokens=5" %%p in ('netstat -ano ^| findstr /r /c:"127.0.0.1:8080 .*LISTENING"') do taskkill /f /pid %%p >nul 2>nul
-  for /f "tokens=5" %%p in ('netstat -ano ^| findstr /r /c:"127.0.0.1:8642 .*LISTENING"') do taskkill /f /pid %%p >nul 2>nul
   echo   Stopped.
   echo.
   pause
@@ -98,13 +96,6 @@ rem ---- what were we asked to do ----------------------------------------------
 
 if /i "%~1"=="check" (
   call npm run doctor
-  echo.
-  pause
-  exit /b %errorlevel%
-)
-
-if /i "%~1"=="ingestion" (
-  call npm run setup-ingestion
   echo.
   pause
   exit /b %errorlevel%
@@ -144,16 +135,15 @@ if errorlevel 1 (
 
 :runtimeready
 
-rem ---- start the two services the workbench talks to -------------------------
+rem ---- start the inference runtime the workbench talks to --------------------
 rem
 rem llama-swap holds one model in VRAM at a time and swaps on demand, which is
 rem what lets the router move between the coder and the vision model on a card
-rem that cannot hold both. The ingestion service does OCR, and warms its engine
-rem before it opens its socket, so it is started first and given a moment.
+rem that cannot hold both.
 rem
-rem Both open their own window. Closing this one does not stop them; that is
+rem It opens its own window. Closing this one does not stop it; that is
 rem deliberate, so a mis-click on the workbench does not take the models down
-rem with it. `run.bat stop` closes all three.
+rem with it. `run.bat stop` closes both.
 
 netstat -ano | findstr /r /c:"127.0.0.1:8080 .*LISTENING" >nul 2>nul
 if errorlevel 1 (
@@ -163,18 +153,6 @@ if errorlevel 1 (
   echo   The inference runtime is already running on 127.0.0.1:8080.
 )
 
-netstat -ano | findstr /r /c:"127.0.0.1:8642 .*LISTENING" >nul 2>nul
-if errorlevel 1 (
-  if exist "services\ingestion\.venv\Scripts\python.exe" (
-    echo   Starting the OCR service on 127.0.0.1:8642 ...
-    start "Faraday - OCR" /min cmd /c "npm run ingestion"
-  ) else (
-    echo   The OCR service is not installed - run:  run.bat ingestion
-    echo   The workbench still starts; uploads and provenance will not work.
-  )
-) else (
-  echo   The OCR service is already running on 127.0.0.1:8642.
-)
 echo.
 
 rem ---- windowed: the old behaviour, an ordinary browser tab -------------------

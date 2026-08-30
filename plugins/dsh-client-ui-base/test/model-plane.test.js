@@ -11,7 +11,6 @@ import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import test from "node:test";
-import { createReportFindingsTool } from "../lib/findings/tool.js";
 import { createLlmAdapter } from "../lib/model-plane/llm-adapter.js";
 import { createModelProvider, ModelProviderError } from "../lib/model-plane/model-provider.js";
 import { ReplayModelProvider } from "../lib/model-plane/replay-provider.js";
@@ -254,7 +253,7 @@ test("ReplayModelProvider ignores a tool-result message when computing the trigg
 	}
 });
 
-test("the shipped 'key findings' replay entry walks create_goal -> bf_report_findings -> update_goal -> a closing reply, citing real provenance (Story 5.1)", async () => {
+test("the shipped 'key findings' replay entry walks create_goal -> update_goal -> a closing reply (Story 5.1)", async () => {
 	const provider = createModelProvider("replay");
 	const adapter = createLlmAdapter(provider, { displayName: "Faraday (replay)" });
 	const trigger = userText("Turn the ingested inspection report into key findings.");
@@ -275,30 +274,17 @@ test("the shipped 'key findings' replay entry walks create_goal -> bf_report_fin
 	assert.match(createArgs.objective, /key findings/);
 	messages = [...messages, toolResult(createCall.id, { goal: { id: "goal-1", revision: 1, objective: createArgs.objective, phase: "active", roundsStarted: 0, maxGoalRounds: 25 }, activation: "armed" })];
 
-	// Step 1: bf_report_findings — dispatch the REAL tool, exactly as the harness would.
-	const findingsCall = await runStep();
-	assert.equal(findingsCall.name, "bf_report_findings");
-	// Pointed at a dead endpoint so the capture answers deterministically. This
-	// test is about the replay cache's step sequence, not about ingestion, and it
-	// must not change its result because a Python service happens to be running.
-	const findingsResult = await createReportFindingsTool({ endpoint: "http://127.0.0.1:1" }).execute();
-	assert.ok(findingsResult.findings.length > 100);
-	messages = [...messages, toolResult(findingsCall.id, findingsResult)];
-
-	// Step 2: the key-findings text, citing real page/bbox provenance from the tool result, plus update_goal.
+	// Step 1: the key-findings text plus update_goal.
+	//
+	// A `bf_report_findings` step stood between these until 31 August 2026. That
+	// tool read the OCR service and was removed with it (ADR-0008); this entry
+	// keeps its authored prose and no longer dispatches a tool the harness does
+	// not have, which is what the replay escape hatch has to be true of.
 	const chunks2 = await collect(adapter.stream({ provider: "replay", model: "replay-authored-v1", messages }));
 	const textBlock = chunks2.filter((c) => c.type === "block-end").map((c) => c.block).find((block) => block.type === "text");
 	assert.ok(textBlock, "the findings step must carry a text block, not only the tool call");
 	assert.match(textBlock.text, /E-1104A/);
 	assert.match(textBlock.text, /PSV-2207A/);
-	// Story 8.1 moved the per-finding citation off the prose and into the reply's
-	// ```dsh-ui table, where it is written the way the Provenance tab writes it —
-	// `p1 · 560, 2048 · 814 × 58`. The page is still cited per finding; only the
-	// wording changed. `test/genui.test.js` checks each cited region against the
-	// OCR capture itself.
-	assert.match(textBlock.text, /p1 ·/u);
-	const e1104a = findingsResult.findings.find((f) => f.text.startsWith("Insulation cladding open"));
-	assert.ok(textBlock.text.includes(String(e1104a.bbox.left)), "the cited region must match the real tool result's bbox, not a hardcoded guess");
 	const updateCall = chunks2.filter((c) => c.type === "block-end").map((c) => c.block).find((block) => block.type === "tool-call");
 	assert.equal(updateCall.name, "update_goal");
 	assert.deepEqual(JSON.parse(updateCall.arguments), { goal_id: "goal-1", revision: 1, action: "complete" });
@@ -306,10 +292,28 @@ test("the shipped 'key findings' replay entry walks create_goal -> bf_report_fin
 	messages = [...messages, { role: "assistant", content: [textBlock, updateCall], source: { kind: "model", provider: "replay", model: "replay-authored-v1" } }];
 	messages = [...messages, toolResult(updateCall.id, { goal: { id: "goal-1", revision: 2, objective: createArgs.objective, phase: "complete", roundsStarted: 0, maxGoalRounds: 25 }, activation: "armed" })];
 
-	// Step 3: the turn ends with a plain closing reply, not another tool call.
+	// Step 2: the turn ends with a plain closing reply, not another tool call.
 	const chunks3 = await collect(adapter.stream({ provider: "replay", model: "replay-authored-v1", messages }));
 	assert.equal(chunks3.at(-1).reason.kind, "stop");
 	assert.ok(chunks3.some((c) => c.type === "text-delta"));
+});
+
+test("no replay entry dispatches a tool this build no longer registers", async () => {
+	// The escape hatch's whole claim is that everything except live generation
+	// still works under `replay`. A cached entry naming a deleted tool breaks
+	// that silently, at the point the harness tries to dispatch it.
+	const { readFileSync } = await import("node:fs");
+	const cache = JSON.parse(readFileSync(new URL("../lib/model-plane/replay-cache.json", import.meta.url), "utf8"));
+	const named = new Set();
+	for (const entry of cache) {
+		for (const step of entry.steps ?? [{ blocks: entry.blocks }]) {
+			for (const block of step?.blocks ?? []) {
+				if (block.type === "tool-call") named.add(block.name);
+			}
+		}
+	}
+	assert.equal(named.has("bf_report_findings"), false, "bf_report_findings was removed with the OCR service (ADR-0008)");
+	assert.equal(named.has("bf_canary"), false, "the canary was removed by ADR-0007");
 });
 
 test("the shipped 'helper agent' replay entry delegates through a real subagent tool call, then reports it as running rather than blocking (Story 5.2)", async () => {

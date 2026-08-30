@@ -189,22 +189,36 @@ test("harness messages flatten to chat messages, including a tool result's paylo
 	]);
 });
 
-test("images attach to the last user message as data-url parts", () => {
-	const chat = toChatMessages([{ role: "user", content: "what is on this page?" }], [
-		{ mediaType: "image/png", base64: "AAAA" },
+test("an image rides the message it was attached to, as a data-url part", () => {
+	// Images arrived as a separate `images` argument and were hung off whichever
+	// user message came last, until 31 August 2026 (ADR-0008). They now come in
+	// on the message's own content, which is where the harness puts them and
+	// where they have to stay for a multi-turn conversation to make sense.
+	const chat = toChatMessages([
+		{
+			role: "user",
+			content: [
+				{ type: "text", text: "what is on this page?" },
+				{ type: "image", attachment: { attachmentId: "sha256:a" }, mediaType: "image/png", base64: "AAAA" },
+			],
+		},
 	]);
-	assert.equal(chat.length, 1);
-	assert.deepEqual(chat[0].content, [
+	// A system note precedes it, telling the model it is looking at a picture.
+	assert.equal(chat.length, 2);
+	assert.equal(chat[0].role, "system");
+	assert.deepEqual(chat[1].content, [
 		{ type: "text", text: "what is on this page?" },
 		{ type: "image_url", image_url: { url: "data:image/png;base64,AAAA" } },
 	]);
 });
 
-test("an image with no user message to attach to still produces a well-formed request", () => {
-	const chat = toChatMessages([], [{ mediaType: "image/jpeg", base64: "BBBB" }]);
-	assert.equal(chat.length, 1);
-	assert.equal(chat[0].role, "user");
-	assert.deepEqual(chat[0].content, [{ type: "image_url", image_url: { url: "data:image/jpeg;base64,BBBB" } }]);
+test("an image sent with no words still produces a well-formed request", () => {
+	const chat = toChatMessages([
+		{ role: "user", content: [{ type: "image", attachment: { attachmentId: "sha256:b" }, mediaType: "image/jpeg", base64: "BBBB" }] },
+	]);
+	assert.equal(chat.length, 2);
+	assert.equal(chat[1].role, "user");
+	assert.deepEqual(chat[1].content, [{ type: "image_url", image_url: { url: "data:image/jpeg;base64,BBBB" } }]);
 });
 
 test("a schema becomes a strict json_schema response format — the reason a 1.5B can be relied on", () => {

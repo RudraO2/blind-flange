@@ -38,19 +38,17 @@
  * counts.
  *
  * Story 5.4 adds the approval-note tool (`deliverables/tool.js`): a real
- * `.docx` written to disk from a completed set of findings, registered
- * unconditionally like the report-findings tool.
+ * `.docx` written to disk from a set of cited clauses, registered
+ * unconditionally.
  *
  * Story 3.9 registers our three plugin-owned session event types into the
  * harness's persistence read-path vocabulary at mount
  * (`session-events/known-types.js`), so a stored session containing them
  * still opens instead of failing with `SessionFormatUnsupportedError`.
  *
- * Story 4.5 adds the provenance route (`findings/provenance.js`) beside the
- * favicon route below: the crop viewer in the browser loads the ingestion
- * capture and the real page images from it, and crops in the browser. Like
- * the favicon it is served through `webServer.register`, so a profile with no
- * web server simply does not have it.
+ * Story 4.5's provenance route was removed on 31 August 2026 with the OCR
+ * service it served (ADR-0008). An attached picture now reaches the vision
+ * model as a picture, so there is no extracted line to cite a pixel box for.
  *
  * Story 3.10 fixes the classifier reading the wrong turn's text (or none).
  * `agent/pre-step` hands the listener `messages: claimed` directly in its
@@ -68,17 +66,15 @@ import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { createSealRpcHandler, isSealed, SEAL_CHANNEL } from "./egress/seal.js";
 import { createApprovalNoteTool } from "./deliverables/tool.js";
-import { createReportFindingsTool } from "./findings/tool.js";
-import { createProvenanceHandler, PROVENANCE_ROUTE_PREFIX } from "./findings/provenance.js";
 import { createLlmAdapter } from "./model-plane/llm-adapter.js";
 import { createModelProvider } from "./model-plane/model-provider.js";
 import { loadFleet } from "./registry/loader.js";
+import { imageRefsIn } from "./attachments/images.js";
 import { classifyRequest, lastUserText } from "./router/classify.js";
 import { recordRoutingDecision } from "./router/dispatch.js";
 import { scoreFleet } from "./router/score.js";
 import { registerKnownSessionEventTypes } from "./session-events/known-types.js";
 import { createTraceRpcHandler, TRACE_CHANNEL } from "./trace/rpc.js";
-import { createUploadRpcHandler, UPLOAD_CHANNEL } from "./upload/rpc.js";
 
 const FAVICON_PATH = "/blind-flange/favicon.svg";
 const FAVICON_SVG = readFileSync(join(dirname(fileURLToPath(import.meta.url)), "favicon.svg"));
@@ -387,7 +383,13 @@ function classifyAndRoute(agent, turn, step, messages) {
 	let classification;
 	try {
 		const text = lastUserText(messages);
-		classification = classifyRequest(text);
+		// An attached picture is a fact about the request, not a guess from its
+		// wording, and only one member of this fleet can see. Routing a turn with
+		// an image to the text-only coder would not give a worse answer — it would
+		// give an answer about a picture nobody looked at. The classifier weighs
+		// this above its own keywords; see `router/classify.js`.
+		const hasImage = imageRefsIn(messages).length > 0;
+		classification = classifyRequest(text, { hasImage });
 		agent.session.append(CLASSIFIED_EVENT, { turn, step, ...classification, noRequestText: text === "" });
 	} catch (error) {
 		console.warn(`@blind-flange/dsh-client-ui-base: request not classified — ${error instanceof Error ? error.message : String(error)}`);
@@ -583,15 +585,9 @@ export function apply(ctx, config) {
 		return decision;
 	});
 
-	// Story 5.1: the report-findings tool. Registered unconditionally, so every
-	// preset's agent can read the ingested report's OCR findings without a
-	// per-preset cordis.patch.yml row.
-	ctx.inject(["tools"], (toolCtx) => {
-		toolCtx.effect(() => toolCtx.tools.register(createReportFindingsTool()), "blind-flange: report findings tool");
-	});
-	// Story 5.4: the approval-note tool. Registered unconditionally, like the
-	// two tools above, so every preset's agent can turn a completed set of
-	// findings into a real, signed .docx without a per-preset row.
+	// Story 5.4: the approval-note tool. Registered unconditionally, so every
+	// preset's agent can turn a set of cited clauses into a real, signed .docx
+	// without a per-preset row.
 	ctx.inject(["tools"], (toolCtx) => {
 		// The provider name is passed in because the note discloses it: a reply
 		// served from a stored response has to say so inside the file, not only on
@@ -601,25 +597,18 @@ export function apply(ctx, config) {
 			"blind-flange: approval note tool",
 		);
 	});
-	// The upload channel the composer's upload control posts to.
-	// `authority: "loopback"` — reachable from a browser
-	// on this machine, not from anything that can merely reach the port. It needs
-	// only `connection`, not the tool registry, because it attaches the document
-	// and calls the ingestion service directly rather than dispatching a tool.
-	ctx.inject(["connection"], (uploadCtx) => {
-		uploadCtx.effect(() => {
-			const dispose = uploadCtx.connection.rpc.handle(UPLOAD_CHANNEL, createUploadRpcHandler(), { authority: "loopback" });
-			return () => {
-				void dispose();
-			};
-		}, "blind-flange: upload rpc channel");
-
-		// The residency chip's channel. Read-only, and it reports llama-swap's own
-		// `/running` rather than anything we track — we do not own loading or
-		// eviction, and a second idea of what is resident could disagree with the
-		// thing actually holding the memory.
-		uploadCtx.effect(() => {
-			const dispose = uploadCtx.connection.rpc.handle(
+	// The residency chip's channel. Read-only, and it reports llama-swap's own
+	// `/running` rather than anything we track — we do not own loading or
+	// eviction, and a second idea of what is resident could disagree with the
+	// thing actually holding the memory.
+	//
+	// `authority: "loopback"` — reachable from a browser on this machine, not
+	// from anything that can merely reach the port. It shared the upload
+	// channel's `inject` block until 31 August 2026, when the upload control was
+	// removed with the OCR service (ADR-0008).
+	ctx.inject(["connection"], (traceCtx) => {
+		traceCtx.effect(() => {
+			const dispose = traceCtx.connection.rpc.handle(
 				TRACE_CHANNEL,
 				createTraceRpcHandler({ providerName: config?.modelPlane?.provider ?? "replay" }),
 				{ authority: "loopback" },
@@ -650,7 +639,13 @@ export function apply(ctx, config) {
 	});
 
 	const providerName = config?.modelPlane?.provider ?? "replay";
-	ctx.inject(["llm"], (llmCtx) => {
+	// `attachments` joins `llm` in the dependency list so a turn can resolve the
+	// pictures the operator attached to it (ADR-0008). The service is the
+	// harness's own durable attachment store — `attachment-local` is the sole
+	// provider of it and cannot be disabled here (see profile/web/cordis.patch.yml
+	// for the boot failure that proves it), so waiting on it costs nothing and
+	// makes the dependency honest rather than assumed.
+	ctx.inject(["llm", "attachments"], (llmCtx) => {
 		llmCtx.effect(() => {
 			let modelProvider;
 			try {
@@ -659,7 +654,12 @@ export function apply(ctx, config) {
 				console.warn(`@blind-flange/dsh-client-ui-base: model plane not mounted — ${error.message}`);
 				return undefined;
 			}
-			const adapter = createLlmAdapter(modelProvider, { displayName: `Faraday (${providerName})` });
+			const adapter = createLlmAdapter(modelProvider, {
+				displayName: `Faraday (${providerName})`,
+				// Bound to the service rather than passed as a bare method: the
+				// store is a class instance and loses `this` when detached.
+				readImageRequest: (ref, policy) => llmCtx.attachments.readImageRequest(ref, policy),
+			});
 			return llmCtx.llm.registerAdapter([providerName], adapter);
 		}, "blind-flange: model plane adapter");
 	});
@@ -684,20 +684,6 @@ export function apply(ctx, config) {
 					},
 				}),
 			"blind-flange: favicon route",
-		);
-
-		// Story 4.5: the provenance route. `kind: "prefix"` so one registration
-		// covers `/findings` and `/pages/<n>` — the page count comes from the
-		// capture, not from a route table that would have to be edited when the
-		// sample report gains a page.
-		web.effect(
-			() =>
-				web.webServer.register({
-					kind: "prefix",
-					path: PROVENANCE_ROUTE_PREFIX,
-					handler: createProvenanceHandler(),
-				}),
-			"blind-flange: provenance route",
 		);
 
 		web.effect(

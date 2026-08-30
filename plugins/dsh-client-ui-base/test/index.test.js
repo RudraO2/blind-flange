@@ -624,7 +624,13 @@ test("Story 3.10: no request text found is recorded on the session, not silently
 
 	const classified = agent.events.find((event) => event.type === "router/classified");
 	assert.ok(classified, "no router/classified event recorded");
-	assert.equal(classified.data.taskType, "document", "still falls back so routing can proceed");
+	// `code` since 31 August 2026, not `document`: the fallback moved to the lane
+	// that builds a tool call, because a request nothing could classify was being
+	// answered conversationally by the vision member and never reached the
+	// sandbox or the egress waterfall. What this test guards is unchanged — that
+	// the absence of request text is *recorded* rather than folded into the
+	// fallback silently.
+	assert.equal(classified.data.taskType, "code", "still falls back so routing can proceed");
 	assert.equal(classified.data.matchedRuleCount, 0);
 	assert.equal(classified.data.noRequestText, true, "must say explicitly that no request text was found");
 });
@@ -638,7 +644,7 @@ test("Story 3.10: a fallback with request text present is not confused with no r
 	await host.preStepListener({ agent, turn: 1, step: 1, messages }, async () => ({ kind: "enter", messages }));
 
 	const classified = agent.events.find((event) => event.type === "router/classified");
-	assert.equal(classified.data.taskType, "document");
+	assert.equal(classified.data.taskType, "code");
 	assert.equal(classified.data.matchedRuleCount, 0);
 	assert.equal(classified.data.noRequestText, false, "text was present, even though no rule matched it");
 });
@@ -693,12 +699,13 @@ test("a classification failure is swallowed so the turn still proceeds", async (
  * user actually makes, above.
  * ---------------------------------------------------------------------- */
 
-test("registers the report-findings tool (Story 5.1), unconditionally", () => {
+test("no longer registers the report-findings tool, removed with the OCR service", () => {
+	// ADR-0008. A tool that is gone from the registry but still named by an
+	// authored replay entry fails at dispatch, which is why the replay cache is
+	// checked for the same name in `test/model-plane.test.js`.
 	const host = stubHostCtx();
 	apply(host.ctx);
-	const findingsTool = host.registeredTools.find((tool) => tool.name === "bf_report_findings");
-	assert.ok(findingsTool, "no report-findings tool registered");
-	assert.equal(typeof findingsTool.execute, "function");
+	assert.equal(host.registeredTools.some((tool) => tool.name === "bf_report_findings"), false);
 });
 
 test("registers the approval-note tool (Story 5.4), unconditionally", () => {
@@ -710,22 +717,23 @@ test("registers the approval-note tool (Story 5.4), unconditionally", () => {
 	assert.equal(typeof approvalNoteTool.presentCall, "function");
 });
 
-test("registers the seal, upload and trace channels, all loopback-only", () => {
+test("registers the seal and trace channels, both loopback-only", () => {
 	const host = stubHostCtx();
 	apply(host.ctx);
-	// Every one is reachable from a browser on this machine and from nothing that
-	// can merely reach the port. The upload channel carries a document the user
-	// chose, so a non-loopback authority on it would be a way to push a file into
-	// someone else's session; the trace channel reports what is resident in VRAM,
+	// Both are reachable from a browser on this machine and from nothing that can
+	// merely reach the port. The trace channel reports what is resident in VRAM,
 	// which is machine state nobody off this box should be reading; the seal
 	// decides whether this machine may reach the network at all, which belongs to
 	// the operator at the keyboard. Asserted rather than assumed, for each.
+	//
+	// `/bf-upload` was the third until 31 August 2026. ADR-0008 removed it: an
+	// attached image now goes through the harness's own attachment service, so
+	// there is no longer a channel of ours carrying a file.
 	assert.deepEqual(
 		host.rpcChannels.map((entry) => [entry.channel, entry.options.authority]).sort(),
 		[
 			["/bf-seal", "loopback"],
 			["/bf-trace", "loopback"],
-			["/bf-upload", "loopback"],
 		],
 	);
 });
@@ -734,13 +742,12 @@ test("a profile with no tool registry still gets the egress denial waterfall", a
 	const host = stubHostCtx({ tools: false });
 	apply(host.ctx);
 	assert.deepEqual(host.registeredTools, []);
-	// The upload, trace and seal channels need only `connection` — one attaches a
-	// document and calls the ingestion service directly, one reads llama-swap, and
-	// the seal is the waterfall's own policy, so a profile that is sealed must be
-	// able to say so and to be opened whether or not it has any tools to deny.
+	// The trace and seal channels need only `connection` — one reads llama-swap,
+	// and the seal is the waterfall's own policy, so a profile that is sealed must
+	// be able to say so and to be opened whether or not it has any tools to deny.
 	assert.deepEqual(
 		host.rpcChannels.map((entry) => entry.channel).sort(),
-		["/bf-seal", "/bf-trace", "/bf-upload"],
+		["/bf-seal", "/bf-trace"],
 	);
 	const decision = await host.preExecuteListener({ name: "web_fetch", arguments: { url: "https://example.com" } }, () => {
 		throw new Error("next() must not be called for a denied tool");
@@ -751,7 +758,7 @@ test("a profile with no tool registry still gets the egress denial waterfall", a
 test("a profile with no browser transport registers the tools but no channels", () => {
 	const host = stubHostCtx({ connection: false });
 	apply(host.ctx);
-	assert.ok(host.registeredTools.some((tool) => tool.name === "bf_report_findings"));
+	assert.ok(host.registeredTools.some((tool) => tool.name === "bf_approval_note"));
 	assert.deepEqual(host.rpcChannels, []);
 });
 

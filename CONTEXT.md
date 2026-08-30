@@ -56,13 +56,22 @@ its width is the operator's to set.
 _Avoid_: the egress panel, the sidebar, the details pane
 
 **Deliverable factory**:
-The path that carries work through to a signed Word document with provenance, rather than
-ending at a chat reply. The reason this is a workbench and not a chatbot.
+The path that carries work through to a signed Word document with its own audit trail, rather
+than ending at a chat reply. The reason this is a workbench and not a chatbot.
 _Avoid_: export, report generator
 
+**Attached image**:
+A picture the operator put on a message — pasted, dropped, or picked from the composer's
+attach row. It rides that message, is shown above it in the transcript, and goes to the vision
+member as pixels. It is never described to the model in words.
+_Avoid_: upload, document, ingested file
+
 **Provenance crop**:
-The image region a cited fact was actually read from, shown next to the claim. Provenance
-here always means page *and region*, never just a filename.
+Removed 31 August 2026 (ADR-0008). It meant the image region a cited fact was read from, shown
+next to the claim — page *and region*, never just a filename. The OCR service that produced
+those regions is gone, and a model cannot give a bounding box that can be checked. The
+attached image itself, beside the message that carried it, is what stands in its place. Do not
+reintroduce the term for anything weaker than a checkable region.
 
 **Harness**:
 The scaffolding around a model that gives it tools, memory, a sandbox and a loop

@@ -30,10 +30,17 @@ function paragraph(text, { bold = false, italic = false, sizeHalfPoints = 22, al
 	return `<w:p>${ppr}<w:r>${rpr}<w:t xml:space="preserve">${escapeXml(text)}</w:t></w:r></w:p>`;
 }
 
-/** Provenance line for one cited clause: page and the exact bounding box it was read from. */
+/**
+ * The equipment tag a clause concerns, when it names one.
+ *
+ * This was a provenance line — `page 1, region left 560 top 2048 …` — until
+ * 31 August 2026. ADR-0008 removed the OCR service that produced those boxes,
+ * so the line would have printed `page undefined, region undefined`, which is
+ * worse than printing nothing: a citation that looks like one and cites
+ * nothing. A clause with no tag now gets no source line at all.
+ */
 function clauseSourceLine(clause) {
-	const region = clause.region;
-	return `page ${clause.page}, region left ${region.left} top ${region.top} width ${region.width} height ${region.height}` + (clause.tag === undefined ? "" : ` (${clause.tag})`);
+	return typeof clause.tag === "string" && clause.tag !== "" ? `Tag: ${clause.tag}` : null;
 }
 
 /**
@@ -41,8 +48,8 @@ function clauseSourceLine(clause) {
  * @param {string} note.title - titleblock heading.
  * @param {string} note.referenceNumber
  * @param {string} note.generatedAt - ISO 8601 timestamp for the titleblock.
- * @param {string} note.sourceReport - the ingested document the clauses were read from.
- * @param {Array<{ text: string, page: number, region: { left: number, top: number, width: number, height: number }, tag?: string }>} note.clauses
+ * @param {string} note.sourceReport - the document or image the clauses were read from.
+ * @param {Array<{ text: string, tag?: string }>} note.clauses
  * @param {string} note.contentHash - hex-encoded digest, printed in the footer.
  * @param {string[]} [note.auditTrail] - lines from `audit-trail.js`; omitted entirely when absent, rather than printing an empty heading.
  * @returns the complete `.docx` file as a Buffer.
@@ -54,10 +61,13 @@ export function buildApprovalNoteDocx(note) {
 		paragraph(`Generated: ${note.generatedAt}`, { sizeHalfPoints: 20 }),
 		paragraph(`Source report: ${note.sourceReport}`, { sizeHalfPoints: 20 }),
 		paragraph("Cited findings", { bold: true, sizeHalfPoints: 26 }),
-		...note.clauses.flatMap((clause, index) => [
-			paragraph(`${index + 1}. ${clause.text}`, { sizeHalfPoints: 22 }),
-			paragraph(`Source: ${clauseSourceLine(clause)}`, { italic: true, sizeHalfPoints: 18 }),
-		]),
+		...note.clauses.flatMap((clause, index) => {
+			const source = clauseSourceLine(clause);
+			return [
+				paragraph(`${index + 1}. ${clause.text}`, { sizeHalfPoints: 22 }),
+				...(source === null ? [] : [paragraph(source, { italic: true, sizeHalfPoints: 18 })]),
+			];
+		}),
 		paragraph("Signatures", { bold: true, sizeHalfPoints: 26 }),
 		paragraph("Prepared by: _________________________        Date: _______________", { sizeHalfPoints: 22 }),
 		paragraph("Approved by: _________________________        Date: _______________", { sizeHalfPoints: 22 }),

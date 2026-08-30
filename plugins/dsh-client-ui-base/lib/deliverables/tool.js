@@ -28,7 +28,7 @@ import { createHash } from "node:crypto";
 import { dirname, isAbsolute, resolve as resolvePath } from "node:path";
 import { loadFleet } from "../registry/loader.js";
 import { lastRoutingDecision, runtimeModelForCurrentTurn } from "../router/dispatch.js";
-import { lastIngestion, toolsRunThisTurn } from "../trace/turn.js";
+import { imagesThisTurn, toolsRunThisTurn } from "../trace/turn.js";
 import { buildAuditTrail } from "./audit-trail.js";
 import { buildApprovalNoteDocx } from "./docx.js";
 
@@ -69,18 +69,6 @@ function validateArgs(args) {
 		if (typeof clause?.text !== "string" || clause.text.trim() === "") {
 			throw new Error(`invalid clauses[${index}].text: expected a non-empty string`);
 		}
-		if (typeof clause?.page !== "number" || !Number.isFinite(clause.page)) {
-			throw new Error(`invalid clauses[${index}].page: expected a number`);
-		}
-		const region = clause?.region;
-		if (
-			typeof region?.left !== "number" ||
-			typeof region?.top !== "number" ||
-			typeof region?.width !== "number" ||
-			typeof region?.height !== "number"
-		) {
-			throw new Error(`invalid clauses[${index}].region: expected { left, top, width, height } numbers — the bounding box provenance was read from`);
-		}
 	}
 }
 
@@ -113,40 +101,26 @@ export function createApprovalNoteTool(options = {}) {
 	return {
 		name: APPROVAL_NOTE_TOOL_NAME,
 		description:
-			"Generate a signed approval note as a real .docx from a completed set of findings. " +
-			"Every clause must carry the page and the exact bounding box (left, top, width, height) " +
-			"it was read from — call bf_report_findings first and cite its findings' provenance, never a paraphrase with no source. " +
+			"Generate a signed approval note as a real .docx from a set of cited clauses. " +
+			"Quote each clause from the source it came from rather than paraphrasing it. " +
 			"The produced file appears in the deliverables row with Open and Show-in-folder actions.",
 		parameters: {
 			type: "object",
 			properties: {
 				title: { type: "string", description: "Titleblock heading, e.g. \"Approval Note\"." },
 				referenceNumber: { type: "string", description: "A reference number for this note, e.g. \"NRC-APPR-0001\"." },
-				sourceReport: { type: "string", description: "The ingested document the clauses were read from." },
+				sourceReport: { type: "string", description: "The document or image the clauses were read from." },
 				clauses: {
 					type: "array",
 					minItems: 1,
-					description: "Findings to cite, each traceable to where it was read from.",
+					description: "Findings to cite.",
 					items: {
 						type: "object",
 						properties: {
 							text: { type: "string", description: "The finding, in full." },
-							page: { type: "number", description: "1-based page number the finding was read from." },
-							region: {
-								type: "object",
-								description: "The bounding box the finding was read from, in source-image pixels.",
-								properties: {
-									left: { type: "number" },
-									top: { type: "number" },
-									width: { type: "number" },
-									height: { type: "number" },
-								},
-								required: ["left", "top", "width", "height"],
-								additionalProperties: false,
-							},
 							tag: { type: "string", description: "Equipment tag this finding concerns, if any." },
 						},
-						required: ["text", "page", "region"],
+						required: ["text"],
 						additionalProperties: false,
 					},
 				},
@@ -197,7 +171,7 @@ export function createApprovalNoteTool(options = {}) {
 					routing: lastRoutingDecision(),
 					dispatch: runtimeModelForCurrentTurn(loadFleet().loaded),
 					providerName,
-					ingestion: lastIngestion(),
+					images: imagesThisTurn(),
 					// This tool's own call is included, because "generated the note" is a
 					// step in the work and a list that omits its own last action reads as
 					// incomplete to anyone checking it.

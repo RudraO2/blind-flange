@@ -40,9 +40,9 @@ import {
 	verdictFor,
 } from "../lanes/code.js";
 import { announceRefusals, loadFleet } from "../registry/loader.js";
-import { attachedImages } from "../findings/attached.js";
+import { imageRefsIn, resolveMessageImages } from "../attachments/images.js";
 import { currentTaskType, runtimeModelForCurrentTurn } from "../router/dispatch.js";
-import { recordTool } from "../trace/turn.js";
+import { recordImages, recordTool } from "../trace/turn.js";
 
 /** Exact model identity this adapter reports; nothing here validates against a catalog (advisory only, per the harness's own contract). */
 async function resolveModel(provider, model) {
@@ -218,24 +218,24 @@ async function* codeLanePieces(modelProvider, options, dispatch) {
  */
 const CODE_LANE_MAX_TOKENS = 700;
 
-async function* streamImpl(modelProvider, options) {
+async function* streamImpl(modelProvider, options, readImageRequest) {
 	const dispatch = dispatchForTurn();
+	// Attached pictures are resolved from their durable references into bytes
+	// before the provider sees them, so the provider stays a wire serialiser and
+	// nothing below this line knows the harness's attachment service exists.
+	// A turn with no attachment resolves to the same array it was given.
+	const messages = await resolveMessageImages(options.messages, readImageRequest);
+	// The residency panel and the approval note both answer "did the model
+	// actually see the picture?" from this, which is why it counts what was
+	// resolved rather than what was attached.
+	recordImages(imageRefsIn(messages).length);
 	// The lane that shapes the request is chosen by task type; the model that
 	// answers it by dispatch. Both come from the same routing decision.
 	const pieces = servesTaskType(currentTaskType())
-		? codeLanePieces(modelProvider, options, dispatch)
-	// Everything that is not the coding lane is a plain turn - and until
-	// 30 August 2026 that turn never carried an image. `answer()` has always
-	// taken `images`, the vision model runs with its projector on the card, and
-	// nothing anywhere passed one: an uploaded photograph was OCR'd to text and
-	// the vision model was handed the words. That is the wrong tool for a
-	// picture. It still reads OCR text for a PDF, where the tables and the
-	// provenance boxes are the point - see `findings/attached.js` for why the
-	// two paths are not interchangeable.
+		? codeLanePieces(modelProvider, { ...options, messages }, dispatch)
 		: modelProvider.answer({
-			messages: options.messages,
+			messages,
 			model: dispatch.runtimeId ?? undefined,
-			images: attachedImages() ?? undefined,
 			});
 	let index = -1;
 	let openTextIndex = -1;
@@ -284,9 +284,14 @@ async function* streamImpl(modelProvider, options) {
 
 /**
  * @param {import("./model-provider.js").ModelProvider} modelProvider - the selected provider this adapter serves turns from.
- * @param {{ displayName: string }} options
+ * @param {{ displayName: string, readImageRequest?: (ref: object, policy: object) => Promise<{ data: Uint8Array, mediaType: string }> }} options
+ *   `readImageRequest` is the harness's `ctx.attachments.readImageRequest`, passed
+ *   in by `index.js` rather than reached for here, so this file keeps knowing
+ *   nothing about the host beyond the seam it is handed. Omitted — in every unit
+ *   test, and in a profile with no attachment service — image blocks resolve to
+ *   nothing and a text turn is unaffected.
  */
-export function createLlmAdapter(modelProvider, { displayName }) {
+export function createLlmAdapter(modelProvider, { displayName, readImageRequest }) {
 	// State every licence refusal once, at mount — an error line per refused
 	// fleet member naming the licence that caused it (Story 3.4). This is the
 	// "not a warning, a refusal" the licence policy requires; `fleetModels`
@@ -297,7 +302,7 @@ export function createLlmAdapter(modelProvider, { displayName }) {
 		console.warn(`@blind-flange/dsh-client-ui-base: fleet registry not read for the licence gate — ${error.message}`);
 	}
 
-	const stream = (options) => streamImpl(modelProvider, options);
+	const stream = (options) => streamImpl(modelProvider, options, readImageRequest);
 	return {
 		providerInfo(provider) {
 			return { id: provider, name: displayName };

@@ -67,6 +67,11 @@ development_status:
   3-10-the-first-turn-classifies-on-what-was-actually-asked: done
   epic-3-retrospective: optional
 
+  # Shipped in full, then superseded by ADR-0008 on 31 Aug 2026: the OCR ingestion service
+  # was deleted and an attached image now goes to the vision member as pixels. Every story
+  # below stays `done` — each was built, worked, and was measured. What replaced them is a
+  # different answer to the same question, not a retreat from it. Story 4.5's provenance crop
+  # has no replacement and that loss is written down in the ADR.
   epic-4: done
   4-1-the-sample-inspection-report-exists: done
   4-2-tesseract-returns-word-boxes-on-this-hardware: done

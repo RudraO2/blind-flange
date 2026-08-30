@@ -12,10 +12,7 @@ pay in front of an audience.
 # 1. Inference. Loads a model on first request; keep it warm.
 D:\ai\llama-swap\llama-swap.exe --config D:\ai\llama-swap\config.yaml --listen 127.0.0.1:8080
 
-# 2. OCR. Warms its own engine at startup — wait for "engine warm in Ns".
-npm run ingestion
-
-# 3. The workbench. Serves http://127.0.0.1:3080 and nothing else.
+# 2. The workbench. Serves http://127.0.0.1:3080 and nothing else.
 npm start
 ```
 
@@ -52,37 +49,40 @@ Invoke-RestMethod http://127.0.0.1:8080/running    # the model(s) currently resi
    internet and is recorded as let through. Do this only on a machine you are willing to have
    reach the network, and close the seal afterwards — a restart closes it anyway. This half is
    what proves the monitor is measuring rather than asserting.
-2. **Upload a scanned document.** The control is in the composer row. It reads
-   the file in the browser, posts it over loopback, and OCRs it immediately — expect roughly 7s for
-   two pages, and the button says which stage it is in. Then ask about the findings: click one and
-   the provenance crop shows the region of the page it was read from, cut from a page rendered on
-   demand at the same resolution the boxes were measured at.
+2. **Attach an image and ask about it.** Paste it, drag it onto the window, or use *Attach an
+   image* in the composer's `+` menu — all three go to the same place. A thumbnail appears in the
+   composer before you send, and after you send it the picture sits above your own message in the
+   transcript, exactly where anyone in the room expects it. Click it for the full-size original.
+   The vision member answers from the pixels, not from extracted text; the routing chip names it.
+   Keep it to a photograph, a nameplate or a screenshot — PNG, JPEG, WebP or GIF. PDFs are not
+   accepted (ADR-0008).
 3. **Ask for a coding or calculation task in the same session.** The routing chip changes member by
    itself; open it for the score per fleet member. The model writes Python, the sandbox runs it,
    and the reply states whether the value it computed matched what the model predicted before
    running.
-4. **Generate the approval note.** A real `.docx`, each clause carrying its page and region, and a
-   "How this note was produced" section naming the task type, every member's score, the model that
-   answered, whether the OCR ran live, and the tools that ran. Open the file to show the reasoning
-   survives leaving the room.
-5. **`npm run evaluate`** if there is time, or just show `docs/evaluation.md`. Ten fixtures against
-   ground truth a human wrote down, scored, with the failing programs printed.
+4. **Generate the approval note.** A real `.docx`, and a "How this note was produced" section
+   naming the task type, every member's score, the model that answered, how many attached images it
+   was sent, and the tools that ran. Open the file to show the reasoning survives leaving the room.
+5. **`npm run evaluate`** if there is time, or just show `docs/evaluation.md`. The coding lane's
+   fixtures against ground truth a human wrote down, scored, with the failing programs printed.
+   The document lane is no longer scored — see ADR-0008.
 
 ## When something misbehaves
 
 **A model OOMs, or llama-swap will not start.** Switch the model plane back to replay: in
 `~/.dsh/profiles/web/cordis.patch.yml`, set the `modelPlane.provider` to `replay` and restart
-`npm start`. Everything else still works — the lanes, the upload control, the provenance crops, the
-audit trail and the evaluation table are all independent of which provider answered. You lose the
-"it's live" line and keep the rest. This is the escape hatch and it is one line.
+`npm start`. Everything else still works — the lanes, the attach control, the audit trail and the
+evaluation table are all independent of which provider answered. You lose the "it's live" line and
+keep the rest. This is the escape hatch and it is one line.
 
-**The ingestion service is down.** The findings tool falls back to the committed capture of the
-shipped fixture and *says so*, on screen and in the `.docx`. An uploaded document, though, will
-refuse rather than describe the fixture — that is deliberate, because the capture describes a
-different file.
+**The turn fails with "exceeds the available context size".** The attached image plus the
+conversation is over `bf-vision`'s 8192-token context. Start a new session and attach the image to
+the first message; a long conversation with a picture in it is the case that overflows. The image
+budget itself is capped at 640×640 in `attachments/images.js` for exactly this reason.
 
-**A provenance crop is blank.** A direct page request answers 502 with the reason when the page
-could not be rendered, rather than 404. Check the ingestion service.
+**The model describes an image nobody sent.** It should not — an attachment that could not be read
+is announced to the model in words rather than dropped silently. If it happens anyway, check the
+host log for `attachment ... could not be read` and say so rather than trusting the answer.
 
 **An arithmetic question gets a wrong answer with no sandbox run.** That is the classifier routing
 it to `document` — a known gap, owned by the router. See `docs/router-handoff.md`. Phrase the

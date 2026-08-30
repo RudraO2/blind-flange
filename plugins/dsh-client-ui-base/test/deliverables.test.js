@@ -112,16 +112,20 @@ test("rejects an empty clauses array", async () => {
 	await assert.rejects(() => tool.execute(sampleArgs({ clauses: [] }), execWithCwd(tmpdir())), /clauses/);
 });
 
-test("rejects a clause with no region — provenance is not optional", async () => {
+test("rejects a clause with no text", async () => {
 	const tool = createApprovalNoteTool();
-	const args = sampleArgs({ clauses: [{ text: "unsourced claim", page: 1 }] });
-	await assert.rejects(() => tool.execute(args, execWithCwd(tmpdir())), /region/);
+	const args = sampleArgs({ clauses: [{ tag: "E-1104A" }] });
+	await assert.rejects(() => tool.execute(args, execWithCwd(tmpdir())), /text/);
 });
 
-test("rejects a clause missing a page number", async () => {
+test("accepts a clause that carries only its text, now that there is no box to cite", async () => {
+	// Page and bounding box were required until 31 August 2026, when ADR-0008
+	// removed the OCR service that produced them. Requiring provenance nothing
+	// can supply would have made the tool uncallable rather than rigorous.
 	const tool = createApprovalNoteTool();
-	const args = sampleArgs({ clauses: [{ text: "x", region: { left: 0, top: 0, width: 1, height: 1 } }] });
-	await assert.rejects(() => tool.execute(args, execWithCwd(tmpdir())), /page/);
+	const args = sampleArgs({ clauses: [{ text: "Insulation cladding open at the 3 o'clock position.", tag: "E-1104A" }] });
+	const result = await tool.execute(args, execWithCwd(tmpdir()));
+	assert.equal(result.clauseCount, 1);
 });
 
 test("presentCall returns the produced-files render intent ui-deliverables reads", () => {

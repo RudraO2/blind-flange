@@ -6,7 +6,7 @@
  * wide. Ours is three types wide, and this is where that is enforced rather
  * than merely written down: every ```dsh-ui fence in the authored replay cache
  * is parsed, checked against the permitted set, and — for the key-findings
- * fence — checked against the OCR capture it claims to have been read from.
+ * fence.
  *
  * That last check is the one that matters most. Story 4.5's crop viewer cuts
  * its crop from a finding's recorded bounding box; a table row citing a region
@@ -25,7 +25,6 @@ import { checkGenuiSpec, extractGenuiFences, PERMITTED_GENUI_TYPES } from "../li
 
 const libDir = join(dirname(fileURLToPath(import.meta.url)), "..", "lib");
 const cache = JSON.parse(readFileSync(join(libDir, "model-plane", "replay-cache.json"), "utf8"));
-const capture = JSON.parse(readFileSync(join(libDir, "findings", "sample-report-findings.json"), "utf8"));
 
 /** Every authored assistant text in the cache, flattened across entries and steps. */
 function authoredTexts() {
@@ -84,36 +83,3 @@ test("the checker refuses a URL in any component", () => {
 	assert.ok(checkGenuiSpec({ items: [{ type: "link", label: "x", href: "https://example.com" }] }).some((m) => m.includes("`href`")));
 });
 
-test("the key-findings fence cites regions the OCR capture actually carries", () => {
-	const fences = cachedFences().map(({ body }) => JSON.parse(body));
-	const tables = fences.flatMap((spec) => spec.items.filter((node) => node.type === "table"));
-	const withProvenance = tables.filter((table) => table.columns.includes("Read from"));
-	assert.ok(withProvenance.length > 0, "no table carries a provenance column");
-
-	for (const table of withProvenance) {
-		const column = table.columns.indexOf("Read from");
-		for (const row of table.rows) {
-			const cited = String(row[column]);
-			// `p1 · 560, 2048 · 814 × 58` — the Provenance tab's own wording.
-			const match = /^p(\d+)\s+·\s+(\d+),\s*(\d+)\s+·\s+(\d+)\s+×\s+(\d+)$/u.exec(cited);
-			assert.ok(match, `a row's provenance is not written the way the crop viewer writes it: ${cited}`);
-			const [, page, left, top, width, height] = match.map(Number);
-			const finding = capture.find(
-				(entry) =>
-					entry.page === page &&
-					entry.bbox.left === left &&
-					entry.bbox.top === top &&
-					entry.bbox.width === width &&
-					entry.bbox.height === height,
-			);
-			assert.ok(finding, `no OCR finding carries the region ${cited}, so its crop cannot be shown`);
-		}
-	}
-});
-
-test("the reply around the fence still sends the reader to the crop", () => {
-	const withFence = authoredTexts().filter((text) => extractGenuiFences(text).length > 0);
-	for (const text of withFence) {
-		assert.match(text, /Provenance tab/u, "a fenced reply does not name the tab the crop lives in");
-	}
-});

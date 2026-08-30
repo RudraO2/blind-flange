@@ -34,7 +34,7 @@
 import { DEFAULT_LOCAL_ENDPOINT, LocalModelProvider } from "../model-plane/local-provider.js";
 import { loadFleet } from "../registry/loader.js";
 import { lastRoutingDecision, runtimeModelForCurrentTurn } from "../router/dispatch.js";
-import { lastIngestion, toolsRunThisTurn } from "./turn.js";
+import { imagesThisTurn, toolsRunThisTurn } from "./turn.js";
 
 /** The channel the session-header chip reads. */
 export const TRACE_CHANNEL = "/bf-trace";
@@ -121,7 +121,7 @@ export function createTraceRpcHandler({ endpoint = DEFAULT_LOCAL_ENDPOINT, fetch
 				selected: routing?.selected ?? null,
 				runtimeId: dispatch?.runtimeId ?? null,
 				dispatchReason: dispatch?.reason ?? null,
-				ingestion: lastIngestion(),
+				images: imagesThisTurn(),
 				tools: toolsRunThisTurn(),
 			},
 		};

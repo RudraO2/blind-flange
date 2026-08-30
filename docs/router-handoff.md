@@ -4,6 +4,9 @@ Written 30 August 2026, from `feat/local-inference-lanes`. Everything downstream
 now works against real local models, so this is what that side needs from yours — and, more
 usefully, the two things measurement says are currently wrong.
 
+**Update, 31 August 2026:** `classify.js` has since been changed — see the banner under
+Problem 1. `score.js` is still untouched.
+
 Nothing on that branch touches `lib/router/classify.js` or `lib/router/score.js`. They are
 yours, and they were left alone deliberately so tomorrow is a merge rather than a conflict in
 the two files two people would otherwise both be rewriting.
@@ -35,6 +38,25 @@ Two consequences worth knowing:
   can run must carry a `runtime_id`, and a test now fails if one doesn't.
 
 ## Problem 1: plain arithmetic classifies as `document`
+
+> **Addressed 31 August 2026.** All three misroutes below now reach the coder, and
+> `test/router.test.js` holds them so they cannot come back. Two things did it, and neither is
+> the model-based classifier this section goes on to propose:
+>
+> 1. **The fallback moved from `document` to `code`.** A request that trips no rule at all was
+>    being handed to the vision member, which is not the lane that builds a tool call. Two of
+>    the three prompts below score zero against every rule, so the fallback alone fixed them.
+> 2. **`calculation` gained `arithmetic-verb` and `how-many`** — near enough the
+>    `\b(sum|count|total|average|mean|minimum|maximum|round)\b` this section asks for. That
+>    fixed the third, which was losing to `report-noun` matching the *verb* "report".
+>
+> A third change went in beside them: **an attached image now confines classification to the
+> two task types the vision member serves**, because only one member can see and that is a fact
+> about the request rather than a guess from its wording.
+>
+> The section below is kept as written. The reasoning still holds, the measurement is still the
+> measurement, and the model-based classifier it proposes is still the better long-term answer —
+> the regex set is now less wrong, not right.
 
 This is the largest hole in the demo, bigger than any missing panel.
 

@@ -64,22 +64,26 @@ test("the titleblock carries the title and reference number", () => {
 	assert.match(parts["word/document.xml"], /Reference: NRC-APPR-0001/);
 });
 
-test("every clause's text and its page-and-region provenance appear in the body", () => {
+test("every clause's text appears in the body, with its tag when it names one", () => {
+	// The second line under a clause was its page and bounding box until
+	// 31 August 2026. ADR-0008 removed the OCR service that produced them; a
+	// clause with no tag now carries no source line rather than one reading
+	// "page undefined", which would look like a citation and cite nothing.
 	const parts = unzipToText(
 		buildApprovalNoteDocx(
 			sampleNote({
 				clauses: [
-					{ text: "First finding.", page: 1, region: { left: 1, top: 2, width: 3, height: 4 } },
-					{ text: "Second finding.", page: 2, region: { left: 5, top: 6, width: 7, height: 8 }, tag: "PSV-2207A" },
+					{ text: "First finding." },
+					{ text: "Second finding.", tag: "PSV-2207A" },
 				],
 			}),
 		),
 	);
 	const body = parts["word/document.xml"];
 	assert.match(body, /First finding\./);
-	assert.match(body, /page 1, region left 1 top 2 width 3 height 4/);
 	assert.match(body, /Second finding\./);
-	assert.match(body, /page 2, region left 5 top 6 width 7 height 8 \(PSV-2207A\)/);
+	assert.match(body, /Tag: PSV-2207A/);
+	assert.doesNotMatch(body, /undefined/);
 });
 
 test("the footer carries the content hash and names the note as not pre-authored", () => {

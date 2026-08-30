@@ -16,8 +16,6 @@
     "record-demo": "node scripts/record-demo.mjs",
     "kiosk": "node scripts/kiosk.mjs",
     "doctor": "node scripts/doctor.mjs",
-    "setup-ingestion": "node scripts/setup-ingestion.mjs",
-    "ingestion": "node scripts/run-ingestion.mjs",
     "evaluate": "node scripts/evaluate.mjs"
   }
 }

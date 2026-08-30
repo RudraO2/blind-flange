@@ -17,7 +17,7 @@ import { createServer } from "node:http";
 import test from "node:test";
 import { clearRoutingDecision, recordRoutingDecision } from "../lib/router/dispatch.js";
 import { createTraceRpcHandler, TRACE_ENDPOINT } from "../lib/trace/rpc.js";
-import { clearTurn, lastIngestion, recordIngestion, recordTool, toolsRunThisTurn } from "../lib/trace/turn.js";
+import { clearTurn, imagesThisTurn, recordImages, recordTool, toolsRunThisTurn } from "../lib/trace/turn.js";
 
 /** A stub llama-swap: `/running` answers `running`, `/health` answers 200. */
 async function startStub(running, { health = true } = {}) {
@@ -46,14 +46,14 @@ const READY = [{ model: "bf-coder", state: "ready", ttl: 300, name: "Faraday —
 
 test("turn state records how the text was obtained and what ran, in order", () => {
 	clearTurn();
-	assert.equal(lastIngestion(), null);
+	assert.equal(imagesThisTurn(), 0);
 	assert.deepEqual(toolsRunThisTurn(), []);
 
-	recordIngestion({ report: "a.pdf", source: "live", seconds: 7.4, findings: [1, 2, 3] });
+	recordImages(3);
 	recordTool("bf_report_findings", { outcome: "3 lines", seconds: 7.4 });
 	recordTool("pwsh", { outcome: "agrees — the sandbox computed 5050" });
 
-	assert.deepEqual(lastIngestion(), { report: "a.pdf", source: "live", seconds: 7.4, findings: 3, detail: undefined });
+	assert.equal(imagesThisTurn(), 3);
 	assert.deepEqual(
 		toolsRunThisTurn().map((tool) => tool.name),
 		["bf_report_findings", "pwsh"],
@@ -122,7 +122,7 @@ test("the turn summary carries the route and the dispatch reason, not the whole 
 			{ taskType: "code", scored: [], excluded: [], selected: "Qwen/Qwen2.5-Coder-1.5B-Instruct", tied: false, allZero: false },
 			1,
 		);
-		recordIngestion({ report: "a.pdf", source: "capture", findings: [1] });
+		recordImages(1);
 		recordTool("pwsh", { outcome: "agrees" });
 
 		const result = await createTraceRpcHandler({ endpoint: stub.endpoint, providerName: "local" })(TRACE_ENDPOINT);
@@ -130,7 +130,7 @@ test("the turn summary carries the route and the dispatch reason, not the whole 
 		assert.equal(result.value.selected, "Qwen/Qwen2.5-Coder-1.5B-Instruct");
 		assert.equal(result.value.runtimeId, "bf-coder");
 		assert.equal(result.value.dispatchReason, "routed");
-		assert.equal(result.value.ingestion.source, "capture");
+		assert.equal(result.value.images, 1);
 		assert.deepEqual(result.value.tools, [{ name: "pwsh", outcome: "agrees", seconds: undefined }]);
 
 		// A summary, not a duplicate. The routing chip beside this one already

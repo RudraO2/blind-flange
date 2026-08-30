@@ -2,7 +2,6 @@ import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 
 import { lastUserText } from "../lib/router/classify.js";
-import { attachDocument, attachedImages, clearDocument, rememberFindings } from "../lib/findings/attached.js";
 import { isGenuineHumanMessage, lastGenuineUserMessage, withoutHarnessInjections } from "../lib/model-plane/injected.js";
 import { toChatMessages } from "../lib/model-plane/local-provider.js";
 
@@ -70,65 +69,83 @@ describe("the harness's own injections never reach the model", () => {
 	});
 });
 
-describe("an attached document announces itself to the model", () => {
-	it("says nothing when no document is attached", () => {
-		clearDocument();
+describe("an attached image reaches the vision model as an image", () => {
+	/** One message carrying `text` and a resolved image block, as `attachments/images.js` leaves it. */
+	function withImage(text, base64 = "aGVsbG8=") {
+		return [
+			{
+				role: "user",
+				source: { kind: "user" },
+				content: [
+					{ type: "text", text },
+					{ type: "image", attachment: { attachmentId: "sha256:abc", mediaType: "image/png" }, mediaType: "image/png", base64 },
+				],
+			},
+		];
+	}
+
+	it("sends the picture as an image_url part on the message that carried it", () => {
+		// The bug this closes: `toChatMessages` flattened every message to a
+		// string, so an `image` block was dropped and the vision model was never
+		// sent the picture the operator could plainly see attached to their own
+		// message. Measured 31 August 2026.
+		const chat = toChatMessages(withImage("what is in this image?"));
+		const user = chat.find((m) => m.role === "user");
+		assert.ok(Array.isArray(user.content), "a message with an image must serialise as parts, not a string");
+		const image = user.content.find((part) => part.type === "image_url");
+		assert.ok(image, "the image part is missing");
+		assert.match(image.image_url.url, /^data:image\/png;base64,/);
+		assert.deepEqual(
+			user.content.find((part) => part.type === "text"),
+			{ type: "text", text: "what is in this image?" },
+		);
+	});
+
+	it("tells the model it is looking at a picture rather than at extracted text", () => {
+		// Asked what was in a photograph, the previous build listed thirteen
+		// numbered lines of OCR text, because the instruction it carried was about
+		// extraction. Measured 30 August 2026.
+		const note = toChatMessages(withImage("what is this?")).find((m) => m.role === "system");
+		assert.ok(note, "a vision note should be present");
+		assert.match(note.content, /looking at the picture itself/);
+		assert.doesNotMatch(note.content, /OCR/);
+	});
+
+	it("keeps each image on its own message rather than moving them all to the last one", () => {
+		// The earlier code hung every image off whichever user message came last,
+		// which detaches a picture from the message it belonged to as soon as a
+		// follow-up is asked.
+		const chat = toChatMessages([
+			...withImage("first picture", "AAAA"),
+			{ role: "assistant", content: [{ type: "text", text: "a gauge" }] },
+			{ role: "user", source: { kind: "user" }, content: [{ type: "text", text: "and the reading?" }] },
+		]);
+		const users = chat.filter((m) => m.role === "user");
+		assert.equal(users.length, 2);
+		assert.ok(Array.isArray(users[0].content), "the first message keeps its image");
+		assert.equal(users[1].content, "and the reading?", "the follow-up must not inherit the picture");
+	});
+
+	it("says an image could not be loaded rather than letting the model invent one", () => {
+		// A vision model asked about a picture it was not sent does not refuse; it
+		// describes something plausible, which is the worst outcome this surface
+		// has.
+		const chat = toChatMessages([
+			{
+				role: "user",
+				source: { kind: "user" },
+				content: [
+					{ type: "text", text: "what is this?" },
+					{ type: "image", attachment: { attachmentId: "sha256:gone" }, unreadable: true },
+				],
+			},
+		]);
+		const user = chat.find((m) => m.role === "user");
+		const said = user.content.map((part) => part.text ?? "").join(" ");
+		assert.match(said, /could not be loaded/);
+	});
+
+	it("says nothing about vision when no image is attached", () => {
 		assert.equal(toChatMessages(sessionWithInjections()).some((m) => m.role === "system"), false);
-	});
-
-	it("names the file, the OCR line count and the tool that reads it", () => {
-		// The gap this closes: upload is host state, so without a note the model has
-		// no idea a file arrived and never calls the findings tool. Measured on
-		// 30 August 2026 — a document was uploaded, "what is in the doc I sent?" was
-		// asked, and the session log recorded zero tool calls for that turn.
-		attachDocument("github-profile.png", new Uint8Array([1, 2, 3]));
-		rememberFindings([{ page: 1 }, { page: 1 }]);
-		const note = toChatMessages(sessionWithInjections()).find((m) => m.role === "system");
-		assert.ok(note, "a system note should be present");
-		assert.match(note.content, /github-profile\.png/);
-		assert.match(note.content, /2 OCR lines/);
-		assert.match(note.content, /bf_report_findings/);
-		clearDocument();
-	});
-});
-
-describe("an uploaded image reaches the vision model as an image", () => {
-	it("offers a picture as vision input, and says the model can see it", () => {
-		// `local-provider.js` has taken `images` since it was written, and nothing
-		// ever passed one: every uploaded photograph was OCR'd to text and the
-		// vision model was handed the words, with its projector sitting on the card
-		// doing nothing. Measured 30 August 2026 by grepping for the caller.
-		attachDocument("profile.png", new Uint8Array([137, 80, 78, 71]));
-		rememberFindings([{ page: 1 }]);
-		const images = attachedImages();
-		assert.equal(images.length, 1);
-		assert.equal(images[0].mediaType, "image/png");
-		assert.ok(images[0].base64.length > 0);
-		const note = toChatMessages(sessionWithInjections()).find((m) => m.role === "system").content;
-		assert.match(note, /You are looking at it right now/);
-		// The first version of this note also told the model to call the findings
-		// tool and cite a box per line. Asked what was in a photograph it did
-		// exactly that and listed thirteen OCR lines instead of describing it.
-		assert.match(note, /Do not list extracted text lines/);
-		assert.doesNotMatch(note, /cite the page and bounding box/);
-		clearDocument();
-	});
-
-	it("does not offer a PDF as vision input", () => {
-		// A dense report's value is in tables of readings and tag numbers, where a
-		// 2B model misreading a digit is worse than useless, and where every finding
-		// has to carry the pixel box it was read from. OCR can produce a box that
-		// can be checked; a model cannot.
-		attachDocument("report.pdf", new Uint8Array([37, 80, 68, 70]));
-		assert.equal(attachedImages(), null);
-		const note = toChatMessages(sessionWithInjections()).find((m) => m.role === "system").content;
-		assert.doesNotMatch(note, /You are looking at it right now/);
-		assert.match(note, /cite the page and bounding box/, "a report still has to carry its provenance");
-		clearDocument();
-	});
-
-	it("offers nothing when no document is attached", () => {
-		clearDocument();
-		assert.equal(attachedImages(), null);
 	});
 });

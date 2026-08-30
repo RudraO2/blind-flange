@@ -31,8 +31,7 @@
  *
  * ## What it needs running
  *
- * llama-swap on 127.0.0.1:8080 for both lanes, and the ingestion service on
- * 127.0.0.1:8642 for the document lane. Neither is started here: a benchmark that
+ * llama-swap on 127.0.0.1:8080. It is not started here: a benchmark that
  * boots its own dependencies hides how long they took.
  */
 
@@ -44,9 +43,6 @@ import { fileURLToPath } from "node:url";
 const REPO = join(dirname(fileURLToPath(import.meta.url)), "..");
 const PLUGIN = join(REPO, "plugins", "dsh-client-ui-base", "lib");
 
-const { clearDocument } = await import(`file://${join(PLUGIN, "findings", "attached.js")}`);
-const { ingestionHealth } = await import(`file://${join(PLUGIN, "findings", "ingestion-client.js")}`);
-const { createReportFindingsTool } = await import(`file://${join(PLUGIN, "findings", "tool.js")}`);
 const { CODE_LANE_SYSTEM_PROMPT, PYTHON_PROGRAM_SCHEMA, parseProgram, pythonCommand, verdictFor } = await import(
 	`file://${join(PLUGIN, "lanes", "code.js")}`
 );
@@ -83,21 +79,6 @@ const CODE_FIXTURES = [
 	},
 ];
 
-/**
- * The document lane's fixtures, every answer read out of
- * `services/ingestion/fixtures/sample-inspection-report.pdf` by a human.
- *
- * These are the fields an approval note is actually built from — the reference
- * number, the tags carrying major findings, a thickness reading against its
- * minimum — rather than trivia the OCR happens to find easy.
- */
-const DOCUMENT_FIXTURES = [
-	{ question: "What is the report number?", expected: "NRC/RVF/INSP/2026-0417" },
-	{ question: "How many findings are graded Major?", expected: "2" },
-	{ question: "What is the measured thickness at CML 04, in millimetres?", expected: "13.05" },
-	{ question: "Which equipment tag has an expired test tag?", expected: "PSV-2207A" },
-	{ question: "What is the minimum allowable thickness at CML 06, in millimetres?", expected: "6.90" },
-];
 
 /** The single-value answer shape the document lane is held to, so grading is a comparison. */
 const ANSWER_SCHEMA = {
@@ -185,77 +166,6 @@ async function runCodeFixture({ task, expected }) {
 	};
 }
 
-async function runDocumentFixture({ question, expected }, findings) {
-	const started = Date.now();
-	const route = routeFor(question);
-	const forced = resolveRuntimeModel(scoreFleet("document", fleet).selected, fleet);
-
-	// OCR text, not the page image: the document lane feeds the vision member
-	// lines rather than pixels, which is why it pays no vision-encoder cost.
-	const lines = findings.map((finding) => `p${finding.page}: ${finding.text}`).join("\n");
-
-	let answer;
-	try {
-		const reply = await ask({
-			model: forced.runtimeId,
-			schema: ANSWER_SCHEMA,
-			schemaName: "bf_report_answer",
-			// 300 was not enough: a truncated schema reply is a harness defect that
-			// reads as a model failure, and it cost a correct answer in the first run.
-			maxTokens: 700,
-			messages: [
-				{
-					role: "system",
-					content:
-						"You answer only from the OCR lines given. You return only JSON matching the schema. " +
-						"`answer` is the value alone — no units, no label, no sentence.",
-				},
-				{ role: "user", content: `OCR lines from the inspection report:\n${lines}\n\n${question}` },
-			],
-		});
-		answer = JSON.parse(reply.trim().replace(/^```(?:json)?\s*/i, "").replace(/\s*```$/, ""));
-	} catch (error) {
-		return { verdict: "FAIL", detail: `no usable answer: ${error.message.slice(0, 80)}`, seconds: (Date.now() - started) / 1000, route };
-	}
-
-	const result = verdictFor(expected, String(answer?.answer ?? ""));
-	return {
-		verdict: result.verdict === "AGREES" ? "PASS" : "FAIL",
-		detail: result.verdict === "AGREES" ? `read ${result.actual}` : `expected ${expected}, read ${result.actual || "nothing"}`,
-		seconds: (Date.now() - started) / 1000,
-		route,
-		// A citation is the difference between an answer and a claim, so whether
-		// one was given is reported even though it is not graded.
-		cited: typeof answer?.citation === "string" && answer.citation.trim() !== "",
-	};
-}
-
-/**
- * The program column is the explainability half of this report, not decoration.
- *
- * A row reading "expected 24.2, computed 24.210526315789473" looks like broken
- * arithmetic until you can see `print((9.5 - 7.2) / 9.5 * 100)` beside it — at
- * which point it is obviously the right formula ignoring the requested rounding.
- * Those are different defects and a reader should not have to guess which they are
- * looking at. So the failing program is shown verbatim, and the verdict stays FAIL
- * because the task asked for one decimal place and did not get it.
- */
-function table(rows, firstColumn, { showCode = false } = {}) {
-	const header = showCode
-		? `| ${firstColumn} | expected | result | verdict | seconds | what the model wrote |`
-		: `| ${firstColumn} | expected | result | verdict | seconds | routed as |`;
-	const lines = [header, showCode ? "| --- | --- | --- | --- | --: | --- |" : "| --- | --- | --- | --- | --: | --- |"];
-	for (const row of rows) {
-		const last = showCode
-			? row.code
-				? `\`${row.code.replace(/\|/g, "\\|").slice(0, 130)}\``
-				: "—"
-			: `${row.route.taskType}${row.route.runtimeId ? ` → ${row.route.runtimeId}` : ""}`;
-		lines.push(`| ${row.label} | \`${row.expected}\` | ${row.detail} | **${row.verdict}** | ${row.seconds.toFixed(2)} | ${last} |`);
-	}
-	return lines.join("\n");
-}
-
 async function main() {
 	console.log("fleet:");
 	for (const member of fleet) console.log(`  ${member.name} -> ${member.runtime_id}`);
@@ -268,17 +178,6 @@ async function main() {
 		console.error(`\nllama-swap is not answering: ${error.message}`);
 		return 1;
 	}
-	const health = await ingestionHealth();
-	if (!health.up) {
-		console.error(`\nthe ingestion service is not answering: ${health.detail ?? "unknown"} — start it with \`npm run ingestion\``);
-		return 1;
-	}
-	console.log(`ingestion: warm=${health.warm} renderDpi=${health.renderDpi}\n`);
-
-	clearDocument();
-	const ingestion = await createReportFindingsTool().execute({});
-	console.log(`read ${ingestion.findings.length} OCR lines from ${ingestion.report} (${ingestion.source})\n`);
-
 	const codeRows = [];
 	for (const fixture of CODE_FIXTURES) {
 		const result = await runCodeFixture(fixture);
@@ -287,25 +186,14 @@ async function main() {
 		if (result.code) console.log(`        ${result.code.slice(0, 110)}`);
 	}
 
-	const documentRows = [];
-	for (const fixture of DOCUMENT_FIXTURES) {
-		const result = await runDocumentFixture(fixture, ingestion.findings);
-		documentRows.push({ label: fixture.question, expected: fixture.expected, ...result });
-		console.log(`[${result.verdict}] document: ${fixture.question.slice(0, 52)} — ${result.detail} (${result.seconds.toFixed(2)}s)`);
-	}
-
-	const all = [...codeRows, ...documentRows];
+	const all = [...codeRows];
 	const passed = all.filter((row) => row.verdict === "PASS").length;
 	const mean = all.reduce((total, row) => total + row.seconds, 0) / all.length;
 
 	// The router is scored separately. A classification miss is a different defect
 	// from a lane getting the answer wrong, and averaging them hides both.
-	const routerHits = [
-		...codeRows.filter((row) => row.route.taskType === "code" || row.route.taskType === "calculation"),
-		...documentRows.filter((row) => row.route.taskType === "document" || row.route.taskType === "drawing"),
-	].length;
+	const routerHits = codeRows.filter((row) => row.route.taskType === "code" || row.route.taskType === "calculation").length;
 	const selfConsistent = codeRows.filter((row) => row.selfConsistent).length;
-	const cited = documentRows.filter((row) => row.cited).length;
 
 	const report = [
 		"# Evaluation",
@@ -331,14 +219,13 @@ async function main() {
 		`Self-consistency, reported and **not** graded: the model's own prediction matched its program's`,
 		`output in ${selfConsistent}/${codeRows.length} cases. Where it did not, the computed value is the one to trust.`,
 		"",
-		`## Document lane — ${documentRows.filter((r) => r.verdict === "PASS").length}/${documentRows.length}`,
+		"## Document lane — not scored",
 		"",
-		"OCR runs on the CPU over the scanned report, and the model answers from the extracted lines rather",
-		"than from the page image — which is why this lane pays no vision-encoder cost.",
-		"",
-		table(documentRows, "question"),
-		"",
-		`A source line was cited in ${cited}/${documentRows.length} answers. Reported, not graded.`,
+		"The document lane scored five questions against a scanned inspection report read by OCR. ADR-0008",
+		"removed the OCR service on 31 August 2026: an attached picture now goes to the vision model as a",
+		"picture, and there is no extracted text to grade against a human-written ground truth. Scoring the",
+		"vision lane needs its own fixtures — photographs with an answer written down beside them — which do",
+		"not exist yet. Reporting a stale number would be worse than reporting none.",
 		"",
 		"## Summary",
 		"",

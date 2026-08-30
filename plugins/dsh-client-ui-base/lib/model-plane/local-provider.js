@@ -37,7 +37,6 @@
  * governs *tool* calls and is untouched by this: the counted zero stays zero.
  */
 
-import { attachmentNote } from "../findings/attached.js";
 import { withoutHarnessInjections } from "./injected.js";
 import { ModelProviderError } from "./model-provider.js";
 import { createSseParser } from "./sse.js";
@@ -88,70 +87,122 @@ function messageText(message) {
 }
 
 /**
- * Translate harness messages into OpenAI chat messages, attaching images to the
- * final user message when the request carries any.
+ * The images on one message, already resolved to bytes by
+ * `attachments/images.js`, as OpenAI `image_url` parts.
+ *
+ * An image whose bytes could not be read becomes a sentence of text instead of
+ * a part. Saying so is the point: a vision model asked "what is in this
+ * picture?" with no picture attached does not refuse, it describes something
+ * plausible, and a confident description of an image nobody sent is the worst
+ * failure this surface has.
+ * @param {{ content?: unknown }} message
+ */
+function messageImageParts(message) {
+	if (!Array.isArray(message.content)) return { parts: [], unreadable: 0 };
+	const parts = [];
+	let unreadable = 0;
+	for (const block of message.content) {
+		if (block?.type !== "image") continue;
+		if (typeof block.base64 !== "string" || block.base64 === "") {
+			unreadable += 1;
+			continue;
+		}
+		parts.push({ type: "image_url", image_url: { url: `data:${block.mediaType};base64,${block.base64}` } });
+	}
+	return { parts, unreadable };
+}
+
+/**
+ * A one-line system note telling the model it is looking at a picture.
+ *
+ * **Why it is needed at all.** Asked "what is in this image?" with an image
+ * genuinely attached, a 2B model still has to decide between describing what it
+ * sees and transcribing the words in it. Measured on 30 August 2026, the
+ * previous build answered a photograph with thirteen numbered lines of
+ * extracted text, because the instruction it had been given was about
+ * extraction. The note says the opposite, once, in a sentence.
+ *
+ * It is a statement of fact, not an instruction to obey — the model still
+ * decides what to say, and the session log still records what it did.
+ */
+function visionNote(count) {
+	const subject = count === 1 ? "An image is" : `${count} images are`;
+	return (
+		`${subject} attached to this conversation. You are looking at the picture itself, not a description of it. ` +
+		"Answer from what you can see, in your own words."
+	);
+}
+
+/**
+ * Translate harness messages into OpenAI chat messages, keeping every attached
+ * image on the message the operator actually attached it to.
+ *
+ * **Images ride their own message.** An earlier build collected every image in
+ * the turn and hung them all off whichever user message came last. That is
+ * indistinguishable from correct in a one-shot demo and wrong in a
+ * conversation: ask a follow-up and the picture detaches from the message it
+ * belonged to. Building the parts per message keeps a conversation about two
+ * different pictures coherent, and costs nothing — a message with no image
+ * still serialises to a plain string, which is what llama-server prefers.
  *
  * Empty messages are dropped: llama-server rejects a message with no content,
  * and the harness legitimately produces them (a tool-result whose payload was
- * not text, for instance).
- * @param {Array<{ role?: string, content?: unknown }>} messages
- * @param {Array<{ mediaType: string, base64: string }>} [images]
+ * not text, for instance). A message carrying an image is never empty, so an
+ * image sent with no words still reaches the model.
+ * @param {Array<{ role?: string, content?: unknown }>} messages - with image blocks already resolved by `attachments/images.js`.
  */
-export function toChatMessages(messages, images) {
+export function toChatMessages(messages) {
 	// The harness's own injected messages are dropped before the model sees
 	// them — the skill catalogue and the runtime-context snapshot. See
 	// `injected.js` for why, and for why tool results are deliberately kept.
 	const source = withoutHarnessInjections(messages);
 	const chat = [];
+	let images = 0;
+	let unreadable = 0;
 
-	// An attached document is host state; nothing in the message list mentions it.
-	// Without this note the model has no idea a file arrived, never calls the
-	// findings tool, and answers about the document from whatever else is in its
-	// window - which on 30 August 2026 was the runtime-context snapshot, reported
-	// confidently as the contents of the file. See `findings/attached.js`.
-	const note = attachmentNote();
-	if (note !== null) chat.push({ role: "system", content: note });
 	for (const message of source) {
 		const text = messageText(message);
-		if (text === "") continue;
+		const image = messageImageParts(message);
+		images += image.parts.length;
+		unreadable += image.unreadable;
+
+		if (text === "" && image.parts.length === 0 && image.unreadable === 0) continue;
 		const role = CHAT_ROLES.has(message.role) ? message.role : "user";
-		chat.push({ role, content: text });
-	}
 
-	if (!Array.isArray(images) || images.length === 0) return chat;
-
-	// Vision input rides the last user message as OpenAI `image_url` parts with
-	// data URLs, which is what llama-server's multimodal path reads. Absent any
-	// user message we make one, so an image-only request is still well formed.
-	let index = -1;
-	for (let i = chat.length - 1; i >= 0; i -= 1) {
-		if (chat[i].role === "user") {
-			index = i;
-			break;
+		if (image.parts.length === 0 && image.unreadable === 0) {
+			chat.push({ role, content: text });
+			continue;
 		}
+
+		const parts = [];
+		if (text !== "") parts.push({ type: "text", text });
+		parts.push(...image.parts);
+		if (image.unreadable > 0) {
+			parts.push({
+				type: "text",
+				text:
+					`[${image.unreadable} attached image${image.unreadable === 1 ? "" : "s"} could not be loaded and ` +
+					"you cannot see it. Say so rather than describing it.]",
+			});
+		}
+		chat.push({ role, content: parts });
 	}
-	if (index === -1) {
-		chat.push({ role: "user", content: "" });
-		index = chat.length - 1;
-	}
-	const parts = [];
-	if (chat[index].content !== "") parts.push({ type: "text", text: chat[index].content });
-	for (const image of images) {
-		parts.push({ type: "image_url", image_url: { url: `data:${image.mediaType};base64,${image.base64}` } });
-	}
-	chat[index] = { role: "user", content: parts };
+
+	// The note goes in front of the conversation, not against one message, so it
+	// applies to every picture in the turn and stays true on a follow-up.
+	if (images > 0) chat.unshift({ role: "system", content: visionNote(images) });
 	return chat;
 }
 
 /**
  * Build the request body for llama-swap's OpenAI-compatible endpoint.
- * @param {{ messages: unknown[], model?: string, schema?: object, schemaName?: string, images?: unknown[], maxTokens?: number, temperature?: number }} request
+ * @param {{ messages: unknown[], model?: string, schema?: object, schemaName?: string, maxTokens?: number, temperature?: number }} request
  * @param {string} defaultModel
  */
 export function buildRequestBody(request, defaultModel) {
 	const body = {
 		model: request.model ?? defaultModel,
-		messages: toChatMessages(request.messages, request.images),
+		messages: toChatMessages(request.messages),
 		stream: true,
 		temperature: request.temperature ?? DEFAULT_TEMPERATURE,
 	};
@@ -222,7 +273,7 @@ export class LocalModelProvider {
 	 * Stream one turn. Yields `{ type: "text" }` pieces, and `{ type: "reasoning" }`
 	 * where the model emits it — the adapter ignores piece types it does not
 	 * know, so reasoning is carried for the execution trace at no cost today.
-	 * @param {{ messages: unknown[], model?: string, schema?: object, images?: unknown[], signal?: AbortSignal }} request
+	 * @param {{ messages: unknown[], model?: string, schema?: object, signal?: AbortSignal }} request
 	 */
 	async *answer(request) {
 		const model = request.model ?? this.defaultModel;
