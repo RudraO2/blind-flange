@@ -156,6 +156,59 @@ window.__ModuleLoader__.load({
 		 * sidebar around it, and a wordmark that restyles itself would stop matching
 		 * the row it sits in (UX-DR7).
 		 */
+		/**
+		 * The hero lockup: the mark, the product name, and the tagline under it.
+		 *
+		 * The hero headline reads "Into the Unknown" and there is no seat for it. It
+		 * is a locale string (`hero.headline`) inside `dsh-client-ui-conversation`,
+		 * `ui-conversation` takes no config, and `locale.register` throws rather than
+		 * overriding: it refuses a namespace/locale pair that is already registered,
+		 * and the conversation package registers both of the two shipped locales. So
+		 * there is no supported way to change that string, and it is the largest text
+		 * on the first screen of the demo, naming somebody else's product.
+		 *
+		 * What this does instead: the shipped headline node is hidden by the
+		 * stylesheet below, and the words are rendered HERE, as real text in a real
+		 * component. CSS only hides; it never fabricates text through `content:`, so
+		 * the name stays selectable, readable by a screen reader, and themed like
+		 * everything else.
+		 *
+		 * How it degrades matters, because the hook is a build-hashed class name. If
+		 * a harness upgrade renames it the rule stops matching, and the hero shows
+		 * both "Faraday" and "Into the Unknown". Untidy, and visible immediately -
+		 * which is the right failure for a demo surface, rather than a blank hero.
+		 * The harness version this was checked against is pinned in package.json.
+		 */
+		function FaradayHero({ size, className }) {
+			let jsxRuntime;
+			try {
+				jsxRuntime = require("react/jsx-runtime");
+			} catch {
+				return null;
+			}
+			if (typeof jsxRuntime?.jsx !== "function") return null;
+			const { jsx, jsxs } = jsxRuntime;
+			return jsxs("span", {
+				style: { display: "inline-flex", alignItems: "center", gap: "0.4em" },
+				children: [
+					jsx(FaradayMark, { size, className }),
+					jsxs("span", {
+						style: { display: "inline-flex", flexDirection: "column", alignItems: "flex-start", lineHeight: 1.05 },
+						children: [
+							// No font-size of ours: the name inherits the headline's own type.
+							jsx("span", { children: "Faraday" }),
+							// The tagline is sized against that headline rather than in px, so it
+							// stays in proportion if the harness restyles the hero.
+							jsx("span", {
+								style: { fontSize: "0.34em", fontWeight: 400, letterSpacing: "0.04em", color: "var(--dsw-alias-label-secondary)" },
+								children: "Into the Unknown",
+							}),
+						],
+					}),
+				],
+			});
+		}
+
 		function FaradayWordmark() {
 			let jsxRuntime;
 			try {
@@ -2591,6 +2644,29 @@ function auditLine(entry) {
 			const EgressPanel = buildEgressPanel(ctx);
 			const SealBand = buildSealBand(ctx);
 			const ProvenanceView = buildProvenanceView();
+			// Hide the shipped hero headline so the lockup above is the only one on
+			// screen. One rule, one job: it hides a node and fabricates nothing. The
+			// selector matches the CSS-module local name rather than the build hash in
+			// front of it, which is the stable half. See `FaradayHero` for what happens
+			// if a harness upgrade renames it.
+			let disposeHeadlineStyle = () => {};
+			if (typeof document !== "undefined" && document.head) {
+				const style = document.createElement("style");
+				style.dataset.faraday = "hero-headline";
+				style.textContent = [
+					// The hero headline row is a grid, and the mark's cell is a fixed 34px
+					// track - sized for a mark, which is all it ever held. The lockup is
+					// wider than that and overflowed onto the Preview badge. Flex lets the
+					// cell size to its content and keeps the badge after it.
+					'[class*="_headline"] { display: flex !important; align-items: center; }',
+					'[class*="_headlineText"] { display: none !important; }',
+				].join("\n");
+				document.head.appendChild(style);
+				disposeHeadlineStyle = () => {
+					style.remove();
+				};
+			}
+
 			const disposeSidebarMark = ctx.slots.inject("sidebar.brand.mark", function* () {
 				yield ctx.slots.register({ name: "sidebar.brand.mark" }, FaradayMark);
 			});
@@ -2598,7 +2674,7 @@ function auditLine(entry) {
 				yield ctx.slots.register({ name: "sidebar.brand.name" }, FaradayWordmark);
 			});
 			const disposeHeroMark = ctx.slots.inject("conversation.hero.brand.mark", function* () {
-				yield ctx.slots.register({ name: "conversation.hero.brand.mark" }, FaradayMark);
+				yield ctx.slots.register({ name: "conversation.hero.brand.mark" }, FaradayHero);
 			});
 			// `conversation.hero.agentPreset` is a child slot the hero declares once
 			// it renders, not a standing seam: registering before that declaration
@@ -2753,6 +2829,7 @@ function auditLine(entry) {
 				disposeTabTitle();
 				disposeSidebarMark();
 				disposeSidebarName();
+				disposeHeadlineStyle();
 				disposeHeroMark();
 				disposeIndicator?.();
 				disposeProviderDisclosure?.();

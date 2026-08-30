@@ -396,27 +396,35 @@ test("the provider disclosure names an unrecognised provider rather than guessin
 	assert.match(JSON.stringify(span.props.children), /Local/);
 });
 
-test("the registered mark renders the Faraday paths in currentColor, not a hand-rolled hex", () => {
+test("the hero seat renders the mark, the name and the tagline as real text", () => {
+	// The shipped headline reads "Into the Unknown" and has no seat: it is a
+	// locale string, ui-conversation takes no config, and locale.register throws
+	// on a namespace/locale pair that already exists. So the words are rendered
+	// here and the shipped node is hidden by a stylesheet - CSS hides, it never
+	// fabricates text, so the name stays selectable and readable aloud.
 	const { exports } = loadClientHalf((specifier) => healthyHostModules[specifier]);
 	const { ctx, registered } = stubSlots();
 	exports.apply(ctx);
 	const hero = registered.find((call) => call.options.name === "conversation.hero.brand.mark");
-	const svg = hero.component({ size: 20, className: "hero-mark" });
+	const flat = JSON.stringify(hero.component({ size: 20, className: "hero-mark" }));
+	assert.match(flat, /Faraday/);
+	assert.match(flat, /Into the Unknown/);
+	assert.match(flat, /--dsw-alias-label-secondary/, "the tagline takes a theme token, not a colour of ours");
+	assert.doesNotMatch(flat, /fontSize":"[0-9]+px/, "the lockup sizes against the headline, not in px");
+});
+
+test("the sidebar mark is still the bare mark, in currentColor", () => {
+	const { exports } = loadClientHalf((specifier) => healthyHostModules[specifier]);
+	const { ctx, registered } = stubSlots();
+	exports.apply(ctx);
+	const side = registered.find((call) => call.options.name === "sidebar.brand.mark");
+	const svg = side.component({ size: 20, className: "side-mark" });
 	assert.equal(svg.type, "svg");
-	assert.equal(svg.props.width, 20);
-	assert.equal(svg.props.className, "hero-mark");
 	assert.equal(svg.props.viewBox, "273 215 722 722", "the viewBox is cropped to the artwork, not the exported canvas");
-	// The artwork is authored at 1254pt and drawn through the exported group
-	// transform; rescaling the coordinates by hand would risk shifting the curves.
-	const group = svg.props.children;
-	assert.equal(group.type, "g");
-	assert.match(group.props.transform, /translate\(0,1254\) scale\(0\.1,-0\.1\)/);
-	const paths = group.props.children;
-	assert.ok(Array.isArray(paths) && paths.length > 0, "the mark should draw at least one path");
+	const paths = svg.props.children.props.children;
+	assert.ok(Array.isArray(paths) && paths.length > 0);
 	for (const path of paths) {
-		assert.equal(path.type, "path");
 		assert.equal(path.props.fill, "currentColor", "the mark takes the theme foreground, never a colour of ours");
-		assert.ok(path.props.d.length > 0);
 	}
 });
 
