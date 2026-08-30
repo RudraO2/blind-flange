@@ -1,10 +1,20 @@
 # Ticket 06: fetch the runtime and the weights.
 # Vulkan build, not CUDA (licence — see issues/04). GGUFs from Qwen's own repos only
 # (ggml-org and bartowski declare no licence at all).
-# Everything lands on D: — 238 GB free there against 44 GB on C:.
+# The runtime root defaults to D:i where a D: drive exists (238 GB free there
+# against 44 GB on C:) and to LOCALAPPDATA where it does not; pass -Root to override.
+
+param(
+	# Where the runtime and the weights land. 2.5 GB, so it goes on the roomiest
+	# drive rather than wherever the checkout happens to be. D:\ai is this team's
+	# machines; anything without a D: falls back to LOCALAPPDATA, because a path
+	# baked into a committed script is one of the ways Story 6.3 fails.
+	[string]$Root = $(if (Test-Path "D:\") { "D:\ai" } else { Join-Path $env:LOCALAPPDATA "faraday-runtime" })
+)
 
 $ErrorActionPreference = "Stop"
-$root = "D:\ai"
+$root = $Root
+Write-Host "runtime root: $root"
 New-Item -ItemType Directory -Force -Path "$root\dl", "$root\models" | Out-Null
 
 $targets = @(
@@ -56,7 +66,7 @@ foreach ($line in ($devices -split "`n")) {
 if ($null -eq $discrete) { throw "no discrete GPU found in --list-devices; set --device by hand in $root\llama-swap\config.yaml" }
 Write-Host "      discrete = $discrete$(if ($igpu) { ", igpu = $igpu" })"
 
-(Get-Content -Raw $config).Replace('__DISCRETE_GPU__', $discrete).Replace('__IGPU__', $(if ($igpu) { $igpu } else { 'Vulkan0' })) |
+(Get-Content -Raw $config).Replace('__RUNTIME_ROOT__', ($root -replace '\\','/')).Replace('__DISCRETE_GPU__', $discrete).Replace('__IGPU__', $(if ($igpu) { $igpu } else { 'Vulkan0' })) |
 	Set-Content -NoNewline -Path "$root\llama-swap\config.yaml"
 Write-Host "OK    config.yaml -> $root\llama-swap\config.yaml (lanes pinned to $discrete)"
 

@@ -1,7 +1,7 @@
 @echo off
 setlocal
 
-rem Blind Flange (SIH26117) - the front door.
+rem Faraday (SIH26117) - the front door.
 rem
 rem Double-click this, or run `run.bat` from a terminal. It checks what is
 rem needed, sets everything up if it has not been set up, and starts the
@@ -15,13 +15,15 @@ rem   run.bat            set up if needed, then open FULLSCREEN (kiosk)
 rem   run.bat windowed   the same, in an ordinary browser tab
 rem   run.bat check      check the install and stop, starting nothing
 rem   run.bat setup      set up and stop, starting nothing
-rem   run.bat ingestion  install the optional Python OCR service
+rem   run.bat ingestion  install the Python OCR service
+rem   run.bat models     download the inference runtime and the two models
+rem   run.bat stop       stop the workbench, the runtime and the OCR service
 
 cd /d "%~dp0"
 
 echo.
-echo   Blind Flange - a sovereign, air-gapped AI workbench
-echo   ---------------------------------------------------
+echo   Faraday - a sovereign, air-gapped AI workbench
+echo   ----------------------------------------------
 echo.
 
 rem ---- Node is the one hard prerequisite -------------------------------------
@@ -53,6 +55,45 @@ if errorlevel 1 (
   )
 )
 
+rem ---- the inference runtime and the two models ------------------------------
+rem
+rem `fetch-runtime.ps1` downloads llama-swap, the llama.cpp Vulkan build, and the
+rem two models the router picks between - the coder and the vision/document
+rem model - then writes llama-swap's config with the discrete GPU it finds on
+rem THIS machine. It is idempotent: anything already on disk is skipped, so the
+rem cost of running it every time is one directory listing.
+rem
+rem Prefer pwsh (PowerShell 7) and fall back to the Windows-shipped powershell,
+rem because a fresh machine has the second and may not have the first.
+
+rem Where the runtime lives. `fetch-runtime.ps1` picks the same two paths: D:\ai
+rem when a D: drive exists, LOCALAPPDATA when it does not, so a machine with one
+rem drive is not asked for a second.
+if exist "D:\" (set "RUNTIME_ROOT=D:\ai") else (set "RUNTIME_ROOT=%LOCALAPPDATA%\faraday-runtime")
+set "LLAMA_SWAP_EXE=%RUNTIME_ROOT%\llama-swap\llama-swap.exe"
+set "SWAP_CONFIG=%RUNTIME_ROOT%\llama-swap\config.yaml"
+
+set "PS=pwsh"
+where pwsh >nul 2>nul || set "PS=powershell"
+
+if /i "%~1"=="stop" (
+  echo   Stopping the workbench, the inference runtime and the OCR service...
+  for /f "tokens=5" %%p in ('netstat -ano ^| findstr /r /c:"127.0.0.1:3080 .*LISTENING"') do taskkill /f /pid %%p >nul 2>nul
+  for /f "tokens=5" %%p in ('netstat -ano ^| findstr /r /c:"127.0.0.1:8080 .*LISTENING"') do taskkill /f /pid %%p >nul 2>nul
+  for /f "tokens=5" %%p in ('netstat -ano ^| findstr /r /c:"127.0.0.1:8642 .*LISTENING"') do taskkill /f /pid %%p >nul 2>nul
+  echo   Stopped.
+  echo.
+  pause
+  exit /b 0
+)
+
+if /i "%~1"=="models" (
+  call %PS% -NoProfile -ExecutionPolicy Bypass -File ".scratch\local-inference-lanes\fetch-runtime.ps1"
+  echo.
+  pause
+  exit /b %errorlevel%
+)
+
 rem ---- what were we asked to do ----------------------------------------------
 
 if /i "%~1"=="check" (
@@ -76,6 +117,66 @@ if /i "%~1"=="setup" (
   exit /b %errorlevel%
 )
 
+rem ---- make sure the runtime and the two models are on disk ------------------
+rem
+rem Skipped in seconds when they already are. On a cold machine it is a 2.5 GB
+rem download and the only slow step in this file, so it says so before starting.
+
+if not exist "%LLAMA_SWAP_EXE%" goto :fetchruntime
+if not exist "%SWAP_CONFIG%" goto :fetchruntime
+goto :runtimeready
+
+:fetchruntime
+echo.
+echo   The inference runtime or the models are missing. Fetching them now -
+echo   about 2.5 GB on a machine that has never run this. Already-downloaded
+echo   files are skipped, so this is quick on every run after the first.
+echo.
+call %PS% -NoProfile -ExecutionPolicy Bypass -File ".scratch\local-inference-lanes\fetch-runtime.ps1"
+if errorlevel 1 (
+  echo.
+  echo   Fetching the runtime failed. The message above says why. The usual
+  echo   causes are no internet on this machine, or no room on the drive.
+  echo.
+  pause
+  exit /b 1
+)
+
+:runtimeready
+
+rem ---- start the two services the workbench talks to -------------------------
+rem
+rem llama-swap holds one model in VRAM at a time and swaps on demand, which is
+rem what lets the router move between the coder and the vision model on a card
+rem that cannot hold both. The ingestion service does OCR, and warms its engine
+rem before it opens its socket, so it is started first and given a moment.
+rem
+rem Both open their own window. Closing this one does not stop them; that is
+rem deliberate, so a mis-click on the workbench does not take the models down
+rem with it. `run.bat stop` closes all three.
+
+netstat -ano | findstr /r /c:"127.0.0.1:8080 .*LISTENING" >nul 2>nul
+if errorlevel 1 (
+  echo   Starting the inference runtime on 127.0.0.1:8080 ...
+  start "Faraday - inference" /min "%LLAMA_SWAP_EXE%" --config "%SWAP_CONFIG%" --listen 127.0.0.1:8080
+) else (
+  echo   The inference runtime is already running on 127.0.0.1:8080.
+)
+
+netstat -ano | findstr /r /c:"127.0.0.1:8642 .*LISTENING" >nul 2>nul
+if errorlevel 1 (
+  if exist "services\ingestion\.venv\Scripts\python.exe" (
+    echo   Starting the OCR service on 127.0.0.1:8642 ...
+    start "Faraday - OCR" /min cmd /c "npm run ingestion"
+  ) else (
+    echo   The OCR service is not installed - run:  run.bat ingestion
+    echo   The workbench still starts; uploads and provenance will not work.
+  )
+) else (
+  echo   The OCR service is already running on 127.0.0.1:8642.
+)
+echo.
+
 rem ---- windowed: the old behaviour, an ordinary browser tab -------------------
 
 if /i "%~1"=="windowed" (
@@ -94,6 +195,7 @@ if /i "%~1"=="windowed" (
   call npm start
   exit /b %errorlevel%
 )
+
 
 rem ---- the normal path: set up, then start ------------------------------------
 
