@@ -146,6 +146,22 @@
 - id: ui-skill
   disabled: true
 
+# Session titles come from the first prompt, not from a model.
+#
+# `session-title-llm` asks the active model to name each session. Under `replay`
+# that was harmless. Under `local` it hands the job to a 2B Qwen, which on
+# 30 August 2026 titled an English session about an inspection document with a
+# paragraph of Chinese about a wholly unrelated subject, and titled others with
+# the literal words "Session Title:" followed by the model's own preamble. The
+# sidebar is on screen for the whole demo and those titles are the first thing a
+# judge reads.
+#
+# Disabling this row leaves `session-title`'s own fallback in place, which takes
+# the first few words of the operator's prompt: deterministic, in the language
+# they typed, and costing no inference on a card that has none to spare.
+- id: session-title-llm
+  disabled: true
+
 # Story 3.7: the routing chip replaces the stock model picker.
 # conversation.input.model is a single slot; disabling ui-model-selection
 # (the composer model seat + /model popup) is what makes bf-base's routing
