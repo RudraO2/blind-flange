@@ -666,10 +666,31 @@ window.__ModuleLoader__.load({
 		 * showing the same events would be two places to keep in step.
 		 * ------------------------------------------------------------------- */
 
-		/** The denial marker the host half appends; see `index.js` `EGRESS_DENIED_EVENT`. */
-		const EGRESS_DENIED_EVENT = "egress/denied";
+		/**
+		 * The four markers the host half appends, mapped to the short kind each
+		 * audit line is rendered from. The monitor used to fold one of them —
+		 * `egress/denied` — which made it a record of this system's own
+		 * successes and nothing else. It now folds the seal being opened and
+		 * closed, the calls the open seal let through, and what became of them.
+		 *
+		 * That is the difference between an instrument and a claim. A count of
+		 * denials, on its own, cannot be told apart from a count taken while
+		 * nothing was being enforced; a list that also shows the seal opening at
+		 * 14:32 and a call reaching the internet at 14:33 is a log that tells on
+		 * itself, and an evaluator can read it as evidence rather than as
+		 * decoration.
+		 */
+		const EGRESS_EVENT_KINDS = {
+			"egress/denied": "denied",
+			"egress/permitted": "permitted",
+			"egress/escaped": "escaped",
+			"egress/seal": "seal",
+		};
 		const EGRESS_VIEW_TARGET = "bf-egress";
 		const EGRESS_DEFINITION_KIND = "bf-egress";
+
+		/** The seal's loopback channel, mirroring `CANARY_CHANNEL` below. */
+		const SEAL_CHANNEL = "/bf-seal";
 
 		/**
 		 * View builder for {@link EGRESS_VIEW_TARGET}. Keeps one node per
@@ -696,8 +717,15 @@ window.__ModuleLoader__.load({
 						return { ...data, seq };
 					})
 					.sort((a, b) => a.seq - b.seq);
+				// `count` stays the number of DENIALS, not of entries: it is what the
+				// chip has always shown and what FR15's counted zero means. The other
+				// kinds are counted separately rather than folded into it, because a
+				// single number that rose whether the seal stopped a call or waved it
+				// through would be worse than no number at all.
 				return {
-					count: entries.length,
+					count: entries.filter((entry) => entry.kind === "denied").length,
+					permitted: entries.filter((entry) => entry.kind === "permitted").length,
+					escaped: entries.filter((entry) => entry.kind === "escaped" && entry.reached === true).length,
 					entries,
 					latest: entries.length > 0 ? entries[entries.length - 1] : null,
 				};
@@ -741,7 +769,7 @@ window.__ModuleLoader__.load({
 			kind: EGRESS_DEFINITION_KIND,
 			target: EGRESS_VIEW_TARGET,
 			match(event) {
-				return event && event.type === EGRESS_DENIED_EVENT
+				return event && EGRESS_EVENT_KINDS[event.type] !== undefined
 					? { id: String(event.seq), role: "start" }
 					: null;
 			},
@@ -753,8 +781,14 @@ window.__ModuleLoader__.load({
 			start(_context, match) {
 				const data = match.event.data || {};
 				return {
+					kind: EGRESS_EVENT_KINDS[match.event.type],
 					tool: data.tool,
 					target: data.target,
+					// `egress/seal`: whether the seal ended up closed.
+					// `egress/escaped`: whether the call actually arrived.
+					sealed: data.sealed,
+					reached: data.reached,
+					detail: data.detail,
 					time: typeof match.event.time === "number" ? match.event.time : null,
 					seq: typeof match.event.seq === "number" ? match.event.seq : null,
 				};
@@ -811,6 +845,78 @@ window.__ModuleLoader__.load({
 		const egressPanelOpen = createOpenStore();
 
 		/**
+		 * The seal's state, as this client understands it, plus the only route
+		 * this client has to change it.
+		 *
+		 * The seal itself lives on the host (`egress/seal.js`) — process-wide,
+		 * closed at boot, never persisted open. This store is a cache of it,
+		 * seeded by asking on mount so a reloaded page shows the truth rather
+		 * than an assumption, and updated from what the host answers rather than
+		 * from what the button hoped would happen. A control that moved its own
+		 * indicator and then told the host would be able to show "sealed" while
+		 * the machine was open, which is the one lie this panel must not be
+		 * capable of.
+		 *
+		 * `known` stays false until the host has answered once. Until then the
+		 * UI says it does not know yet, rather than assuming the safe answer and
+		 * showing a reassurance it has not earned.
+		 */
+		function createSealStore() {
+			let state = { sealed: true, known: false, busy: false };
+			let connection = null;
+			const listeners = new Set();
+			function emit() {
+				for (const listener of listeners) listener();
+			}
+			function set(next) {
+				state = { ...state, ...next };
+				emit();
+			}
+			async function call(endpoint, sessionId) {
+				if (!connection) return;
+				set({ busy: true });
+				try {
+					const result = await connection.rpc.call(SEAL_CHANNEL, endpoint, sessionId ? { sessionId } : {});
+					if (result?.ok === true && typeof result.value?.sealed === "boolean") {
+						set({ sealed: result.value.sealed, known: true, busy: false });
+						return;
+					}
+					set({ busy: false });
+				} catch (error) {
+					console.warn(
+						`@blind-flange/dsh-client-ui-base: the seal did not answer — ${error instanceof Error ? error.message : String(error)}`,
+					);
+					set({ busy: false });
+				}
+			}
+			return {
+				get: () => state,
+				subscribe(listener) {
+					listeners.add(listener);
+					return () => listeners.delete(listener);
+				},
+				/** Point the store at the host transport, and read the seal once. */
+				bind(next) {
+					connection = next;
+					void call("get");
+				},
+				/**
+				 * Ask the host to open or close the seal.
+				 * @param sealed - true to close it, false to open it.
+				 * @param sessionId - the session to record the change on, when there is one.
+				 */
+				request(sealed, sessionId) {
+					return call(sealed ? "close" : "open", sessionId);
+				},
+			};
+		}
+
+		const seal = createSealStore();
+
+		/** How long the seal must be held open before it opens. See {@link buildSealControl}. */
+		const SEAL_HOLD_MS = 900;
+
+		/**
 		 * The clock reading for one audit line, from the `time` the harness
 		 * stamped on the denial event. Local wall time with seconds, because an
 		 * evaluator reads it against the moment they pressed the canary. Renders
@@ -838,6 +944,57 @@ window.__ModuleLoader__.load({
 		 * of denial events — this function never invents one.
 		 * @param session - a session face, or null.
 		 */
+		/**
+		 * One audit entry, in the words an evaluator reads on screen.
+		 *
+		 * Plain sentences rather than event names: the person this list has to
+		 * convince is a domain expert reading it once, over someone's shoulder,
+		 * without a glossary. "Refused" and "Reached the internet" are readable
+		 * from across a room; `egress/escaped { reached: true }` is not.
+		 *
+		 * A field the record does not carry is named as missing rather than
+		 * filled in — an audit surface that invents a value is worse than one
+		 * that admits a gap.
+		 * @param entry - one folded entry from the `bf-egress` view.
+		 * @returns `{ headline, detail }`, both plain text.
+		 */
+		function describeEntry(entry) {
+			const tool = typeof entry.tool === "string" && entry.tool !== "" ? entry.tool : "an unrecorded tool";
+			const target =
+				typeof entry.target === "string" && entry.target !== "" ? entry.target : "an unrecorded target";
+			switch (entry.kind) {
+				case "seal":
+					return entry.sealed === false
+						? {
+								headline: "Seal opened",
+								detail: "Blind Flange stopped denying outbound calls. Recorded here because the operator did it.",
+							}
+						: { headline: "Seal closed", detail: "Outbound calls are denied again." };
+				case "permitted":
+					return {
+						headline: "Permitted — the seal was open",
+						detail: `${tool} was allowed to reach ${target}. Nothing in this application stood in its way.`,
+					};
+				case "escaped":
+					return entry.reached === true
+						? {
+								headline: "Reached the internet",
+								detail: `${target} answered. The seal was open and nothing else stopped this call.`,
+							}
+						: {
+								headline: "Left the application — stopped outside it",
+								detail: `${target} was attempted and nothing came back. ${
+									typeof entry.detail === "string" && entry.detail !== "" ? entry.detail : "No response."
+								} Whatever refused this was not Blind Flange.`,
+							};
+				default:
+					return {
+						headline: "Denied",
+						detail: `${tool} tried to reach ${target}. Blind Flange denied it before it ran.`,
+					};
+			}
+		}
+
 		function readEgressSnapshot(session) {
 			if (!session) return null;
 			const view = session.getSnapshot().views.get(EGRESS_VIEW_TARGET);
@@ -862,6 +1019,7 @@ window.__ModuleLoader__.load({
 			 * user action.
 			 */
 			function EgressChip(props) {
+				const sealState = useSyncExternalStore(seal.subscribe, seal.get);
 				const session = ctx.sessions?.binding?.(props.sessionId)?.session ?? null;
 				const snapshot = useSyncExternalStore(
 					(onChange) => (session ? session.subscribe(onChange) : () => {}),
@@ -872,17 +1030,27 @@ window.__ModuleLoader__.load({
 				const breached = ready && count > 0;
 
 				return jsx(Pill, {
-					active: breached,
+					active: breached || (sealState.known && !sealState.sealed),
 					onClick: () => egressPanelOpen.toggle(),
 					"aria-haspopup": "dialog",
-					title: breached
-						? `Egress monitor: ${count} outbound attempt${count === 1 ? "" : "s"} denied and recorded this session. Open for the audit detail.`
-						: "Egress monitor: no outbound attempt has been made this session. The count is the number of recorded denials, not a fixed label.",
+					title:
+						sealState.known && !sealState.sealed
+							? "Egress monitor: the seal is OPEN — outbound calls are not being denied. Open for the audit detail and the control that closes it."
+							: breached
+								? `Egress monitor: ${count} outbound attempt${count === 1 ? "" : "s"} denied and recorded this session. Open for the audit detail.`
+								: "Egress monitor: no outbound attempt has been made this session. The count is the number of recorded denials, not a fixed label.",
 					children: jsxs("span", {
 						style: { display: "inline-flex", alignItems: "center", gap: "6px" },
 						children: [
-							jsx(StateDot, { state: breached ? "error" : "done", size: 8 }),
-							ready ? `Egress ${count}` : "Egress",
+							jsx(StateDot, {
+								state: sealState.known && !sealState.sealed ? "warning" : breached ? "error" : "done",
+								size: 8,
+							}),
+							// The chip stops showing a count while the seal is open. A
+							// number that keeps reading "0" with enforcement switched off
+							// would be the most misleading thing on the screen — true, and
+							// understood as the opposite of what it means.
+							sealState.known && !sealState.sealed ? "Egress — open" : ready ? `Egress ${count}` : "Egress",
 						],
 					}),
 				});
@@ -899,13 +1067,22 @@ window.__ModuleLoader__.load({
 		 * @returns the component.
 		 */
 		function buildEgressPanel(ctx) {
-			const { useEffect, useRef, useSyncExternalStore } = require("react");
+			const { useEffect, useRef, useState, useSyncExternalStore } = require("react");
 			const { jsx, jsxs } = require("react/jsx-runtime");
 			const { StateDot, Button } = require("@deepseek-ai/dsh-client-ui-primitives");
 
 			const SECONDARY = { color: "var(--dsw-alias-label-secondary)" };
 
 			/** Current session id from the sessions list store, or null. */
+			function useCurrentSessionId() {
+				const list = ctx.sessions?.list ?? null;
+				return useSyncExternalStore(
+					(onChange) => (list ? list.subscribe(onChange) : () => {}),
+					() => (list ? list.getSnapshot().current ?? null : null),
+				);
+			}
+
+			/** The session face for the current session, or null. */
 			function useCurrentSession() {
 				const list = ctx.sessions?.list ?? null;
 				const current = useSyncExternalStore(
@@ -928,15 +1105,13 @@ window.__ModuleLoader__.load({
 			 * @param entry - one folded `egress/denied` entry from the view.
 			 * @returns the row, keyed by the event's log sequence number.
 			 */
-			function auditLine(entry) {
-				const tool = typeof entry.tool === "string" && entry.tool !== "" ? entry.tool : "unrecorded tool";
-				const target =
-					typeof entry.target === "string" && entry.target !== "" ? entry.target : "unrecorded target";
+function auditLine(entry) {
+				const line = describeEntry(entry);
 				return jsxs(
 					"div",
 					{
 						role: "listitem",
-						title: `${denialStamp(entry.time)} — ${tool} attempted ${target}. Denied by egress denial and written to the session log.`,
+						title: `${denialStamp(entry.time)} — ${line.headline}. ${line.detail}`,
 						style: { display: "flex", flexDirection: "column", gap: "2px" },
 						children: [
 							jsxs("div", {
@@ -946,14 +1121,114 @@ window.__ModuleLoader__.load({
 										style: { ...SECONDARY, fontVariantNumeric: "tabular-nums", flex: "0 0 auto" },
 										children: denialClock(entry.time),
 									}),
-									jsx("span", { style: { flex: "1 1 auto", minWidth: 0 }, children: tool }),
+									jsx("span", { style: { flex: "1 1 auto", minWidth: 0 }, children: line.headline }),
 								],
 							}),
-							jsx("div", { style: { ...SECONDARY, wordBreak: "break-all" }, children: target }),
+							jsx("div", { style: { ...SECONDARY, wordBreak: "break-all" }, children: line.detail }),
 						],
 					},
 					`bf-egress-line:${entry.seq}`,
 				);
+			}
+
+			/**
+			 * The seal control.
+			 *
+			 * WHY IT IS A HOLD AND NOT A SWITCH. Closing the seal is safe, so it
+			 * is one press. Opening it lets this workbench make real outbound
+			 * calls, so it asks for {@link SEAL_HOLD_MS} of deliberate pressure
+			 * instead. Not a confirmation dialog: a dialog is answered without
+			 * being read, and it makes the dangerous act and the safe act cost
+			 * the same gesture. A hold cannot happen by accident, it cannot
+			 * happen while the operator's attention is elsewhere, and — the part
+			 * that matters on a projector — the room can see it being done.
+			 * Resistance where the consequence is real.
+			 *
+			 * The sentence under the button is not a warning label. It says what
+			 * opening the seal actually does, that the act is recorded, and that
+			 * a restart undoes it, at the one moment that information is
+			 * relevant. An evaluator reading it learns the safety properties
+			 * from the product rather than from the pitch.
+			 * @param props.sessionId - the session the change is recorded against.
+			 */
+			function SealControl(props) {
+				const state = useSyncExternalStore(seal.subscribe, seal.get);
+				const [held, setHeld] = useState(0);
+				const timer = useRef(null);
+
+				function stop() {
+					if (timer.current !== null) {
+						clearInterval(timer.current);
+						timer.current = null;
+					}
+					setHeld(0);
+				}
+				// A press that ends with the pointer outside the button, or with the
+				// component unmounting, must not leave an interval running that opens
+				// the seal after the operator let go.
+				useEffect(() => stop, []);
+
+				function begin() {
+					if (timer.current !== null || state.busy) return;
+					const started = Date.now();
+					timer.current = setInterval(() => {
+						const progress = Math.min(1, (Date.now() - started) / SEAL_HOLD_MS);
+						setHeld(progress);
+						if (progress >= 1) {
+							stop();
+							void seal.request(false, props.sessionId);
+						}
+					}, 16);
+				}
+
+				const open = state.known && !state.sealed;
+				return jsxs("div", {
+					style: { display: "flex", flexDirection: "column", gap: "6px" },
+					children: [
+						// The hold's pointer handlers sit on a wrapper, not on `Button`.
+						// `Button` is a shipped primitive and nothing documents which
+						// props it forwards to its DOM node; hanging the gesture off it
+						// would fail silently if it forwards only the ones it knows.
+						// Events bubble to this wrapper whatever the primitive does with
+						// them. `onClick` stays on the Button itself — that one is
+						// proven, the Dismiss control beside it uses it.
+						jsxs("div", {
+							style: { display: "flex", flexDirection: "column", gap: "4px" },
+							onPointerDown: open ? undefined : begin,
+							onPointerUp: open ? undefined : stop,
+							onPointerLeave: open ? undefined : stop,
+							onPointerCancel: open ? undefined : stop,
+							children: [
+								jsx(Button, {
+									variant: "ghost",
+									size: "sm",
+									disabled: !state.known || state.busy,
+									onClick: open ? () => void seal.request(true, props.sessionId) : undefined,
+									title: open
+										? "Close the seal. Blind Flange goes back to denying every outbound call."
+										: "Press and hold. Opening the seal lets this workbench make real outbound calls.",
+									children: open ? "Close the seal" : held > 0 ? "Keep holding…" : "Hold to open the seal",
+								}),
+								// The fill is the hold made visible. `currentColor` rather
+								// than a colour of our own, so it is legible in both themes
+								// and adds nothing to the palette (UX-DR7).
+								jsx("div", {
+									"aria-hidden": "true",
+									style: { height: "2px", borderRadius: "1px", overflow: "hidden", opacity: held > 0 ? 0.5 : 0 },
+									children: jsx("div", {
+										style: { height: "100%", width: `${Math.round(held * 100)}%`, background: "currentColor" },
+									}),
+								}),
+							],
+						}),
+						jsx("span", {
+							style: { ...SECONDARY, fontSize: "0.9em" },
+							children: open
+								? "Every outbound call is now allowed to run, and each one is recorded above."
+								: "Opening it lets this workbench make real outbound calls. The change is recorded here, and restarting the workbench closes it again.",
+						}),
+					],
+				});
 			}
 
 			/**
@@ -974,6 +1249,8 @@ window.__ModuleLoader__.load({
 			 */
 			function EgressPanel() {
 				const open = useSyncExternalStore(egressPanelOpen.subscribe, egressPanelOpen.get);
+				const sealState = useSyncExternalStore(seal.subscribe, seal.get);
+				const sessionId = useCurrentSessionId();
 				const session = useCurrentSession();
 				const snapshot = useSyncExternalStore(
 					(onChange) => (session ? session.subscribe(onChange) : () => {}),
@@ -984,6 +1261,11 @@ window.__ModuleLoader__.load({
 				const count = ready ? snapshot.count : null;
 				const breached = ready && count > 0;
 				const entries = ready && Array.isArray(snapshot.entries) ? snapshot.entries : [];
+				// Calls that actually reached the internet this session. Counted
+				// separately from denials and stated separately below, because
+				// re-closing the seal does not un-send them: once something has got
+				// out, the session carries that fact whatever the seal does next.
+				const escaped = ready && typeof snapshot.escaped === "number" ? snapshot.escaped : 0;
 
 				// Keep the newest denial in view. The list reads oldest-first —
 				// the order the log wrote them, which is what this story asks for —
@@ -1001,14 +1283,33 @@ window.__ModuleLoader__.load({
 
 				if (!open) return null;
 
+				// Two facts, stated separately because they are independent: whether
+				// enforcement is on, and what it has stopped. Folding them into one
+				// sentence hid the count for as long as the seal's state was still
+				// being read, and a count that disappears is worse than one that waits.
+				const sealLine = !sealState.known
+					? "Checking whether the seal is closed."
+					: sealState.sealed
+						? "Sealed. Outbound calls are denied before they run."
+						: "The seal is OPEN. Outbound calls are not being denied by Blind Flange.";
 				const body = !ready
 					? jsx("span", { style: SECONDARY, children: "Waiting for a session." })
-					: jsxs("span", {
-							style: SECONDARY,
+					: jsxs("div", {
+							style: { display: "flex", flexDirection: "column", gap: "4px" },
 							children: [
-								breached
-									? `${count} outbound attempt${count === 1 ? "" : "s"} denied and written to the session log.`
-									: "No outbound attempt has been made. This zero is counted from the denial log, not printed.",
+								jsx("span", { style: SECONDARY, children: sealLine }),
+								escaped > 0
+									? jsx("span", {
+											style: SECONDARY,
+											children: `${escaped} call${escaped === 1 ? "" : "s"} reached the internet in this session. Closing the seal does not undo that.`,
+										})
+									: null,
+								jsx("span", {
+									style: SECONDARY,
+									children: breached
+										? `${count} outbound attempt${count === 1 ? "" : "s"} denied and written to the session log.`
+										: "No outbound attempt has been made. This zero is counted from the denial log, not printed.",
+								}),
 							],
 						});
 
@@ -1050,7 +1351,14 @@ window.__ModuleLoader__.load({
 						jsxs("div", {
 							style: { display: "flex", alignItems: "center", gap: "8px" },
 							children: [
-								jsx(StateDot, { state: breached ? "error" : "done", size: 10 }),
+								// Three readings, not two. "Sealed and nothing refused" is
+								// the resting state; "sealed and something was refused" is
+								// the seal doing its job; "open" is neither, and it must not
+								// borrow the colour of either.
+								jsx(StateDot, {
+									state: sealState.known && !sealState.sealed ? "warning" : breached ? "error" : "done",
+									size: 10,
+								}),
 								jsx("strong", { style: { flex: "1 1 auto" }, children: "Egress monitor" }),
 								jsx("span", {
 									style: { ...SECONDARY, fontVariantNumeric: "tabular-nums" },
@@ -1059,6 +1367,17 @@ window.__ModuleLoader__.load({
 							],
 						}),
 						body,
+						jsx("div", {
+							"aria-hidden": "true",
+							style: { height: "1px", background: "var(--dsw-alias-border-l2)" },
+						}),
+						jsx(SealControl, { sessionId }),
+						entries.length > 0
+							? jsx("div", {
+									"aria-hidden": "true",
+									style: { height: "1px", background: "var(--dsw-alias-border-l2)" },
+								})
+							: null,
 						entries.length > 0 ? jsx("div", { style: SECONDARY, children: "Audit log — oldest first" }) : null,
 						entries.length > 0
 							? jsx("div", {
@@ -1089,6 +1408,101 @@ window.__ModuleLoader__.load({
 			}
 
 			return EgressPanel;
+		}
+
+		/**
+		 * The open-seal band.
+		 *
+		 * WHY A BAND AND NOT A RED CHIP. A control that changes only itself is
+		 * not telling the truth about what it did — the consequence has to be
+		 * visible in the same frame as the cause. So the seal's open state is
+		 * not a colour somewhere in the header: it takes space at the top of the
+		 * window and keeps it. The application looks different because it *is*
+		 * different, and there is no reading of the screen in which an open seal
+		 * goes unnoticed.
+		 *
+		 * It cannot be dismissed. A dismissable warning is a warning that will
+		 * be dismissed, and the state it describes is the one state nobody
+		 * should be able to forget they are in.
+		 *
+		 * Its weight comes from occupying the layout, not from shouting: the
+		 * surface, border and shadow are the same `ui-theme` tokens every other
+		 * panel uses, and the only colour is `StateDot`'s own. This is
+		 * industrial control software (UX-DR7); a stripe of hand-mixed red would
+		 * read as pasted on, which is the failure this project has already made
+		 * once and written a rule about.
+		 *
+		 * Closed by the same call the panel's control uses, so the band is a
+		 * second way to reach one action rather than a second mechanism.
+		 * @param ctx - client root context, carrying `sessions`.
+		 * @returns the component.
+		 */
+		function buildSealBand(ctx) {
+			const { useSyncExternalStore } = require("react");
+			const { jsx, jsxs } = require("react/jsx-runtime");
+			const { StateDot, Button } = require("@deepseek-ai/dsh-client-ui-primitives");
+
+			function SealBand() {
+				const state = useSyncExternalStore(seal.subscribe, seal.get);
+				const list = ctx.sessions?.list ?? null;
+				const sessionId = useSyncExternalStore(
+					(onChange) => (list ? list.subscribe(onChange) : () => {}),
+					() => (list ? list.getSnapshot().current ?? null : null),
+				);
+
+				// Silent unless it has something true to say. Until the host has
+				// answered once, this client does not know the seal's state and must
+				// not imply either answer.
+				if (!state.known || state.sealed) return null;
+
+				return jsx("div", {
+					style: {
+						position: "absolute",
+						top: "12px",
+						left: "0",
+						right: "0",
+						display: "flex",
+						justifyContent: "center",
+						pointerEvents: "none",
+					},
+					children: jsxs("section", {
+						role: "status",
+						"aria-label": "The egress seal is open",
+						style: {
+							pointerEvents: "auto",
+							display: "flex",
+							alignItems: "center",
+							gap: "10px",
+							maxWidth: "min(680px, calc(100% - 32px))",
+							padding: "8px 10px 8px 14px",
+							borderRadius: "12px",
+							background: "var(--dsw-alias-bg-layer-1)",
+							border: "1px solid var(--dsw-alias-border-l2)",
+							boxShadow: "var(--dsw-shadow-lv2)",
+							color: "var(--dsw-alias-label-primary)",
+						},
+						children: [
+							jsx(StateDot, { state: "warning", size: 10 }),
+							jsxs("span", {
+								style: { flex: "1 1 auto" },
+								children: [
+									jsx("strong", { children: "The egress seal is open." }),
+									" Outbound calls are not being blocked by Blind Flange.",
+								],
+							}),
+							jsx(Button, {
+								variant: "ghost",
+								size: "sm",
+								disabled: state.busy,
+								onClick: () => void seal.request(true, sessionId),
+								children: "Close the seal",
+							}),
+						],
+					}),
+				});
+			}
+
+			return SealBand;
 		}
 
 		/* ---------------------------------------------------------------------
@@ -1123,18 +1537,39 @@ window.__ModuleLoader__.load({
 			const { Pill, StateDot } = require("@deepseek-ai/dsh-client-ui-primitives");
 
 			/**
-			 * Four outcomes, and the button says which one it is rather than
-			 * looking the same after every press. `denied` is the expected one —
-			 * red, matching the monitor. `allowed` is amber, because a canary that
-			 * got out means the seal is not holding and that is the one result
-			 * nobody should be able to miss.
+			 * Five outcomes, and the button says which one it is rather than
+			 * looking the same after every press.
+			 *
+			 * `refused` and `stoppedOutside` are both good news and both red, but
+			 * they are emphatically not the same fact, and the button must never
+			 * report one as the other: in the first, Blind Flange stopped the call
+			 * and wrote the record; in the second the call genuinely left this
+			 * process and something outside it — a host firewall, an unplugged
+			 * cable — refused it, and we can claim no credit and no record. The
+			 * old code collapsed the two, which would have had this button assert
+			 * a denial and an audit entry that the counter beside it could not
+			 * corroborate. See `createCanaryRpcHandler`.
+			 *
+			 * `reached` is amber, because a canary that got out is the one result
+			 * nobody should be able to miss — and, when the operator opened the
+			 * seal deliberately, the one that proves this button is measuring
+			 * something rather than asserting it.
 			 */
 			const COPY = {
-				idle: "Fire the canary: attempt a real outbound connection and watch egress denial refuse it.",
+				idle: "Fire the canary: attempt a real outbound connection and watch what happens to it.",
 				firing: "Firing the canary — attempting an outbound connection.",
-				denied: "Canary denied. The attempt was refused by egress denial and written to the audit log.",
-				allowed: "Canary was NOT denied — the outbound connection completed. Egress denial is not holding.",
+				refused: "Denied by Blind Flange before the call ran, and written to the audit log.",
+				stoppedOutside:
+					"The call left Blind Flange and nothing came back within three seconds. Whatever refused it was outside this application — Blind Flange did not.",
+				reached: "The call REACHED the internet. The seal was open and nothing stopped it.",
 				failed: "The canary could not be fired. The host did not answer.",
+			};
+
+			/** Server outcome name to button phase. Anything unrecognised is a failure to report, not a result to invent. */
+			const PHASE_FOR = {
+				refused: "refused",
+				"stopped-outside": "stoppedOutside",
+				reached: "reached",
 			};
 
 			/**
@@ -1159,7 +1594,12 @@ window.__ModuleLoader__.load({
 							setPhase("failed");
 							return;
 						}
-						setPhase(result.value?.denied === true ? "denied" : "allowed");
+						const next = PHASE_FOR[result.value?.outcome];
+						setPhase(next ?? "failed");
+						// The alarm brings up the instrument. A call that got out is the
+						// loudest thing this system can say about itself, and it should
+						// not depend on the panel already happening to be open.
+						if (next === "reached") egressPanelOpen.set(true);
 					} catch (error) {
 						console.warn(
 							`@blind-flange/dsh-client-ui-base: the canary could not be fired — ${error instanceof Error ? error.message : String(error)}`,
@@ -1171,9 +1611,9 @@ window.__ModuleLoader__.load({
 				const dot =
 					phase === "firing"
 						? "ongoing"
-						: phase === "denied"
+						: phase === "refused" || phase === "stoppedOutside"
 							? "error"
-							: phase === "allowed" || phase === "failed"
+							: phase === "reached" || phase === "failed"
 								? "warning"
 								: null;
 
@@ -1185,7 +1625,15 @@ window.__ModuleLoader__.load({
 					"aria-label": COPY[phase],
 					children: jsxs("span", {
 						style: { display: "inline-flex", alignItems: "center", gap: "6px" },
-						children: [dot === null ? null : jsx(StateDot, { state: dot, size: 8 }), "Canary"],
+						// The label stays the control's name; the dot and the tooltip
+						// carry the state, and the audit list carries the sentence. The
+						// one exception is the call that got out: that outcome is named
+						// on the button itself, because it is the only one that must be
+						// legible from the back of the room without hovering anything.
+						children: [
+							dot === null ? null : jsx(StateDot, { state: dot, size: 8 }),
+							phase === "reached" ? "Canary — got out" : "Canary",
+						],
 					}),
 				});
 			}
@@ -1771,6 +2219,7 @@ window.__ModuleLoader__.load({
 			const RoutingChip = buildRoutingChip(ctx);
 			const EgressChip = buildEgressChip(ctx);
 			const EgressPanel = buildEgressPanel(ctx);
+			const SealBand = buildSealBand(ctx);
 			const ProvenanceView = buildProvenanceView();
 			const disposeSidebarMark = ctx.slots.inject("sidebar.brand.mark", function* () {
 				yield ctx.slots.register({ name: "sidebar.brand.mark" }, BlindFlangeMark);
@@ -1825,6 +2274,14 @@ window.__ModuleLoader__.load({
 				);
 				return () => { dispose(); };
 			});
+			// The open-seal band shares `shell.overlay` with the panel (list, root).
+			// It renders nothing while the seal is closed, which is almost always,
+			// and takes space at the top of the window when it is not — see
+			// `buildSealBand` for why that is a band rather than a colour.
+			const disposeSealBand = ctx.slots.inject("shell.overlay", () => {
+				const dispose = ctx.slots.register({ name: "shell.overlay", id: "bf-seal-band" }, SealBand);
+				return () => { dispose(); };
+			});
 			// The canary takes `conversation.input.right` (list, session) — the
 			// composer tool row, before the send button. Deferred behind
 			// `ctx.inject(["connection"])` rather than named in this plugin's own
@@ -1833,6 +2290,11 @@ window.__ModuleLoader__.load({
 			// the monitor is worth more than the button that calibrates it.
 			let disposeCanary;
 			ctx.inject(["connection"], (canaryCtx) => {
+				// Point the seal store at the host transport and read the seal once.
+				// Everything that displays the seal — the band, the chip, the panel's
+				// control — reads that answer rather than assuming one, so a reloaded
+				// page shows the machine's real state instead of the safe-looking one.
+				seal.bind(canaryCtx.connection);
 				const CanaryButton = buildCanaryButton(canaryCtx.connection);
 				disposeCanary = canaryCtx.slots.inject("conversation.input.right", () => {
 					const dispose = canaryCtx.slots.register(
@@ -1888,6 +2350,7 @@ window.__ModuleLoader__.load({
 				disposeProviderDisclosure?.();
 				disposeEgressChip?.();
 				disposeEgressPanel?.();
+				disposeSealBand?.();
 				disposeCanary?.();
 				disposeRoutingChip?.();
 				disposeProvenanceView?.();

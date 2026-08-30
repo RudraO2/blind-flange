@@ -18,6 +18,7 @@ import test from "node:test";
 import {
 	CANARY_CHANNEL,
 	CANARY_ENDPOINT,
+	CANARY_TIMEOUT_MS,
 	CANARY_TOOL_NAME,
 	createCanaryRpcHandler,
 	createCanaryTool,
@@ -60,15 +61,25 @@ test("the tool body actually calls fetch — the attempt is real, not simulated"
 	assert.deepEqual(value, { target: TARGET, status: 204 });
 });
 
-test("the tool forwards the caller's cancellation signal to the attempt", async () => {
+test("the caller's cancellation still stops the attempt, alongside the deadline", async () => {
+	// The signal handed to fetch is no longer the caller's own object — it is
+	// the caller's cancellation composed with CANARY_TIMEOUT_MS, so that a call
+	// a host firewall discards in silence still ends. What has to hold is the
+	// behaviour, not the identity: aborting the caller's signal must still abort
+	// the attempt.
 	const attempts = [];
-	const signal = new AbortController().signal;
+	const controller = new AbortController();
 	const tool = createCanaryTool(TARGET, (url, init) => {
 		attempts.push(init);
 		return Promise.resolve({ status: 200 });
 	});
-	await tool.execute({}, { signal });
-	assert.equal(attempts[0].signal, signal);
+	await tool.execute({}, { signal: controller.signal });
+
+	const forwarded = attempts[0].signal;
+	assert.ok(forwarded instanceof AbortSignal);
+	assert.equal(forwarded.aborted, false);
+	controller.abort();
+	assert.equal(forwarded.aborted, true, "the caller must still be able to cancel the attempt");
 });
 
 test("an explicit target argument overrides the configured one", async () => {
@@ -107,7 +118,10 @@ test("firing dispatches the canary through tools.execute, carrying the session's
 	assert.equal(exec.agent, agent, "without the agent the denial lands nowhere the monitor can read");
 	assert.deepEqual(exec.arguments, { target: TARGET });
 	assert.equal(typeof exec.callId, "string");
-	assert.deepEqual(result, { ok: true, value: { denied: true, target: TARGET, reason: DENIED.error.message } });
+	assert.deepEqual(result, {
+		ok: true,
+		value: { outcome: "refused", sealed: true, target: TARGET, detail: DENIED.error.message },
+	});
 });
 
 test("two presses never share a call id", async () => {
@@ -118,12 +132,65 @@ test("two presses never share a call id", async () => {
 	assert.notEqual(tools.calls[0].callId, tools.calls[1].callId);
 });
 
-test("an allowed canary is reported as not denied — the seal is not holding", async () => {
-	const tools = stubTools({ isError: false, value: { target: TARGET, status: 200 }, content: [] });
+test("an omitted seal reading is treated as sealed — a forgetful caller gets the safe answer", async () => {
+	const tools = stubTools(DENIED);
 	const handler = createCanaryRpcHandler({ tools, agents: { get: () => ({}) }, target: TARGET });
 	const result = await handler(CANARY_ENDPOINT, { sessionId: "s1" }, undefined);
-	assert.equal(result.ok, true);
-	assert.equal(result.value.denied, false);
+	assert.equal(result.value.outcome, "refused");
+	assert.equal(result.value.sealed, true);
+});
+
+test("with the seal open and the call arriving, the outcome is 'reached' — the alarm can fire", async () => {
+	// The calibration case. An instrument that can only ever return one answer
+	// is not an instrument, and this is the answer that proves it is measuring
+	// rather than asserting: the seal was open, the call went out, it arrived.
+	const events = [];
+	const agent = { session: { append: (type, data) => events.push({ type, data }) } };
+	const tools = stubTools({ isError: false, value: { target: TARGET, status: 200 }, content: [] });
+	const handler = createCanaryRpcHandler({ tools, agents: { get: () => agent }, target: TARGET, sealed: () => false });
+	const result = await handler(CANARY_ENDPOINT, { sessionId: "s1" }, undefined);
+
+	assert.equal(result.value.outcome, "reached");
+	assert.equal(result.value.sealed, false);
+	assert.equal(events.length, 1, "a call that got out must be recorded — that is the loudest fact this system has");
+	assert.equal(events[0].type, "egress/escaped");
+	assert.equal(events[0].data.reached, true);
+	assert.equal(events[0].data.target, TARGET);
+});
+
+test("with the seal open and the call dying outside, we claim neither the refusal nor the record", async () => {
+	// The demo's second beat: our own policy stood aside, the call genuinely
+	// left this process, and a host firewall discarded it. Reporting this as a
+	// denial — which the pre-seal handler did, because it read any error as one
+	// — would have the button assert an audit entry the monitor could not
+	// corroborate, because our waterfall never ran and never wrote one.
+	const events = [];
+	const agent = { session: { append: (type, data) => events.push({ type, data }) } };
+	const tools = stubTools({ isError: true, error: { message: "fetch failed" }, content: [] });
+	const handler = createCanaryRpcHandler({ tools, agents: { get: () => agent }, target: TARGET, sealed: () => false });
+	const result = await handler(CANARY_ENDPOINT, { sessionId: "s1" }, undefined);
+
+	assert.equal(result.value.outcome, "stopped-outside");
+	assert.notEqual(result.value.outcome, "refused", "only our own waterfall may be reported as a refusal");
+	assert.equal(events[0].type, "egress/escaped");
+	assert.equal(events[0].data.reached, false);
+	assert.match(events[0].data.detail, /fetch failed/);
+});
+
+test("the attempt is bounded, so a silently dropped packet reads as evidence and not as a hang", async () => {
+	// A host firewall discards rather than refuses and sends nothing back, so an
+	// unbounded fetch waits for minutes. NFR2: a control that spins that long on
+	// stage reads as a crash.
+	assert.equal(typeof CANARY_TIMEOUT_MS, "number");
+	assert.ok(CANARY_TIMEOUT_MS > 0 && CANARY_TIMEOUT_MS <= 5000, "the wait has to be legible, not indefinite");
+
+	let seen;
+	const tool = createCanaryTool(TARGET, (_url, init) => {
+		seen = init.signal;
+		return Promise.resolve({ status: 204 });
+	});
+	await tool.execute({}, { signal: undefined });
+	assert.ok(seen instanceof AbortSignal, "the outbound call must carry a deadline");
 });
 
 test("an unknown endpoint on the channel is refused rather than dispatched", async () => {

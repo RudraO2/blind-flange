@@ -17,6 +17,7 @@ import { createRequire } from "node:module";
 import { homedir } from "node:os";
 import { dirname, join } from "node:path";
 import test from "node:test";
+import { isSealed, setSealed } from "../lib/egress/seal.js";
 import { fileURLToPath } from "node:url";
 import { apply, inject } from "../lib/index.js";
 import { OUR_SESSION_EVENT_TYPES } from "../lib/session-events/known-types.js";
@@ -356,7 +357,7 @@ test("a session-append failure does not stop the denial", async () => {
 		console.warn = originalWarn;
 	}
 	assert.equal(warnings.length, 1);
-	assert.match(warnings[0], /egress denial not recorded/);
+	assert.match(warnings[0], /egress event not recorded/);
 });
 
 test("registers the replay adapter under the 'replay' route by default (Story 3.1)", () => {
@@ -668,12 +669,18 @@ test("registers the approval-note tool (Story 5.4), unconditionally like the can
 	assert.equal(typeof approvalNoteTool.presentCall, "function");
 });
 
-test("registers the canary channel loopback-only", () => {
+test("registers the canary and seal channels, both loopback-only", () => {
 	const host = stubHostCtx();
 	apply(host.ctx);
-	assert.equal(host.rpcChannels.length, 1);
-	assert.equal(host.rpcChannels[0].channel, "/bf-canary");
-	assert.equal(host.rpcChannels[0].options.authority, "loopback");
+	// Both change what this machine may do — one attempts a real outbound call,
+	// the other decides whether such a call is refused — so both belong to the
+	// operator at the keyboard and neither to anything that can reach the port.
+	const canary = host.rpcChannels.find((row) => row.channel === "/bf-canary");
+	const seal = host.rpcChannels.find((row) => row.channel === "/bf-seal");
+	assert.ok(canary, "no canary channel registered");
+	assert.ok(seal, "no seal channel registered");
+	assert.equal(canary.options.authority, "loopback");
+	assert.equal(seal.options.authority, "loopback");
 });
 
 test("the canary is denied by the same waterfall that denies any other attempt", async () => {
@@ -693,7 +700,7 @@ test("firing the canary records a denial in the same shape as any other denial",
 	const result = await host.rpcChannels[0].handler("fire", { sessionId: "s1" }, undefined);
 
 	assert.equal(result.ok, true);
-	assert.equal(result.value.denied, true, "the canary must be refused, not allowed");
+	assert.equal(result.value.outcome, "refused", "the canary must be refused by us, not merely fail");
 	assert.equal(agent.events.length, 1);
 	assert.equal(agent.events[0].type, "egress/denied");
 	assert.equal(agent.events[0].data.tool, "bf_canary");
@@ -739,7 +746,14 @@ test("a profile with no tool registry still gets the egress denial waterfall", a
 	const host = stubHostCtx({ tools: false });
 	apply(host.ctx);
 	assert.deepEqual(host.registeredTools, []);
-	assert.deepEqual(host.rpcChannels, []);
+	// No canary — that channel needs the tool registry to dispatch through. The
+	// seal channel does not, and is deliberately still here: the seal is the
+	// waterfall's own policy, so a profile that is sealed must be able to say so
+	// and to be opened, whether or not it has any tools to deny.
+	assert.deepEqual(
+		host.rpcChannels.map((row) => row.channel),
+		["/bf-seal"],
+	);
 	const decision = await host.preExecuteListener({ name: "web_fetch", arguments: { url: "https://example.com" } }, () => {
 		throw new Error("next() must not be called for a denied tool");
 	});
@@ -856,4 +870,107 @@ test("records something auditable even for arguments in a shape it has never see
 		throw new Error("next() must not be called for a denied tool");
 	});
 	assert.equal(agent.events[0].data.target, '{"host":"example.com","port":443}');
+});
+
+/* ---------------------------------------------------------------------------
+ * The seal, seen from the waterfall (`lib/egress/seal.js`)
+ *
+ * `test/seal.test.js` covers the seal's own behaviour. These are the integration
+ * half: that the denial waterfall actually consults it, that an open seal lets
+ * the call run rather than pretending to, and that letting it run is recorded as
+ * plainly as refusing it would have been.
+ * ------------------------------------------------------------------------- */
+
+test("the seal is closed when the plugin mounts, so a fresh boot denies", async () => {
+	setSealed(true);
+	const host = stubHostCtx();
+	apply(host.ctx);
+	assert.equal(isSealed(), true);
+	const decision = await host.preExecuteListener({ name: "web_fetch", arguments: { url: "https://example.com" } }, () => {
+		throw new Error("next() must not be called while the seal is closed");
+	});
+	assert.equal(decision.kind, "deny");
+});
+
+test("with the seal open the call is genuinely allowed to run, not pretended at", async () => {
+	setSealed(false);
+	try {
+		const agent = stubAgent();
+		const host = stubHostCtx({ agent });
+		apply(host.ctx);
+		let reached = false;
+		const decision = await host.preExecuteListener(
+			{ name: "web_fetch", arguments: { url: "https://example.com" }, agent },
+			() => {
+				reached = true;
+				return { kind: "allow" };
+			},
+		);
+		assert.equal(decision.kind, "allow");
+		assert.equal(reached, true, "an open seal must let the waterfall continue, not fake a permit");
+	} finally {
+		setSealed(true);
+	}
+});
+
+test("permitting is recorded as loudly as denying — the log is not a list of successes", async () => {
+	setSealed(false);
+	try {
+		const agent = stubAgent();
+		const host = stubHostCtx({ agent });
+		apply(host.ctx);
+		await host.preExecuteListener({ name: "web_fetch", arguments: { url: "https://example.com/x" }, agent }, () => ({
+			kind: "allow",
+		}));
+		assert.equal(agent.events.length, 1);
+		assert.equal(agent.events[0].type, "egress/permitted");
+		assert.equal(agent.events[0].data.tool, "web_fetch");
+		assert.equal(agent.events[0].data.target, "https://example.com/x");
+	} finally {
+		setSealed(true);
+	}
+});
+
+test("the open seal covers the sandbox shell too, on the same permitted event", async () => {
+	setSealed(false);
+	try {
+		const agent = stubAgent();
+		const host = stubHostCtx({ agent });
+		apply(host.ctx);
+		const decision = await host.preExecuteListener(
+			{ name: "pwsh", arguments: { command: "Invoke-WebRequest https://example.com" }, agent },
+			() => ({ kind: "allow" }),
+		);
+		assert.equal(decision.kind, "allow");
+		assert.equal(agent.events[0].type, "egress/permitted");
+		assert.match(agent.events[0].data.target, /Invoke-WebRequest/);
+	} finally {
+		setSealed(true);
+	}
+});
+
+test("opening the seal over its own channel is what changes the waterfall's answer", async () => {
+	// End to end, through the same loopback channel the control posts to: no
+	// second mechanism, and no code edit. Before the seal existed, making this
+	// call succeed meant deleting a line from NETWORK_TOOL_NAMES and restarting.
+	setSealed(true);
+	try {
+		const agent = stubAgent();
+		const host = stubHostCtx({ agent });
+		apply(host.ctx);
+		const seal = host.rpcChannels.find((row) => row.channel === "/bf-seal");
+		await seal.handler("open", { sessionId: "s1" });
+
+		const decision = await host.preExecuteListener(
+			{ name: "bf_canary", arguments: { target: "https://example.com/x" }, agent },
+			() => ({ kind: "allow" }),
+		);
+		assert.equal(decision.kind, "allow");
+		assert.deepEqual(
+			agent.events.map((event) => event.type),
+			["egress/seal", "egress/permitted"],
+		);
+	} finally {
+		setSealed(true);
+	}
 });

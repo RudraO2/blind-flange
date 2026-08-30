@@ -38,6 +38,14 @@ block it, the monitor turn red, and the audit log record it. Silence proves noth
 canary is what turns an absence into evidence.
 _Avoid_: the test call, the network test
 
+**The seal**:
+Whether Blind Flange is denying outbound calls. Closed by default, closed again by a
+restart, and opened only by holding the control in the egress monitor — which is recorded
+on the session log like any other attempt. The seal is what makes the canary an instrument
+rather than an assertion: with it open the attempt genuinely leaves the process, so the
+same button can be shown succeeding on a connected machine and failing on a sealed one.
+_Avoid_: the toggle, the switch, egress mode
+
 **Egress monitor**:
 The always-on display of outbound attempts. Pairs with the canary: the monitor is the
 instrument, the canary is the calibration.
