@@ -96,8 +96,63 @@ const healthyHostModules = {
 		StateDot: (props) => ({ type: "StateDot", props }),
 		Menu: (props) => ({ type: "Menu", props }),
 		Button: (props) => ({ type: "Button", props }),
+		// The sidebar puts a Tooltip on its own controls when the column is
+		// collapsed; the seal row does the same so a collapsed Faraday behaves
+		// like a collapsed harness.
+		Tooltip: (props) => ({ type: "Tooltip", props }),
 	},
 };
+
+/**
+ * Walk a rendered tree and return the first node whose props match.
+ *
+ * The old tests reached into `children[0].props.children[2]` and so were
+ * rewritten by every change to the layout around what they were asserting.
+ * These surfaces are now deep enough that index paths are a liability.
+ * @param node - a rendered node, an array of them, or anything else.
+ * @param predicate - called with each node's props.
+ */
+function findNode(node, predicate) {
+	if (node === null || node === undefined || typeof node !== "object") return null;
+	if (Array.isArray(node)) {
+		for (const child of node) {
+			const hit = findNode(child, predicate);
+			if (hit !== null) return hit;
+		}
+		return null;
+	}
+	if (node.props !== undefined && predicate(node.props, node)) return node;
+	return node.props === undefined ? null : findNode(node.props.children, predicate);
+}
+
+/**
+ * Render a node whose `type` is one of our own components — the slot registry
+ * would do this, and a test that only stringifies the element asserts on the
+ * props we passed rather than on anything the component decided.
+ */
+function render(node) {
+	return typeof node?.type === "function" ? node.type(node.props) : node;
+}
+
+/**
+ * Render a whole tree, including our own components nested inside it. The slot
+ * registry and React would do this; a test that stops at the first element
+ * asserts on the props we passed rather than on what the component decided.
+ */
+function renderTree(node) {
+	if (Array.isArray(node)) return node.map(renderTree);
+	if (node === null || node === undefined || typeof node !== "object") return node;
+	let current = node;
+	for (let guard = 0; typeof current?.type === "function" && guard < 20; guard += 1) {
+		current = current.type(current.props);
+	}
+	if (current === null || current === undefined || typeof current !== "object") return current;
+	if (current.props === undefined || current.props.children === undefined) return current;
+	return { ...current, props: { ...current.props, children: renderTree(current.props.children) } };
+}
+
+/** The shipped primitives our surfaces render through, by identity. */
+const PRIMITIVES = healthyHostModules["@deepseek-ai/dsh-client-ui-primitives"];
 
 /**
  * A `ctx.sessions` stub whose one session exposes a `bf-routing` conversation
@@ -177,6 +232,8 @@ function hostModulesWithSeatedState(seated) {
 		if (specifier === "react") {
 			return {
 				useEffect: () => {},
+				useRef: (initial) => ({ current: initial }),
+				useSyncExternalStore: (_subscribe, getSnapshot) => getSnapshot(),
 				useState: (initial) => {
 					if (first) {
 						first = false;
@@ -316,22 +373,21 @@ test("occupies both places the DeepSeek whale used to render, and the hero's tas
 		"conversation.hero.agentPreset",
 		"conversation.hero.brand.mark",
 		"conversation.input.model",
-		// Two seats in the composer tool row: the upload control and the canary.
-		// Left to right they read "give it a document, then prove nothing left the
-		// box", which is also the order the demo does them in.
+		// One seat in the composer tool row now: the upload control. The canary
+		// shared it until 30 August 2026 (ADR-0007) — the proof is the request the
+		// operator types, so the row is one control lighter.
 		"conversation.input.right",
-		"conversation.input.right",
-		// Three chips in the session header: the provider disclosure, the egress
-		// monitor, and residency — which models are in VRAM right now. That last one
-		// is the only surface showing it; the routing chip shows scores and the
-		// approval note carries the rest of the trace.
-		"conversation.session.header.utilities",
-		"conversation.session.header.utilities",
+		// One chip left in the session header: the provider disclosure, which
+		// discloses a per-turn fact and belongs to the conversation. The egress
+		// monitor moved to the sidebar foot (root-scoped, so it survives a new
+		// chat) and residency moved into the drawer.
 		"conversation.session.header.utilities",
 		// Story 4.5's crop viewer — a whole tab, not a chip.
 		"conversation.view",
-		// Two overlay seats: the egress panel, and the band that takes space at
-		// the top of the window for as long as the seal is open.
+		// Three overlay seats: the Sovereignty drawer, the notice that announces a
+		// denial for eight seconds, and the band that takes space at the top of
+		// the window for as long as the seal is open.
+		"shell.overlay",
 		"shell.overlay",
 		"shell.overlay",
 		"sidebar.brand.mark",
@@ -339,6 +395,10 @@ test("occupies both places the DeepSeek whale used to render, and the hero's tas
 	// the harness's build hash, which is the wrong product name sitting directly
 	// beside our own mark for the whole demo.
 	"sidebar.brand.name",
+		// The seal, at the sidebar foot beside Settings. A `list` slot scoped
+		// `root`, which is the whole point: the claim is on screen on the hero as
+		// well as in a session.
+		"sidebar.footer.action",
 	]);
 });
 
@@ -413,19 +473,60 @@ test("the hero seat renders the mark, the name and the tagline as real text", ()
 	assert.doesNotMatch(flat, /fontSize":"[0-9]+px/, "the lockup sizes against the headline, not in px");
 });
 
-test("the sidebar mark is still the bare mark, in currentColor", () => {
+test("the sidebar mark keeps its artwork and wears the seal as a ring", () => {
 	const { exports } = loadClientHalf((specifier) => healthyHostModules[specifier]);
 	const { ctx, registered } = stubSlots();
 	exports.apply(ctx);
 	const side = registered.find((call) => call.options.name === "sidebar.brand.mark");
-	const svg = side.component({ size: 20, className: "side-mark" });
-	assert.equal(svg.type, "svg");
+	// RingedMark owns the seat's square and puts the artwork inside it, so the
+	// ring costs the mark a little presence and costs the layout nothing.
+	const ringed = renderTree(side.component({ size: 20, className: "side-mark" }));
+	assert.equal(ringed.props.style.width, "20px");
+	assert.equal(ringed.props.style.height, "20px");
+	const svg = findNode(ringed, (props) => props.viewBox !== undefined);
+	assert.ok(svg, "the mark's artwork is not inside the ring");
 	assert.equal(svg.props.viewBox, "273 215 722 722", "the viewBox is cropped to the artwork, not the exported canvas");
 	const paths = svg.props.children.props.children;
 	assert.ok(Array.isArray(paths) && paths.length > 0);
 	for (const path of paths) {
 		assert.equal(path.props.fill, "currentColor", "the mark takes the theme foreground, never a colour of ours");
 	}
+});
+
+test("the ring says nothing until the host has answered about the seal", () => {
+	// Before the first answer this client does not know the seal's state, and a
+	// ring drawn then would imply one. Silence is the only honest reading.
+	const { exports } = loadClientHalf((specifier) => healthyHostModules[specifier]);
+	const { ctx, registered } = stubSlots({ connection: false });
+	exports.apply(ctx);
+	const ringed = render(registered.find((call) => call.options.name === "sidebar.brand.mark").component({ size: 20 }));
+	assert.equal(findNode(ringed, (props) => props.style?.borderRadius === "50%"), null, "a ring was drawn before the seal was known");
+});
+
+test("an open seal breaks the ring, and only then does it take a colour", async () => {
+	const { exports } = loadClientHalf((specifier) => healthyHostModules[specifier]);
+	const { ctx, registered } = stubSlots({ sealed: false });
+	exports.apply(ctx);
+	await settled();
+	const ringed = render(registered.find((call) => call.options.name === "sidebar.brand.mark").component({ size: 20 }));
+	const ring = findNode(ringed, (props) => props.style?.borderRadius === "50%");
+	assert.ok(ring, "no ring on a known seal state");
+	assert.match(ring.props.style.border, /dashed/, "an open seal is a broken ring");
+	assert.match(ring.props.style.border, /var\(--dsw-alias-state-warn-primary\)/);
+});
+
+test("a closed seal draws the ring as a hairline with no colour of its own", async () => {
+	// A permanently green logo is a reassurance nobody reads by the third minute.
+	// Colour appears only in the abnormal state.
+	const { exports } = loadClientHalf((specifier) => healthyHostModules[specifier]);
+	const { ctx, registered } = stubSlots({ sealed: true });
+	exports.apply(ctx);
+	await settled();
+	const ringed = render(registered.find((call) => call.options.name === "sidebar.brand.mark").component({ size: 20 }));
+	const ring = findNode(ringed, (props) => props.style?.borderRadius === "50%");
+	assert.ok(ring, "no ring on a known seal state");
+	assert.match(ring.props.style.border, /var\(--dsw-alias-border-l3\)/);
+	assert.doesNotMatch(ring.props.style.border, /dashed|warn|success/);
 });
 
 test("registers the task-type indicator into conversation.hero.agentPreset once the slot is declared", () => {
@@ -691,190 +792,309 @@ test("Story 2.4: the bf-egress view lists denials in the order the log wrote the
 	assert.equal(after.latest.target, "https://mrpl.example/x");
 });
 
-test("the egress chip reads a counted zero and a green dot with no attempts", () => {
+/**
+ * The seal row and the drawer, by id. Both are registered unconditionally, so
+ * these never have to guess whether a transport was present.
+ */
+function findSealRow(registered) {
+	return registered.find((call) => call.options.id === "bf-seal");
+}
+function findDrawer(registered) {
+	return registered.find((call) => call.options.id === "bf-sovereignty-drawer");
+}
+
+/**
+ * Open the drawer the way a user does — through the seal row — and render it.
+ *
+ * The row's control is a toggle and the open store is module-scoped, so a
+ * second call inside one test would close what the first one opened. Pressing
+ * again when the drawer did not appear keeps these helpers composable without
+ * any of them reaching past the control.
+ */
+function openDrawer(registered) {
+	const row = findSealRow(registered).component({ wide: true });
+	const press = findNode(row, (props) => typeof props.onClick === "function").props.onClick;
+	press();
+	let drawer = findDrawer(registered).component({});
+	if (drawer === null) {
+		press();
+		drawer = findDrawer(registered).component({});
+	}
+	assert.ok(drawer, "the drawer did not open");
+	return drawer;
+}
+
+test("the seal row takes the sidebar foot, which is root-scoped and so survives a new chat", () => {
+	// The whole reason it moved. `conversation.session.header.utilities` is
+	// scoped `session`: the header does not exist until a conversation does, so
+	// the product's one load-bearing claim was missing from the first screen an
+	// evaluator sees. `sidebar.footer.action` is scoped `root`.
 	const { exports } = loadClientHalf((specifier) => healthyHostModules[specifier]);
-	const { ctx, registered } = stubSlots({ sessions: stubEgressSessions({ count: 0, latest: null }) });
+	const { ctx, registered } = stubSlots({ sessions: stubEgressSessions({ count: 0, entries: [], latest: null }) });
 	exports.apply(ctx);
-	const chip = registered.find((call) => call.options.id === "bf-egress-chip");
-	assert.ok(chip, "the egress chip took no seat");
-	assert.equal(chip.options.name, "conversation.session.header.utilities");
-	const rendered = chip.component({ sessionId: "s-1" });
-	assert.equal(rendered.type, healthyHostModules["@deepseek-ai/dsh-client-ui-primitives"].Pill);
-	const flat = JSON.stringify(rendered.props.children);
-	assert.match(flat, /Egress 0/);
-	assert.match(flat, /"state":"done"/);
-	assert.equal(rendered.props.active, false);
+	const row = findSealRow(registered);
+	assert.ok(row, "the seal row took no seat");
+	assert.equal(row.options.name, "sidebar.footer.action");
+	assert.equal(
+		registered.some((call) => call.options.id === "bf-egress-chip"),
+		false,
+		"the session-scoped egress chip should be gone, not merely duplicated",
+	);
 });
 
-test("the egress chip turns red and names the count once something is denied", () => {
+test("the seal row reads a counted zero and states the seal, not the count", async () => {
+	const { exports } = loadClientHalf((specifier) => healthyHostModules[specifier]);
+	const { ctx, registered } = stubSlots({ sessions: stubEgressSessions({ count: 0, entries: [], latest: null }) });
+	exports.apply(ctx);
+	await settled();
+	const flat = JSON.stringify(findSealRow(registered).component({ wide: true }));
+	assert.match(flat, /Sealed/);
+	assert.match(flat, /"state":"done"/);
+	assert.match(flat, /"children":"0"/, "the zero must be on screen — it is the counted one (FR15)");
+});
+
+test("a denial does not leave the row permanently red", async () => {
+	// A denial is the seal working. Marking the interface permanently for good
+	// news teaches a room to ignore the mark, so the standing colour states the
+	// seal and only the seal. The notice and the count's own brief emphasis are
+	// what make the moment visible.
 	const { exports } = loadClientHalf((specifier) => healthyHostModules[specifier]);
 	const { ctx, registered } = stubSlots({
-		sessions: stubEgressSessions({ count: 2, latest: { tool: "web_fetch", target: "https://example.com" } }),
+		sessions: stubEgressSessions({ count: 3, entries: [], latest: null }),
 	});
 	exports.apply(ctx);
-	const chip = registered.find((call) => call.options.id === "bf-egress-chip");
-	const rendered = chip.component({ sessionId: "s-1" });
-	assert.match(JSON.stringify(rendered.props.children), /Egress 2/);
-	assert.match(JSON.stringify(rendered.props.children), /"state":"error"/);
-	assert.equal(rendered.props.active, true);
+	await settled();
+	const rendered = findSealRow(registered).component({ wide: true });
+	const flat = JSON.stringify(rendered);
+	assert.match(flat, /"state":"done"/, "a denial must not change what the dot says about the seal");
+	assert.match(flat, /"children":"3"/);
+	assert.doesNotMatch(flat, /"state":"error"/);
 });
 
-test("the egress panel is hidden until the chip opens it, then shows the counted state", () => {
+test("an open seal is the one state the row does colour, and it says so in words", async () => {
+	const { exports } = loadClientHalf((specifier) => healthyHostModules[specifier]);
+	const { ctx, registered } = stubSlots({ sealed: false, sessions: stubEgressSessions({ count: 0, entries: [], latest: null }) });
+	exports.apply(ctx);
+	await settled();
+	const rendered = findSealRow(registered).component({ wide: true });
+	const flat = JSON.stringify(rendered);
+	assert.match(flat, /Seal OPEN/);
+	assert.match(flat, /"state":"warning"/);
+	assert.match(flat, /var\(--dsw-alias-state-warn/);
+});
+
+test("the collapsed rail shows the dot alone, with the tooltip the sidebar gives its own controls", async () => {
+	const { exports } = loadClientHalf((specifier) => healthyHostModules[specifier]);
+	const { ctx, registered } = stubSlots({ sessions: stubEgressSessions({ count: 2, entries: [], latest: null }) });
+	exports.apply(ctx);
+	await settled();
+	const railed = findSealRow(registered).component({ wide: false });
+	assert.equal(railed.type, PRIMITIVES.Tooltip, "the rail form must carry the shipped Tooltip");
+	assert.equal(railed.props.disabled, false, "the tooltip is what names the control when the label is gone");
+	const flat = JSON.stringify(railed.props.children);
+	assert.match(flat, /"state":"done"/);
+	assert.doesNotMatch(flat, /"children":"2"/, "there is no shelf for a number in a 56px rail");
+});
+
+test("the seal row sets no hand-rolled colour of its own", () => {
+	const source = readFileSync(join(packageDir, "lib", "client.js"), "utf8");
+	const section = source.slice(source.indexOf("function buildSealFootRow"), source.indexOf("function buildSovereigntyDrawer"));
+	assert.ok(section.length > 1000, "the seal row section was not found — this test is asserting nothing");
+	assert.doesNotMatch(section, /#[0-9a-fA-F]{3,8}\b/, "the seal row must not hand-roll a hex colour");
+	assert.doesNotMatch(section, /rgba?\(/, "the seal row must not hand-roll a colour");
+});
+
+/* ---- The Sovereignty drawer (30 August 2026) ---- */
+
+test("the drawer is hidden until the seal row opens it, then shows the counted state", () => {
 	const { exports } = loadClientHalf((specifier) => healthyHostModules[specifier]);
 	const { ctx, registered } = stubSlots({
 		sessions: stubEgressSessions({
 			count: 1,
-			entries: [{ tool: "web_search", target: "MRPL", time: 1787918400000, seq: 3 }],
-			latest: { tool: "web_search", target: "MRPL", time: 1787918400000, seq: 3 },
+			entries: [{ kind: "denied", tool: "web_search", target: "MRPL", time: 1787918400000, seq: 3 }],
+			latest: null,
 		}),
 	});
 	exports.apply(ctx);
-	const panel = registered.find((call) => call.options.id === "bf-egress-panel");
-	assert.ok(panel, "the egress panel took no seat");
-	assert.equal(panel.options.name, "shell.overlay");
-	// Closed by default.
-	assert.equal(panel.component({}), null);
-	// The chip's click toggles the shared open store.
-	const chip = registered.find((call) => call.options.id === "bf-egress-chip");
-	chip.component({ sessionId: "s-1" }).props.onClick();
-	const opened = panel.component({});
-	assert.equal(opened.type, "section");
-	assert.equal(opened.props["aria-label"], "Egress monitor");
-	const flat = JSON.stringify(opened.props.children);
-	assert.match(flat, /1 outbound attempt denied/);
+	const drawerSeat = findDrawer(registered);
+	assert.equal(drawerSeat.options.name, "shell.overlay");
+	assert.equal(drawerSeat.component({}), null, "closed by default");
+
+	const opened = openDrawer(registered);
+	assert.equal(opened.type, "aside");
+	assert.equal(opened.props["aria-label"], "Sovereignty");
+	const flat = JSON.stringify(opened);
+	assert.match(flat, /denied this session/);
 	assert.match(flat, /web_search/);
 	// Only theme tokens on the surface — no hand-rolled hex.
 	assert.match(opened.props.style.background, /var\(--dsw-/);
-	assert.match(opened.props.style.border, /var\(--dsw-/);
+	assert.match(opened.props.style.borderLeft, /var\(--dsw-/);
 	assert.doesNotMatch(JSON.stringify(opened.props.style), /#[0-9a-fA-F]{3,}/);
 });
 
-test("the egress panel says the zero is counted, not printed, when nothing has been denied", () => {
+test("the drawer says the figures are counted, not printed, when nothing has been denied", () => {
 	const { exports } = loadClientHalf((specifier) => healthyHostModules[specifier]);
 	const { ctx, registered } = stubSlots({ sessions: stubEgressSessions({ count: 0, entries: [], latest: null }) });
 	exports.apply(ctx);
-	const panel = registered.find((call) => call.options.id === "bf-egress-panel");
-	const chip = registered.find((call) => call.options.id === "bf-egress-chip");
-	chip.component({ sessionId: "s-1" }).props.onClick();
-	const flat = JSON.stringify(panel.component({}).props.children);
-	assert.match(flat, /counted from the denial log/);
-	// Nothing denied, so no audit list and no empty scaffolding for one.
-	assert.doesNotMatch(flat, /Audit log/);
+	const flat = JSON.stringify(openDrawer(registered));
+	assert.match(flat, /counts of events this session's log recorded/);
+	assert.match(flat, /"children":"0"/);
 });
 
-/* ---- The audit log on screen (Story 2.4) ---- */
+test("the drawer insets the application rather than covering the transcript", () => {
+	// A panel that lands on the conversation is a panel closed before the
+	// interesting part happens. The app gives up the width instead.
+	const source = readFileSync(join(packageDir, "lib", "client.js"), "utf8");
+	assert.match(source, /padding-right: \$\{pixels\}px/, "nothing insets the frame");
+	assert.match(source, /#root \{ box-sizing: border-box;/, "the inset must not change the frame's box model under it");
+});
+
+test("the drawer is resizable, and the width is remembered rather than re-guessed", () => {
+	const { exports } = loadClientHalf((specifier) => healthyHostModules[specifier]);
+	const { ctx, registered } = stubSlots({ sessions: stubEgressSessions({ count: 0, entries: [], latest: null }) });
+	exports.apply(ctx);
+	const opened = openDrawer(registered);
+	assert.equal(opened.props.style.width, "380px", "the default width");
+
+	const handle = render(findNode(opened, (props) => props.role === "separator") ?? opened.props.children[0]);
+	assert.equal(handle.props.role, "separator");
+	assert.equal(handle.props["aria-orientation"], "vertical");
+	assert.equal(handle.props.style.cursor, "col-resize");
+	// A resize that exists only as a drag does not exist for a keyboard.
+	assert.equal(typeof handle.props.onKeyDown, "function");
+	assert.equal(typeof handle.props.onPointerDown, "function");
+	assert.ok(handle.props["aria-valuemin"] < handle.props["aria-valuemax"]);
+
+	const source = readFileSync(join(packageDir, "lib", "client.js"), "utf8");
+	assert.match(source, /localStorage\?\.setItem\(DRAWER_WIDTH_KEY/, "the width is not written down");
+	// One write per gesture, not one per frame.
+	assert.match(source, /drawerWidth\.commit\(\);/);
+});
+
+test("the drawer ranks the seal above the ledger and leaves residency collapsed", () => {
+	const { exports } = loadClientHalf((specifier) => healthyHostModules[specifier]);
+	const { ctx, registered } = stubSlots({
+		sessions: stubEgressSessions({
+			count: 1,
+			entries: [{ kind: "denied", tool: "pwsh", target: 'Start-Process "https://web.whatsapp.com"', time: 1787918400000, seq: 3 }],
+			latest: null,
+		}),
+	});
+	exports.apply(ctx);
+	const flat = JSON.stringify(openDrawer(registered));
+	// Consequence order: the seal is the argument, the ledger is the evidence,
+	// residency is context. Not a fifty-fifty split.
+	assert.ok(flat.indexOf("Sealed") < flat.indexOf("Egress monitor"), "the seal must come before the ledger");
+	assert.ok(flat.indexOf("Egress monitor") < flat.indexOf("Residency"), "residency must come after the ledger");
+	assert.ok(flat.indexOf("Residency") < flat.indexOf("Model plane"));
+});
+
+test("residency opens on request and names the escape hatch when llama-swap is silent", () => {
+	// The worse of the two mistakes: a comfortable "idle" while llama-swap is dead
+	// hides the reason nothing works. With no trace read, that must say so.
+	const { exports } = loadClientHalf((specifier) => healthyHostModules[specifier]);
+	const { ctx, registered } = stubSlots({ sessions: stubEgressSessions({ count: 0, entries: [], latest: null }) });
+	exports.apply(ctx);
+	const opened = openDrawer(registered);
+	const residency = findNode(opened, (props) => props.label === "Residency");
+	assert.ok(residency, "residency is not in the drawer");
+	assert.equal(residency.props.summary, "not answering");
+	const body = JSON.stringify(residency.props.children);
+	assert.match(body, /llama-swap is not answering/);
+	// It names the one-line fix, because the person reading this at the wrong
+	// moment needs that and not a diagnosis.
+	assert.match(body, /replay/);
+});
+
+test("the export writes the record out rather than only showing it", () => {
+	const { exports } = loadClientHalf((specifier) => healthyHostModules[specifier]);
+	const { ctx, registered } = stubSlots({ sessions: stubEgressSessions({ count: 0, entries: [], latest: null }) });
+	exports.apply(ctx);
+	const empty = findNode(openDrawer(registered), (props) => props.children === "Export egress record");
+	assert.ok(empty, "no export control");
+	assert.equal(empty.props.disabled, true, "an empty record is nothing to export");
+
+	// A second module instance: the drawer's open state is module-scoped, so
+	// re-using the first one would toggle the drawer shut instead of open.
+	const { exports: exports2 } = loadClientHalf((specifier) => healthyHostModules[specifier]);
+	const { ctx: ctx2, registered: registered2 } = stubSlots({
+		sessions: stubEgressSessions({
+			count: 1,
+			entries: [{ kind: "denied", tool: "web_fetch", target: "https://web.whatsapp.com/", time: 1787918400000, seq: 3 }],
+			latest: null,
+		}),
+	});
+	exports2.apply(ctx2);
+	const live = findNode(openDrawer(registered2), (props) => props.children === "Export egress record");
+	assert.equal(live.props.disabled, false);
+	assert.equal(typeof live.props.onClick, "function");
+});
+
+/* ---- The record on screen (Story 2.4) ---- */
 
 /**
- * Open the audit surface for a given folded snapshot and return the rendered
- * panel. The panel is a pure function of that snapshot, which the view builder
- * produces from the log (asserted separately above).
+ * Open the drawer for a given folded snapshot and return it rendered. The
+ * drawer is a pure function of that snapshot, which the view builder produces
+ * from the log (asserted separately above).
  * @param snapshot - the folded `bf-egress` snapshot.
  */
 function openAuditSurface(snapshot) {
 	const { exports } = loadClientHalf((specifier) => healthyHostModules[specifier]);
 	const { ctx, registered } = stubSlots({ sessions: stubEgressSessions(snapshot) });
 	exports.apply(ctx);
-	const panel = registered.find((call) => call.options.id === "bf-egress-panel");
-	const chip = registered.find((call) => call.options.id === "bf-egress-chip");
-	chip.component({ sessionId: "s-1" }).props.onClick();
-	return panel.component({});
+	return openDrawer(registered);
 }
 
 /** Two recorded denials, oldest first, as the view builder orders them. */
 const AUDIT_ENTRIES = [
-	{ tool: "web_search", target: "MRPL inspection standards", time: 1787918400000, seq: 3 },
-	{ tool: "bf_canary", target: "https://example.com/", time: 1787918460000, seq: 9 },
+	{ kind: "denied", tool: "web_search", target: "MRPL inspection standards", time: 1787918400000, seq: 3 },
+	{ kind: "denied", tool: "pwsh", target: 'Start-Process "https://web.whatsapp.com"', time: 1787918460000, seq: 9 },
 ];
 
-test("Story 2.4: the audit surface lists each denial with timestamp, tool and refused target", () => {
+test("Story 2.4: the record lists each denial with timestamp, tool and refused target", () => {
 	const opened = openAuditSurface({ count: 2, entries: AUDIT_ENTRIES, latest: AUDIT_ENTRIES[1] });
-	const flat = JSON.stringify(opened.props.children);
-	assert.match(flat, /Audit log/);
-	// The tool and the refused target, per entry.
+	const flat = JSON.stringify(opened);
 	assert.match(flat, /web_search/);
 	assert.match(flat, /MRPL inspection standards/);
-	assert.match(flat, /bf_canary/);
-	assert.match(flat, /https:\/\/example\.com\//);
-	// The timestamp, from the log's own record: readable clock on the line,
-	// unambiguous ISO stamp in the title.
+	assert.match(flat, /web\.whatsapp\.com/);
+	// The timestamp is the one the log stamped, rendered as a clock reading.
 	assert.match(flat, new RegExp(new Date(1787918400000).toLocaleTimeString().replace(/[.*+?^${}()|[\]\\]/g, "\\$&")));
-	assert.match(flat, /2026-08-28T\d{2}:00:00\.000Z/);
-	// The list is reachable by name for a screen reader, and nothing is invented.
-	assert.match(flat, /"aria-label":"Audit log — denied outbound attempts"/);
-	assert.doesNotMatch(flat, /unrecorded/);
 });
 
-test("Story 2.4: audit entries appear in the order they were written", () => {
-	const opened = openAuditSurface({ count: 2, entries: AUDIT_ENTRIES, latest: AUDIT_ENTRIES[1] });
-	const flat = JSON.stringify(opened.props.children);
-	assert.ok(flat.indexOf("web_search") < flat.indexOf("bf_canary"), "the older denial did not render first");
+test("Story 2.4: record entries appear in the order they were written", () => {
+	const flat = JSON.stringify(openAuditSurface({ count: 2, entries: AUDIT_ENTRIES, latest: AUDIT_ENTRIES[1] }));
+	assert.ok(flat.indexOf("web_search") < flat.indexOf("web.whatsapp.com"), "the older denial did not render first");
 });
 
 test("Story 2.4: a new denial appears on the open surface without a restart", () => {
-	// The panel subscribes to the session's bf-egress view, so a denial folded
-	// into that view after the surface was opened renders on the next snapshot.
 	const before = openAuditSurface({ count: 1, entries: [AUDIT_ENTRIES[0]], latest: AUDIT_ENTRIES[0] });
-	assert.doesNotMatch(JSON.stringify(before.props.children), /bf_canary/);
+	assert.doesNotMatch(JSON.stringify(before), /web\.whatsapp\.com/);
 	const after = openAuditSurface({ count: 2, entries: AUDIT_ENTRIES, latest: AUDIT_ENTRIES[1] });
-	const flat = JSON.stringify(after.props.children);
-	assert.match(flat, /bf_canary/);
-	assert.match(flat, /2 outbound attempts denied/);
+	assert.match(JSON.stringify(after), /web\.whatsapp\.com/);
 });
 
 test("Story 2.4: a denial with no recorded timestamp is named as missing, never filled in", () => {
-	const opened = openAuditSurface({
-		count: 1,
-		entries: [{ tool: "web_fetch", target: "", time: null, seq: 4 }],
-		latest: { tool: "web_fetch", target: "", time: null, seq: 4 },
-	});
-	const flat = JSON.stringify(opened.props.children);
-	assert.match(flat, /no timestamp recorded/);
-	assert.match(flat, /unrecorded target/);
+	const flat = JSON.stringify(
+		openAuditSurface({
+			count: 1,
+			entries: [{ kind: "denied", tool: "web_fetch", target: "https://example.com", time: null, seq: 5 }],
+			latest: null,
+		}),
+	);
+	assert.match(flat, /—/, "a missing timestamp must render as an em dash, not as now");
 });
 
 test("Story 2.4: a fresh denial is scrolled into view rather than landing below the fold", () => {
-	// The list is oldest-first inside a capped box, so the fourth entry onwards
-	// renders below the fold — exactly the entry an evaluator pressing the canary
-	// is watching for. The panel scrolls the box to the end on every new entry.
-	const listBox = { scrollTop: 0, scrollHeight: 420, clientHeight: 168 };
-	const effects = [];
-	const hostModules = (specifier) => {
-		if (specifier === "react") {
-			return {
-				...healthyHostModules.react,
-				// The panel's one ref is the audit list's box.
-				useRef: () => ({ current: listBox }),
-				useEffect: (run, deps) => effects.push({ run, deps }),
-			};
-		}
-		return healthyHostModules[specifier];
-	};
-	const { exports } = loadClientHalf(hostModules);
-	const entries = [
-		...AUDIT_ENTRIES,
-		{ tool: "bf_canary", target: "https://example.com/", time: 1787918520000, seq: 14 },
-		{ tool: "bf_canary", target: "https://example.com/", time: 1787918580000, seq: 19 },
-	];
-	const { ctx, registered } = stubSlots({ sessions: stubEgressSessions({ count: 4, entries, latest: entries[3] }) });
-	exports.apply(ctx);
-	const panel = registered.find((call) => call.options.id === "bf-egress-panel");
-	const chip = registered.find((call) => call.options.id === "bf-egress-chip");
-	chip.component({ sessionId: "s-1" }).props.onClick();
-	panel.component({});
-	const scrollEffect = effects.find((entry) => Array.isArray(entry.deps) && entry.deps[0] === entries.length);
-	assert.ok(scrollEffect, "the panel registered no effect keyed to the entry count");
-	scrollEffect.run();
-	assert.equal(listBox.scrollTop, listBox.scrollHeight);
+	const source = readFileSync(join(packageDir, "lib", "client.js"), "utf8");
+	assert.match(source, /node\.scrollTop = node\.scrollHeight/, "nothing keeps the newest line in view");
 });
 
-test("Story 2.4: the audit surface sets no hand-rolled colour of its own", () => {
-	const opened = openAuditSurface({ count: 2, entries: AUDIT_ENTRIES, latest: AUDIT_ENTRIES[1] });
-	const flat = JSON.stringify(opened);
-	// Every colour on the surface is a --dsw-* theme token, so it reads
-	// correctly in light and dark alike (UX-DR1/UX-DR2).
-	assert.doesNotMatch(flat, /#[0-9a-fA-F]{3,}/);
-	assert.doesNotMatch(flat, /rgb\(|hsl\(/);
-	assert.match(flat, /var\(--dsw-alias-label-secondary\)/);
+test("Story 2.4: the drawer sets no hand-rolled colour of its own", () => {
+	const source = readFileSync(join(packageDir, "lib", "client.js"), "utf8");
+	const section = source.slice(source.indexOf("function buildSovereigntyDrawer"), source.indexOf("The open-seal band"));
+	assert.ok(section.length > 4000, "the drawer section was not found — this test is asserting nothing");
+	assert.doesNotMatch(section, /#[0-9a-fA-F]{3,8}\b/, "the drawer must not hand-roll a hex colour");
+	assert.doesNotMatch(section, /rgba?\(/, "the drawer must not hand-roll a colour");
 });
 
 test("puts the tab title back when the harness rewrites it after hydration", () => {
@@ -945,118 +1165,89 @@ test("the harness version recorded here matches the harness actually installed",
 });
 
 /* -------------------------------------------------------------------------
- * The canary button (Story 2.3)
+ * The denial notice (30 August 2026)
+ *
+ * The canary button lived here until ADR-0007. It existed to make a panel move;
+ * the request an operator types does that now, so what is left is the problem
+ * the button was solving badly — that the moment of refusal has to be visible
+ * from the back of a room without leaving a permanent mark on the interface.
  * ---------------------------------------------------------------------- */
 
-/** The shipped primitives the canary renders through, by identity. */
-const PRIMITIVES = healthyHostModules["@deepseek-ai/dsh-client-ui-primitives"];
-
-/** Find the registered canary seat, or undefined. */
-function findCanary(registered) {
-	return registered.find((call) => call.options.name === "conversation.input.right");
+/** The notice seat, and a render of it for a given snapshot. */
+function findNotice(registered) {
+	return registered.find((call) => call.options.id === "bf-denial-notice");
 }
 
-test("takes conversation.input.right, the composer tool row before the send button", () => {
+test("the notice takes an overlay seat and renders nothing until a denial lands", () => {
 	const { exports } = loadClientHalf((specifier) => healthyHostModules[specifier]);
-	const { ctx, injectedNames, registered } = stubSlots();
+	const { ctx, registered } = stubSlots({ sessions: stubEgressSessions({ count: 0, entries: [], latest: null }) });
 	exports.apply(ctx);
-	assert.ok(injectedNames.includes("conversation.input.right"));
-	const canary = findCanary(registered);
-	assert.equal(canary.options.id, "bf-canary");
-	assert.equal(typeof canary.options.inject, "function");
-	// Compared field-wise, not with deepEqual: the browser half runs in a `vm`
-	// realm, so an object it builds has a different prototype than one here.
-	assert.equal(canary.options.inject("s1").sessionId, "s1");
+	const notice = findNotice(registered);
+	assert.ok(notice, "the denial notice took no seat");
+	assert.equal(notice.options.name, "shell.overlay");
+	assert.equal(notice.component({}), null, "nothing has been denied — there is nothing to announce");
 });
 
-test("a client with no host transport loses the canary and keeps every other seat", () => {
-	const { exports } = loadClientHalf((specifier) => healthyHostModules[specifier]);
-	const { ctx, registered } = stubSlots({ connection: false });
+test("the notice names the tool and the target, and offers the record", () => {
+	// `useState` is stubbed to echo its initial value, so seat the notice the way
+	// the effect would once the count has gone up.
+	const seated = { kind: "denied", tool: "web_fetch", target: "https://web.whatsapp.com/", time: 1787918400000, seq: 3 };
+	const { exports } = loadClientHalf(hostModulesWithSeatedState(seated));
+	const { ctx, registered } = stubSlots({
+		sessions: stubEgressSessions({ count: 1, entries: [seated], latest: seated }),
+	});
 	exports.apply(ctx);
-	assert.equal(findCanary(registered), undefined);
-	assert.equal(registered.length, 10, "the other seats must survive a missing transport");
+	const rendered = findNotice(registered).component({});
+	assert.ok(rendered, "the notice did not render for a seated denial");
+	const flat = JSON.stringify(rendered);
+	assert.match(flat, /Outbound call denied/);
+	assert.match(flat, /web_fetch/);
+	assert.match(flat, /web\.whatsapp\.com/);
+	assert.match(flat, /"children":"Show"/, "the notice must lead to the record, not replace it");
+	assert.match(flat, /"state":"error"/);
 });
 
-test("pressing it posts to the host's loopback canary channel for this session", async () => {
-	const { exports } = loadClientHalf((specifier) => healthyHostModules[specifier]);
-	const { ctx, registered, canaryCalls } = stubSlots();
-	exports.apply(ctx);
-	const element = findCanary(registered).component({ sessionId: "s1" });
-	await element.props.onClick();
-	// Filtered by channel: mounting also reads the seal once over /bf-seal, and
-	// this assertion is about the canary's own post.
-	const fired = canaryCalls.filter((call) => call.channel === "/bf-canary");
-	assert.equal(fired.length, 1);
-	assert.equal(fired[0].endpoint, "fire");
-	assert.equal(fired[0].payload.sessionId, "s1");
-});
-
-test("it is a shipped Pill, like the chips beside it, reading 'Canary'", () => {
-	const { exports } = loadClientHalf((specifier) => healthyHostModules[specifier]);
-	const { ctx, registered } = stubSlots();
-	exports.apply(ctx);
-	const element = findCanary(registered).component({ sessionId: "s1" });
-	assert.equal(element.type, PRIMITIVES.Pill, "the canary must be a shipped primitive, not a hand-rolled control");
-	assert.equal(element.props.active, false, "idle is the resting pill, not the emphasised one");
-	assert.ok(element.props.children.props.children.includes("Canary"));
-	assert.equal(element.props.children.props.children[0], null, "idle shows no state dot");
-	assert.match(element.props.title, /attempt a real outbound connection/);
-});
-
-test("a denied canary reads as denied and shows the same red the monitor shows", () => {
-	const { exports } = loadClientHalf(hostModulesWithSeatedState("refused"));
-	const { ctx, registered } = stubSlots();
-	exports.apply(ctx);
-	const element = findCanary(registered).component({ sessionId: "s1" });
-	const dot = element.props.children.props.children[0];
-	assert.equal(dot.type, PRIMITIVES.StateDot);
-	assert.equal(dot.props.state, "error");
-	assert.match(element.props.title, /Denied by Faraday/);
-	assert.match(element.props.title, /written to the audit log/);
-});
-
-test("a call stopped outside the application is not reported as our denial", () => {
-	// The seal was open, the call genuinely left this process, and a host
-	// firewall discarded it. Red, because an attempt was stopped — but the
-	// sentence must not claim Faraday stopped it or wrote a record, because
-	// our waterfall never ran and the counter beside this button will not move.
-	const { exports } = loadClientHalf(hostModulesWithSeatedState("stoppedOutside"));
-	const { ctx, registered } = stubSlots();
-	exports.apply(ctx);
-	const element = findCanary(registered).component({ sessionId: "s1" });
-	assert.equal(element.props.children.props.children[0].props.state, "error");
-	assert.match(element.props.title, /outside this application/);
-	assert.doesNotMatch(element.props.title, /Denied by Faraday/);
-});
-
-test("a canary that reached the internet says so on the button itself", () => {
-	// The one outcome that must be legible from the back of the room without
-	// hovering anything, so it is the one outcome named on the label.
-	const { exports } = loadClientHalf(hostModulesWithSeatedState("reached"));
-	const { ctx, registered } = stubSlots();
-	exports.apply(ctx);
-	const element = findCanary(registered).component({ sessionId: "s1" });
-	assert.equal(element.props.children.props.children[0].props.state, "warning");
-	assert.match(element.props.title, /REACHED the internet/);
-	assert.ok(element.props.children.props.children.includes("Canary — got out"));
-});
-
-test("it refuses a second press while one is in flight", async () => {
-	const { exports } = loadClientHalf(hostModulesWithSeatedState("firing"));
-	const { ctx, registered, canaryCalls } = stubSlots();
-	exports.apply(ctx);
-	const element = findCanary(registered).component({ sessionId: "s1" });
-	assert.equal(element.props.disabled, true);
-	await element.props.onClick();
-	const fired = canaryCalls.filter((call) => call.channel === "/bf-canary");
-	assert.equal(fired.length, 0, "a press while firing must not post again");
-});
-
-test("it sets no colour of its own — the state dot carries it through theme tokens", () => {
+test("the notice is transient — it announces, and the record keeps", () => {
+	// A permanent alarm colour for good news is an alarm colour nobody reads by
+	// the third minute. The notice says its piece and goes; the ledger keeps it.
 	const source = readFileSync(join(packageDir, "lib", "client.js"), "utf8");
-	const canarySection = source.slice(source.indexOf("function buildCanaryButton"), source.indexOf("function holdTabTitle"));
-	assert.doesNotMatch(canarySection, /#[0-9a-fA-F]{3,8}\b/, "the canary must not hand-roll a hex colour");
-	assert.doesNotMatch(canarySection, /rgba?\(/, "the canary must not hand-roll a colour");
+	const section = source.slice(source.indexOf("function buildDenialNotice"), source.indexOf("function holdTabTitle"));
+	assert.ok(section.length > 1000, "the notice section was not found — this test is asserting nothing");
+	assert.match(section, /setTimeout\(\(\) => setNotice\(null\), NOTICE_MS\)/, "the notice never goes away");
+});
+
+test("the notice cannot be made to appear by anything but a recorded denial", () => {
+	// NFR8. There is no path from a control in this package to this component:
+	// it fires on the count folded from the host's own `egress/denied` events.
+	const source = readFileSync(join(packageDir, "lib", "client.js"), "utf8");
+	const section = source.slice(source.indexOf("function buildDenialNotice"), source.indexOf("function holdTabTitle"));
+	assert.match(section, /readEgressSnapshot\(session\)/);
+	assert.doesNotMatch(section, /rpc\.call/, "the notice must not be able to ask for its own reason to exist");
+});
+
+test("a seal change landing in the same instant is not announced as a refusal", () => {
+	const denial = { kind: "denied", tool: "pwsh", target: 'Start-Process "https://web.whatsapp.com"', time: 1787918400000, seq: 3 };
+	const source = readFileSync(join(packageDir, "lib", "client.js"), "utf8");
+	const section = source.slice(source.indexOf("function buildDenialNotice"), source.indexOf("function holdTabTitle"));
+	assert.match(section, /entries\.filter\(\(entry\) => entry\.kind === "denied"\)/, "the notice reads the newest event, not the newest denial");
+	// And the seated form still names the denial rather than the seal event.
+	const { exports } = loadClientHalf(hostModulesWithSeatedState(denial));
+	const { ctx, registered } = stubSlots({
+		sessions: stubEgressSessions({
+			count: 1,
+			entries: [denial, { kind: "seal", sealed: true, time: 1787918400001, seq: 4 }],
+			latest: null,
+		}),
+	});
+	exports.apply(ctx);
+	assert.match(JSON.stringify(findNotice(registered).component({})), /web\.whatsapp\.com/);
+});
+
+test("the notice sets no colour of its own — the state dot carries it through theme tokens", () => {
+	const source = readFileSync(join(packageDir, "lib", "client.js"), "utf8");
+	const section = source.slice(source.indexOf("function buildDenialNotice"), source.indexOf("function holdTabTitle"));
+	assert.doesNotMatch(section, /#[0-9a-fA-F]{3,8}\b/, "the notice must not hand-roll a hex colour");
+	assert.doesNotMatch(section, /rgba?\(/, "the notice must not hand-roll a colour");
 });
 
 /* ---------------------------------------------------------------------------
@@ -1107,18 +1298,19 @@ test("the band sets no hand-rolled colour of its own", async () => {
 	assert.ok(!flat.includes("rgb(") && !flat.includes("hsl("), "no hand-rolled colour functions either");
 });
 
-test("the chip stops showing a count while the seal is open", async () => {
-	// A number that keeps reading "0" with enforcement off would be the most
+test("the seal row says OPEN in words rather than showing a count that reads as fine", async () => {
+	// A number still reading "0" with enforcement off would be the most
 	// misleading thing on the screen: true, and understood as its opposite.
 	const { exports } = loadClientHalf((specifier) => healthyHostModules[specifier]);
-	const { ctx, registered } = stubSlots({ sealed: false, sessions: stubEgressSessions({ count: 0, latest: null }) });
+	const { ctx, registered } = stubSlots({ sealed: false, sessions: stubEgressSessions({ count: 0, entries: [], latest: null }) });
 	exports.apply(ctx);
 	await settled();
-	const chip = registered.find((call) => call.options.id === "bf-egress-chip").component({ sessionId: "s-1" });
-	const flat = JSON.stringify(chip.props.children);
-	assert.match(flat, /Egress — open/);
-	assert.doesNotMatch(flat, /Egress 0/);
-	assert.match(chip.props.title, /the seal is OPEN/);
+	const row = findSealRow(registered).component({ wide: true });
+	const flat = JSON.stringify(row);
+	assert.match(flat, /Seal OPEN/);
+	assert.doesNotMatch(flat, /"children":"Sealed"/);
+	const button = findNode(row, (props) => typeof props.onClick === "function");
+	assert.match(button.props.title, /seal is OPEN/);
 });
 
 test("closing the seal from the band posts close, and the client renders the host's answer", async () => {
@@ -1137,24 +1329,20 @@ test("closing the seal from the band posts close, and the client renders the hos
 });
 
 /**
- * The seal control, rendered. The panel is closed until the chip opens it, so
- * this opens it the way a user does rather than reaching past the store.
+ * The seal control, rendered. The drawer is closed until the seal row opens it,
+ * so this opens it the way a user does rather than reaching past the store.
  */
 function sealControl(registered) {
-	registered.find((call) => call.options.id === "bf-egress-chip").component({ sessionId: "s-1" }).props.onClick();
-	const panel = registered.find((call) => call.options.id === "bf-egress-panel").component({});
-	assert.ok(panel, "the panel did not open");
-	const seat = panel.props.children.find((child) => child && child.props && child.props.sessionId !== undefined);
-	assert.ok(seat, "the seal control is not in the panel");
-	// The panel yields the component and its props; render it here.
-	return seat.type(seat.props);
+	const drawer = openDrawer(registered);
+	const seat = findNode(drawer, (props) => props.sessionId !== undefined);
+	assert.ok(seat, "the seal control is not in the drawer");
+	return render(seat);
 }
 
 /** The switch itself: the `role="switch"` button inside the seal control. */
 function sealSwitch(registered) {
 	const control = sealControl(registered);
-	const row = control.props.children[0];
-	const found = row.props.children.find((child) => child && child.props && child.props.role === "switch");
+	const found = control.props.role === "switch" ? control : findNode(control, (props) => props.role === "switch");
 	assert.ok(found, "the seal control has no switch in it");
 	return found;
 }
@@ -1195,20 +1383,24 @@ test("the switch reports its state to a screen reader, and Space throws it", asy
 	assert.equal(posted[posted.length - 1].endpoint, "open");
 });
 
-test("the seal control says what opening it does, at the moment of deciding", async () => {
+test("the drawer says what opening the seal does, at the moment of deciding", async () => {
+	// The sentence sits beside the switch rather than inside it: the control is
+	// the control, and the section it lives in states what throwing it means.
 	const { exports } = loadClientHalf((specifier) => healthyHostModules[specifier]);
-	const { ctx, registered } = stubSlots({ sessions: stubEgressSessions({ count: 0, latest: null }) });
+	const { ctx, registered } = stubSlots({ sessions: stubEgressSessions({ count: 0, entries: [], latest: null }) });
 	exports.apply(ctx);
 	await settled();
-	const flat = JSON.stringify(sealControl(registered));
-	assert.match(flat, /Seal closed/);
-	assert.match(flat, /real outbound calls/);
+	const flat = JSON.stringify(openDrawer(registered));
+	assert.match(flat, /Sealed/);
+	assert.match(flat, /denied before they run/);
 	assert.match(flat, /recorded/, "the operator should learn the act is logged before doing it");
-	assert.match(flat, /restarting the workbench closes it again/);
+	assert.match(flat, /a restart closes it again/);
+	// And the switch itself still names the consequence on hover.
+	assert.match(JSON.stringify(sealSwitch(registered).props.title), /real outbound calls/);
 });
 
 test("a call that got out stays on the record after the seal is closed again", async () => {
-	// Re-sealing does not un-send it. The panel keeps saying so for the rest of
+	// Re-sealing does not un-send it. The drawer keeps saying so for the rest of
 	// the session, because the alternative is a surface that quietly returns to
 	// looking clean after the one event it exists to report.
 	const { exports } = loadClientHalf((specifier) => healthyHostModules[specifier]);
@@ -1216,19 +1408,21 @@ test("a call that got out stays on the record after the seal is closed again", a
 		sealed: true,
 		sessions: stubEgressSessions({
 			count: 0,
-			escaped: 1,
-			entries: [{ kind: "escaped", tool: "bf_canary", target: "https://example.com/", reached: true, time: 1787918400000, seq: 4 }],
+			permitted: 1,
+			entries: [
+				{ kind: "permitted", tool: "pwsh", target: 'Start-Process "https://web.whatsapp.com"', time: 1787918400000, seq: 4 },
+			],
 			latest: null,
 		}),
 	});
 	exports.apply(ctx);
 	await settled();
-	registered.find((call) => call.options.id === "bf-egress-chip").component({ sessionId: "s-1" }).props.onClick();
-	const flat = JSON.stringify(registered.find((call) => call.options.id === "bf-egress-panel").component({}));
+	const flat = JSON.stringify(openDrawer(registered));
 
-	assert.match(flat, /1 call reached the internet in this session/);
-	assert.match(flat, /Closing the seal does not undo that/);
-	assert.match(flat, /Reached the internet/, "the audit line names it too");
+	assert.match(flat, /let through/);
+	assert.match(flat, /"children":"1"/, "the count of calls we allowed out must survive re-sealing");
+	assert.match(flat, /Permitted — the seal was open/, "the record names it too");
+	assert.match(flat, /web\.whatsapp\.com/);
 });
 
 /* ---------------------------------------------------------------------------
@@ -1245,7 +1439,7 @@ function findUpload(registered) {
 	return registered.find((call) => call.options.name === "conversation.input.right" && call.options.id === "bf-upload");
 }
 
-test("the upload control takes the composer tool row, before the canary", () => {
+test("the upload control takes the composer tool row", () => {
 	const { exports } = loadClientHalf((specifier) => healthyHostModules[specifier]);
 	const { ctx, registered } = stubSlots();
 	exports.apply(ctx);
@@ -1253,9 +1447,15 @@ test("the upload control takes the composer tool row, before the canary", () => 
 	const upload = findUpload(registered);
 	assert.ok(upload, "no bf-upload registration");
 	assert.equal(upload.options.label, "Upload");
-	// Left to right the row reads "give it a document, then prove nothing left the
-	// box", which is also the order the demo does them in.
-	assert.ok(upload.options.order < 0, "the upload control should sort before the canary");
+	// It sorts to the head of the row. The canary sat after it until 30 August
+	// 2026 (ADR-0007); the row is one control lighter now, and the ordering is
+	// kept so anything added later lands after the document, not before it.
+	assert.ok(upload.options.order < 0, "the upload control should sort to the head of the row");
+	assert.equal(
+		registered.filter((call) => call.options.name === "conversation.input.right").length,
+		1,
+		"the composer row should carry the upload control alone",
+	);
 });
 
 test("it is a shipped Pill like the controls beside it, and says which stage it is in", () => {
@@ -1290,60 +1490,4 @@ test("it sets no colour of its own either — the state dot carries it through t
 	assert.doesNotMatch(section, /rgba?\(/, "the upload control must not hand-roll a colour");
 	// One exception, and it is layout rather than colour: the file input is hidden.
 	assert.match(section, /display: "none"/);
-});
-
-/* ---------------------------------------------------------------------------
- * The residency chip (30 August 2026)
- *
- * CONTEXT.md "Residency": which fleet members are resident in VRAM at a given
- * moment. The only surface that shows it — the routing chip shows scores and the
- * approval note carries the rest of the trace, so this is the part that adds
- * information rather than repeating it.
- * ------------------------------------------------------------------------- */
-
-function findResidency(registered) {
-	return registered.find((call) => call.options.name === "conversation.session.header.utilities" && call.options.id === "bf-residency");
-}
-
-test("the residency chip takes a session-header seat, not a composer seat", () => {
-	const { exports } = loadClientHalf((specifier) => healthyHostModules[specifier]);
-	const { ctx, registered } = stubSlots();
-	exports.apply(ctx);
-
-	const chip = findResidency(registered);
-	assert.ok(chip, "no bf-residency registration");
-	assert.equal(chip.options.label, "Residency");
-	// It describes the machine's state rather than offering an action, and the
-	// header is where this product already puts that — beside the provider
-	// disclosure and the egress monitor.
-	assert.equal(chip.options.name, "conversation.session.header.utilities");
-});
-
-test("with nothing read yet it says the runtime is not answering, rather than looking idle", () => {
-	// The worse of the two mistakes: a comfortable "VRAM idle" while llama-swap is
-	// dead hides the reason nothing works. Before the first poll resolves there is
-	// no trace, and that must read as unknown-and-bad, not as fine.
-	const { exports } = loadClientHalf((specifier) => healthyHostModules[specifier]);
-	const { ctx, registered } = stubSlots();
-	exports.apply(ctx);
-
-	const rendered = findResidency(registered).component({});
-	// A Menu whose anchor is the Pill, the same shape as the routing chip.
-	assert.equal(rendered.type, PRIMITIVES.Menu);
-	const flat = JSON.stringify(rendered.props);
-	assert.match(flat, /VRAM/);
-	assert.match(flat, /llama-swap is not answering/);
-	// It names the escape hatch, because the person reading this chip at the wrong
-	// moment needs the one-line fix and not a diagnosis.
-	assert.match(flat, /replay/);
-});
-
-test("the residency chip sets no colour of its own either", () => {
-	// Same rule as the canary and the upload control, same reason: a hand-rolled
-	// colour is what made the 27 Aug egress monitor read as pasted on.
-	const source = readFileSync(join(packageDir, "lib", "client.js"), "utf8");
-	const section = source.slice(source.indexOf("function buildResidencyChip"), source.indexOf("const UPLOAD_CHANNEL"));
-	assert.ok(section.length > 1000, "the residency section was not found — this test is asserting nothing");
-	assert.doesNotMatch(section, /#[0-9a-fA-F]{3,8}\b/, "the residency chip must not hand-roll a hex colour");
-	assert.doesNotMatch(section, /rgba?\(/, "the residency chip must not hand-roll a colour");
 });

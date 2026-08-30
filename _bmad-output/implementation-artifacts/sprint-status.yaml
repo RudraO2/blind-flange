@@ -47,6 +47,9 @@ development_status:
   epic-2: done
   2-1-outbound-attempts-are-denied-and-recorded: done
   2-2-the-egress-monitor-shows-a-counted-zero: done
+  # Shipped, then superseded by ADR-0007 on 30 Aug 2026: the canary button was removed and
+  # the operator's own request proves the same thing. Still `done` — it was built, it worked,
+  # and the acceptance criteria are met by what replaced it.
   2-3-the-canary-proves-the-zero-is-enforced: done
   2-4-the-audit-log-can-be-read-on-screen: done
   epic-2-retrospective: optional

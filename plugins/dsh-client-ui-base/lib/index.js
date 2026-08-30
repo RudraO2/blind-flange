@@ -8,10 +8,12 @@
  * editing the harness's built `dist/index.html` or `dist/favicon.svg`, which
  * NFR5 forbids touching. Story 2.1 adds the egress denial waterfall
  * alongside it, and Story 2.2 has that waterfall append an `egress/denied`
- * marker event the on-screen egress monitor counts. Story 2.3 hangs the canary
- * here: a real tool (`egress/canary.js`) whose body genuinely calls out, named
- * in the same deny-list so the same waterfall refuses it, plus the loopback RPC
- * channel the composer button fires it through.
+ * marker event the on-screen egress monitor counts.
+ *
+ * Story 2.3's canary was removed on 30 August 2026 (ADR-0007). The proof is now
+ * the operator's own request — "open WhatsApp" — refused by this same
+ * waterfall, so the demonstration runs through the path a user actually takes
+ * rather than through a button that existed to be pressed.
  *
  * `conversation.hero.brand.mark` — the third piece of AC1 — is a client-side
  * slot and is registered in client.js instead; this file only reaches what a
@@ -37,7 +39,7 @@
  *
  * Story 5.4 adds the approval-note tool (`deliverables/tool.js`): a real
  * `.docx` written to disk from a completed set of findings, registered
- * unconditionally like the canary and the report-findings tool.
+ * unconditionally like the report-findings tool.
  *
  * Story 3.9 registers our three plugin-owned session event types into the
  * harness's persistence read-path vocabulary at mount
@@ -64,13 +66,6 @@
 import { readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
-import {
-	CANARY_CHANNEL,
-	CANARY_TOOL_NAME,
-	createCanaryRpcHandler,
-	createCanaryTool,
-	DEFAULT_CANARY_TARGET,
-} from "./egress/canary.js";
 import { createSealRpcHandler, isSealed, SEAL_CHANNEL } from "./egress/seal.js";
 import { createApprovalNoteTool } from "./deliverables/tool.js";
 import { createReportFindingsTool } from "./findings/tool.js";
@@ -132,11 +127,11 @@ function replaceOrWarn(html, search, replacement, label) {
  * static name rather than from watching it actually try to connect. Any
  * future tool that can reach the network must be added here.
  *
- * The canary (Story 2.3, `egress/canary.js`) is in this set for exactly that
- * reason, and it is the only entry whose body genuinely tries: `web_search`
- * and `web_fetch` are names the harness's own `tool-web` would have used, kept
- * here as defence in depth after Story 1.2 removed the package that provides
- * them.
+ * `web_search` and `web_fetch` are names the harness's own `tool-web` would
+ * have used, kept here as defence in depth after Story 1.2 removed the package
+ * that provides them. The work of actually catching an outbound attempt now
+ * falls to the `pwsh` command patterns below, because the sandbox shell is the
+ * only network-capable surface this profile still mounts.
  *
  * Membership of this set is not by itself a refusal: the waterfall consults the
  * seal (`egress/seal.js`) first, and with the seal open a named tool here runs
@@ -144,7 +139,7 @@ function replaceOrWarn(html, search, replacement, label) {
  * lets a real outbound connection out of this machine — deliberately, from the
  * UI, recorded, and closed again by a restart.
  */
-const NETWORK_TOOL_NAMES = new Set(["web_search", "web_fetch", CANARY_TOOL_NAME]);
+const NETWORK_TOOL_NAMES = new Set(["web_search", "web_fetch"]);
 
 /**
  * The tool name Story 5.3 enables (`tool-pwsh`; the Windows executor per
@@ -221,12 +216,71 @@ const NETWORK_PYTHON_PATTERN =
 const UNINSPECTABLE_PYTHON_PATTERN = /(?:^|[\s;&|(])(?:python[\d.]*|py|pythonw)(?:\.exe)?\s+(?!-c\b|-V\b|--version\b)[^\s]/i;
 
 /**
+ * Matches a command that hands something to the operating system to *open* —
+ * a browser, a shell association, a registered URI handler.
+ *
+ * **Why this exists.** Everything above knows what a network *client* looks
+ * like: a cmdlet that fetches, a Python module that connects. None of it knows
+ * what "open WhatsApp" looks like, and that is the request this workbench now
+ * demonstrates itself with. `Start-Process "https://web.whatsapp.com"` opens
+ * the default browser on the host and reaches the internet without importing
+ * anything, without naming a client, and without matching a single pattern
+ * above. Measured on 30 August 2026 against the real waterfall with the seal
+ * closed: seven of eleven "open WhatsApp" shapes were permitted through to
+ * their tool body.
+ *
+ * Nothing further out catches them either. The harness's own sandbox is
+ * explicit that it does not try: `@deepseek-ai/dsh-sandbox` — "File effects are
+ * the whole policy vocabulary; the seam expresses no network, process, syscall,
+ * device, or credential restrictions" — and the Windows backend that actually
+ * confines `tool-pwsh` here, `@deepseek-ai/dsh-sandbox-windows-acl`, "restricts
+ * writes; reads, network, and process visibility are not". This waterfall is
+ * the only thing standing there.
+ *
+ * Names are matched in full, hyphen included, so the cmdlets a coding lane
+ * legitimately uses are untouched: `Start-Process` is here, `Start-Sleep` is
+ * not, and a bare `start` is left to {@link URI_ARGUMENT_PATTERN} rather than
+ * matched as a word — `\bstart\b` also matches the first half of `Start-Sleep`,
+ * which would deny the sandbox its own timer.
+ *
+ * Browsers are named only with their `.exe`, for the same reason in the other
+ * direction: `chrome`, `brave` and `opera` are ordinary English words, and a
+ * policy that refused `print("be brave")` would be discredited by the first
+ * person who tried it. Nothing is lost by the restraint — a browser launched
+ * without its extension goes through `Start-Process` or `start`, and a browser
+ * launched at all carries the address it is being sent to, so
+ * {@link URI_ARGUMENT_PATTERN} has it either way.
+ */
+const NETWORK_LAUNCHER_PATTERN =
+	/\b(?:Start-Process|Invoke-Item|explorer|rundll32)(?:\.exe)?\b|\b(?:msedge|chrome|firefox|iexplore|brave|opera)\.exe\b|\[(?:System\.)?Diagnostics\.Process\]::Start/i;
+
+/**
+ * Matches a URL or an application URI anywhere in the command text.
+ *
+ * The companion to {@link NETWORK_LAUNCHER_PATTERN}, and the half that closes
+ * the shapes it cannot name: `cmd /c start "" https://web.whatsapp.com` uses no
+ * cmdlet this policy could enumerate, and `whatsapp://send?text=hi` names no
+ * program at all — the association in the registry does the reaching.
+ *
+ * Deliberately broad. A command that merely *mentions* a URL is refused, even
+ * in a comment, because `tools/pre-execute` decides from static text and cannot
+ * tell a citation from an argument. That is the same trade
+ * {@link NETWORK_PYTHON_PATTERN} already makes when it refuses the bare word
+ * `socket`, and it fails in the safe direction: the refusal is visible, names
+ * itself, and is one sentence for an operator to read — where the other
+ * direction is a browser opening on a projector.
+ */
+const URI_ARGUMENT_PATTERN = /[a-z][a-z0-9+.-]*:\/\/|\b(?:mailto|tel|callto|sms|whatsapp|skype|zoommtg|slack):/i;
+
+/**
  * Why this sandbox command must be refused, or `undefined` to allow it.
  *
- * One function so the three policies read in one place and the waterfall stays
- * a single branch. Order matters: the specific network match is reported before
- * the blanket "cannot be inspected" rule, because a named client is a more
- * useful denial reason than a shape complaint.
+ * One function so every policy reads in one place and the waterfall stays a
+ * single branch. Order matters, and it runs most specific first: a named
+ * network client, then a named launcher, then the mere presence of a web
+ * address, then the blanket "cannot be inspected" rule. An operator reading
+ * "attempted to reach the network via: curl …" learns more than one reading
+ * "carried a web address", and both beat a complaint about the command's shape.
  * @param {string} command - the `command` argument of a sandbox tool call.
  * @returns {string | undefined}
  */
@@ -236,6 +290,12 @@ function sandboxDenialReason(command) {
 	}
 	if (NETWORK_PYTHON_PATTERN.test(command)) {
 		return `attempted to reach the network from Python via: ${command}`;
+	}
+	if (NETWORK_LAUNCHER_PATTERN.test(command)) {
+		return `asked the operating system to open something outside this application: ${command}`;
+	}
+	if (URI_ARGUMENT_PATTERN.test(command)) {
+		return `carried a web address, which reaches the network the moment anything opens it: ${command}`;
 	}
 	if (UNINSPECTABLE_PYTHON_PATTERN.test(command)) {
 		return (
@@ -252,7 +312,7 @@ function sandboxDenialReason(command) {
  * for the audit trail — but `tool/call` is appended for every call, allowed or
  * denied, so it cannot be counted as a denial. This is the distinct marker the
  * egress monitor folds: the counted zero is `the number of these events`, never
- * a literal (FR15), and the canary's increment (Story 2.3) is one more of them.
+ * a literal (FR15).
  *
  * A plugin-owned event type, like the router's {@link CLASSIFIED_EVENT} and
  * {@link ROUTED_EVENT}. `Session.append` gives no way to mark an event
@@ -425,11 +485,6 @@ function pwshCommandText(toolArguments) {
  * log carries the task type each request classified as and the fleet-scoring
  * decision that followed.
  *
- * `config.canary.target` is the address the canary tool (Story 2.3) attempts,
- * defaulting to {@link DEFAULT_CANARY_TARGET}. The tool and the loopback RPC
- * channel that fires it are registered below, each behind the services it
- * needs, so a profile with no tool registry or no browser transport still
- * boots sealed.
  * @param ctx - host plugin context.
  * @param config - this row's resolved config; `modelPlane.provider` defaults to `"replay"`.
  */
@@ -494,9 +549,9 @@ export function apply(ctx, config) {
 					return next();
 				}
 				// Same distinct denial marker as above (Story 2.2) — the sandbox's
-				// shell is sealed the same way the network canary is (Story 5.3),
-				// and since 30 August 2026 that covers Python as well as
-				// PowerShell, because the coding lane now writes Python.
+				// shell is sealed the same way a named network tool is (Story 5.3),
+				// and since 30 August 2026 that covers Python and the operating
+				// system's own launchers as well as PowerShell's web cmdlets.
 				record(EGRESS_DENIED_EVENT, { tool: exec.name, target: command });
 				return {
 					kind: "deny",
@@ -528,24 +583,9 @@ export function apply(ctx, config) {
 		return decision;
 	});
 
-	// The canary (Story 2.3). Two registrations, both deferred until the
-	// services they need exist, so a profile without them still gets the seal:
-	//
-	//   1. the tool itself, on `tools` — a genuine outbound `fetch`, denied by
-	//      the waterfall above because its name is in NETWORK_TOOL_NAMES;
-	//   2. the loopback RPC channel the composer's canary button posts to, which
-	//      resolves that session's agent and dispatches the tool through
-	//      `ctx.tools.execute`, i.e. through `tools/pre-execute` like any other
-	//      call. Nothing here appends an event or moves a panel: the denial
-	//      recorded by the waterfall is the only thing the monitor reads.
-	const canaryTarget = config?.canary?.target ?? DEFAULT_CANARY_TARGET;
-	ctx.inject(["tools"], (toolCtx) => {
-		toolCtx.effect(() => toolCtx.tools.register(createCanaryTool(canaryTarget)), "blind-flange: canary tool");
-	});
-
-	// Story 5.1: the report-findings tool. Registered unconditionally, like the
-	// canary above, so every preset's agent can read the ingested report's OCR
-	// findings without a per-preset cordis.patch.yml row.
+	// Story 5.1: the report-findings tool. Registered unconditionally, so every
+	// preset's agent can read the ingested report's OCR findings without a
+	// per-preset cordis.patch.yml row.
 	ctx.inject(["tools"], (toolCtx) => {
 		toolCtx.effect(() => toolCtx.tools.register(createReportFindingsTool()), "blind-flange: report findings tool");
 	});
@@ -561,26 +601,8 @@ export function apply(ctx, config) {
 			"blind-flange: approval note tool",
 		);
 	});
-	ctx.inject(["connection", "agents", "tools"], (canaryCtx) => {
-		canaryCtx.effect(() => {
-			const dispose = canaryCtx.connection.rpc.handle(
-				CANARY_CHANNEL,
-				createCanaryRpcHandler({
-					tools: canaryCtx.tools,
-					agents: canaryCtx.agents,
-					target: canaryTarget,
-					sealed: isSealed,
-				}),
-				{ authority: "loopback" },
-			);
-			return () => {
-				void dispose();
-			};
-		}, "blind-flange: canary rpc channel");
-	});
-
-	// The upload channel the composer's upload control posts to. Same shape and
-	// same `authority: "loopback"` as the canary above — reachable from a browser
+	// The upload channel the composer's upload control posts to.
+	// `authority: "loopback"` — reachable from a browser
 	// on this machine, not from anything that can merely reach the port. It needs
 	// only `connection`, not the tool registry, because it attaches the document
 	// and calls the ingestion service directly rather than dispatching a tool.
@@ -608,7 +630,7 @@ export function apply(ctx, config) {
 		}, "blind-flange: trace rpc channel");
 	});
 
-	// The seal's own loopback channel. Registered beside the canary's and behind
+	// The seal's own loopback channel. Registered behind
 	// the same services, with the same `loopback` authority: opening the seal
 	// changes what this machine may do, so it belongs to the operator sitting at
 	// it and never to anything that can merely reach the port.

@@ -91,7 +91,7 @@ Five decisions are recorded in `docs/adr/` and the artifact does not yet reflect
   plays a recorded `local` run with the cable pulled as the sovereignty proof. `remote` is
   never active during a demo or a recording.
 - **ADR-0002** — panels before inference. Every differentiator (routing explainer,
-  provenance crops, egress monitor, canary, fan-out, `.docx` factory) needs no large model.
+  provenance crops, egress monitor, fan-out, `.docx` factory) needs no large model.
   Build those first; inference is a swappable dependency. This is what answers "why not
   just Ollama with Open WebUI?" — and it has to answer it visually, in thirty seconds.
 - **ADR-0003** — DeepSeek Harness adopted as the runtime, not just its plugin pattern. MIT,
@@ -149,5 +149,9 @@ cold clone, and a recorded offline run.
 1. Pull the network cable, keep working.
 2. Same session, different task type, routing chip changes model automatically — open the
    panel and show the scores.
-3. Press the canary button: a deliberate outbound call gets blocked, the monitor turns red,
-   the audit log records it. Silence proves nothing until the alarm is shown to work.
+3. Ask it to open WhatsApp: the attempt is refused before it runs, a notice names the tool
+   and the address, and the Sovereignty drawer's record carries the line. Silence proves
+   nothing until the alarm is shown to work — and the request is the alarm, so nobody has to
+   be told what they are watching. Then open the seal, ask again, and watch the same request
+   reach the internet: an instrument that can only ever return one answer is not an
+   instrument. (The canary button did this job until 30 Aug 2026 — ADR-0007.)

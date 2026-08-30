@@ -16,7 +16,7 @@
  * than a second one this package would have to maintain.
  *
  * Written structurally against the harness's `ToolDefinition` shape, like
- * `../egress/canary.js` and `../findings/tool.js`, rather than through
+ * `../findings/tool.js`, rather than through
  * `defineTool` — this package resolves nothing from the harness's own
  * installed packages (`../model-plane/llm-adapter.js` explains why: a
  * `link:`-mounted plugin resolves a bare import from its own real on-disk

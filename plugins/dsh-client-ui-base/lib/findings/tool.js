@@ -18,10 +18,10 @@
  * The tool call itself is real: a genuine file read and JSON parse dispatched
  * through the ordinary tool registry, logged like any other call. Only the
  * model's synthesis of these lines into key findings is replayed text
- * (ADR-0001) — the same split canary.js documents for the egress seal.
+ * (ADR-0001) — the same split `../egress/seal.js` documents for the seal.
  *
  * Written structurally against the harness's `ToolDefinition` shape, like
- * `../egress/canary.js`, rather than through `defineTool` — this package
+ * `../egress/seal.js`, rather than through `defineTool` — this package
  * resolves nothing from the harness's own installed packages (see
  * `../model-plane/llm-adapter.js` for why).
  */

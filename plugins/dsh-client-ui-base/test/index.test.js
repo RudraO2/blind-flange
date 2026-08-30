@@ -37,8 +37,8 @@ const packageDir = dirname(dirname(fileURLToPath(import.meta.url)));
  * missing. Pass `webServer: false` to stand in for the `headless` profile,
  * where there is no web server to wait for; pass `llm: false` for a profile
  * with no model seam mounted at all; pass `tools: false` or `connection: false`
- * for a profile with no tool registry or no browser transport, where the canary
- * (Story 2.3) has nothing to register into and the seal still holds.
+ * for a profile with no tool registry or no browser transport, where the tools
+ * have nothing to register into and the seal still holds.
  *
  * `llmService.registerAdapter` mirrors the real (duck-typed) contract closely
  * enough for these tests: it records the call and returns a disposer, exactly
@@ -685,23 +685,15 @@ test("a classification failure is swallowed so the turn still proceeds", async (
 });
 
 /* -------------------------------------------------------------------------
- * The canary (Story 2.3)
+ * The tools this plugin registers, and the channels it answers on.
  *
- * These are the integration half — that the canary is denied by *the same*
- * waterfall that denies any other attempt, and recorded in the same shape.
- * The tool body and the RPC handler are tested on their own in
- * `canary.test.js`.
+ * The canary was one of these until 30 August 2026 (ADR-0007). Its integration
+ * cover — that an outbound attempt is denied by *the same* waterfall that
+ * denies any other, and recorded in the same shape — now sits on the request a
+ * user actually makes, above.
  * ---------------------------------------------------------------------- */
 
-test("registers the canary as a real tool, not a private code path", () => {
-	const host = stubHostCtx();
-	apply(host.ctx);
-	const canary = host.registeredTools.find((tool) => tool.name === "bf_canary");
-	assert.ok(canary, "no canary tool registered");
-	assert.equal(typeof canary.execute, "function");
-});
-
-test("registers the report-findings tool (Story 5.1), unconditionally like the canary", () => {
+test("registers the report-findings tool (Story 5.1), unconditionally", () => {
 	const host = stubHostCtx();
 	apply(host.ctx);
 	const findingsTool = host.registeredTools.find((tool) => tool.name === "bf_report_findings");
@@ -709,7 +701,7 @@ test("registers the report-findings tool (Story 5.1), unconditionally like the c
 	assert.equal(typeof findingsTool.execute, "function");
 });
 
-test("registers the approval-note tool (Story 5.4), unconditionally like the canary", () => {
+test("registers the approval-note tool (Story 5.4), unconditionally", () => {
 	const host = stubHostCtx();
 	apply(host.ctx);
 	const approvalNoteTool = host.registeredTools.find((tool) => tool.name === "bf_approval_note");
@@ -718,7 +710,7 @@ test("registers the approval-note tool (Story 5.4), unconditionally like the can
 	assert.equal(typeof approvalNoteTool.presentCall, "function");
 });
 
-test("registers the canary, seal, upload and trace channels, all loopback-only", () => {
+test("registers the seal, upload and trace channels, all loopback-only", () => {
 	const host = stubHostCtx();
 	apply(host.ctx);
 	// Every one is reachable from a browser on this machine and from nothing that
@@ -731,7 +723,6 @@ test("registers the canary, seal, upload and trace channels, all loopback-only",
 	assert.deepEqual(
 		host.rpcChannels.map((entry) => [entry.channel, entry.options.authority]).sort(),
 		[
-			["/bf-canary", "loopback"],
 			["/bf-seal", "loopback"],
 			["/bf-trace", "loopback"],
 			["/bf-upload", "loopback"],
@@ -739,71 +730,11 @@ test("registers the canary, seal, upload and trace channels, all loopback-only",
 	);
 });
 
-test("the canary is denied by the same waterfall that denies any other attempt", async () => {
-	const host = stubHostCtx();
-	apply(host.ctx);
-	const decision = await host.preExecuteListener({ name: "bf_canary", arguments: { target: "https://example.com/x" } }, () => {
-		throw new Error("next() must not be called for a denied tool");
-	});
-	assert.equal(decision.kind, "deny");
-	assert.match(decision.reason, /https:\/\/example\.com\/x/);
-});
-
-test("firing the canary records a denial in the same shape as any other denial", async () => {
-	const agent = stubAgent();
-	const host = stubHostCtx({ agent });
-	apply(host.ctx);
-	const result = await host.rpcChannels[0].handler("fire", { sessionId: "s1" }, undefined);
-
-	assert.equal(result.ok, true);
-	assert.equal(result.value.outcome, "refused", "the canary must be refused by us, not merely fail");
-	assert.equal(agent.events.length, 1);
-	assert.equal(agent.events[0].type, "egress/denied");
-	assert.equal(agent.events[0].data.tool, "bf_canary");
-	assert.equal(agent.events[0].data.target, "https://example.com/blind-flange-canary");
-});
-
-test("the tool body never runs while the seal holds — the denial comes before the attempt", async () => {
-	const agent = stubAgent();
-	const host = stubHostCtx({ agent });
-	const originalFetch = globalThis.fetch;
-	let reached = false;
-	globalThis.fetch = () => {
-		reached = true;
-		return Promise.resolve({ status: 200 });
-	};
-	try {
-		apply(host.ctx);
-		await host.rpcChannels[0].handler("fire", { sessionId: "s1" }, undefined);
-	} finally {
-		globalThis.fetch = originalFetch;
-	}
-	assert.equal(reached, false, "pre-execute must deny before the canary's fetch runs");
-});
-
-test("each press adds one denial, so the monitor's counter increments", async () => {
-	const agent = stubAgent();
-	const host = stubHostCtx({ agent });
-	apply(host.ctx);
-	await host.rpcChannels[0].handler("fire", { sessionId: "s1" }, undefined);
-	await host.rpcChannels[0].handler("fire", { sessionId: "s1" }, undefined);
-	assert.equal(agent.events.filter((event) => event.type === "egress/denied").length, 2);
-});
-
-test("the canary target is a config value, not a code change", async () => {
-	const agent = stubAgent();
-	const host = stubHostCtx({ agent });
-	apply(host.ctx, { canary: { target: "https://example.net/probe" } });
-	await host.rpcChannels[0].handler("fire", { sessionId: "s1" }, undefined);
-	assert.equal(agent.events[0].data.target, "https://example.net/probe");
-});
-
 test("a profile with no tool registry still gets the egress denial waterfall", async () => {
 	const host = stubHostCtx({ tools: false });
 	apply(host.ctx);
 	assert.deepEqual(host.registeredTools, []);
-	// The canary's channel needs the tool registry and so does not mount here. The
-	// upload, trace and seal channels need only `connection` — one attaches a
+	// The upload, trace and seal channels need only `connection` — one attaches a
 	// document and calls the ingestion service directly, one reads llama-swap, and
 	// the seal is the waterfall's own policy, so a profile that is sealed must be
 	// able to say so and to be opened whether or not it has any tools to deny.
@@ -817,10 +748,9 @@ test("a profile with no tool registry still gets the egress denial waterfall", a
 	assert.equal(decision.kind, "deny");
 });
 
-test("a profile with no browser transport registers the tools but no canary channel", () => {
+test("a profile with no browser transport registers the tools but no channels", () => {
 	const host = stubHostCtx({ connection: false });
 	apply(host.ctx);
-	assert.ok(host.registeredTools.some((tool) => tool.name === "bf_canary"));
 	assert.ok(host.registeredTools.some((tool) => tool.name === "bf_report_findings"));
 	assert.deepEqual(host.rpcChannels, []);
 });
@@ -955,6 +885,83 @@ test("denies running Python from a file or module, because the code cannot be in
 		});
 		assert.equal(decision.kind, "deny", `PERMITTED an uninspectable Python invocation: ${command}`);
 		assert.match(decision.reason, /cannot inspect|inline only/);
+	}
+});
+
+/**
+ * The launcher routes — "open WhatsApp", in every shape a model reaches for.
+ *
+ * These are the shapes that were PERMITTED before 30 August 2026, measured
+ * against this same listener: the patterns above knew what a network client
+ * looks like and nothing about what *opening* something looks like. Nothing
+ * further out catches them either — the harness's sandbox states in its own
+ * README that it expresses no network or process restrictions, and the Windows
+ * ACL backend that confines `tool-pwsh` here restricts writes only.
+ *
+ * The demo asks the workbench to open WhatsApp and expects to watch it refused.
+ * Each of these is a way that request can succeed instead.
+ */
+test("denies every shape of asking the operating system to open a web address", async () => {
+	for (const command of [
+		'Start-Process "https://web.whatsapp.com"',
+		'Start-Process msedge "https://web.whatsapp.com"',
+		"start https://web.whatsapp.com",
+		'explorer.exe "https://web.whatsapp.com"',
+		'Start-Process "whatsapp://send?text=hi"',
+		'cmd /c start "" https://web.whatsapp.com',
+		'[System.Diagnostics.Process]::Start("https://web.whatsapp.com")',
+		'Invoke-Item "https://web.whatsapp.com"',
+		'rundll32 url.dll,FileProtocolHandler "https://web.whatsapp.com"',
+		'Start-Process chrome "https://web.whatsapp.com"',
+	]) {
+		const host = stubHostCtx();
+		apply(host.ctx);
+		const decision = await host.preExecuteListener({ name: "pwsh", arguments: { command } }, () => {
+			throw new Error("next() must not be called for a denied tool");
+		});
+		assert.equal(decision.kind, "deny", `PERMITTED a launcher route: ${command}`);
+		assert.match(decision.reason, /open something outside this application|carried a web address/);
+	}
+});
+
+test("a denied launcher call lands on the same egress/denied event the monitor counts", async () => {
+	const agent = stubAgent();
+	const host = stubHostCtx();
+	apply(host.ctx);
+	await host.preExecuteListener(
+		{ name: "pwsh", arguments: { command: 'Start-Process "https://web.whatsapp.com"' }, agent },
+		() => {
+			throw new Error("next() must not be called for a denied tool");
+		},
+	);
+	// The ledger and the counted zero read this event and nothing else, so a
+	// denial the monitor cannot see is a denial that proves nothing.
+	assert.equal(agent.events.length, 1);
+	assert.equal(agent.events[0].type, "egress/denied");
+	assert.equal(agent.events[0].data.tool, "pwsh");
+	assert.match(agent.events[0].data.target, /web\.whatsapp\.com/);
+});
+
+test("the launcher policy does not deny the cmdlets it shares a prefix with", async () => {
+	// `\bstart\b` matches the first half of `Start-Sleep`, which is why the
+	// launcher pattern matches whole hyphenated names and leaves a bare `start`
+	// to the web-address rule. A seal that stops the sandbox sleeping is a seal
+	// that gets switched off.
+	for (const command of [
+		"Start-Sleep -Seconds 1",
+		"Start-Job { 1 + 1 }",
+		"Get-Process | Select-Object -First 3",
+		'python -c "print(\'chrome is a word, not a launch\')"',
+	]) {
+		const host = stubHostCtx();
+		apply(host.ctx);
+		let reached = false;
+		const decision = await host.preExecuteListener({ name: "pwsh", arguments: { command } }, () => {
+			reached = true;
+			return { kind: "allow" };
+		});
+		assert.ok(reached, `the waterfall did not pass through a benign command: ${command}`);
+		assert.equal(decision.kind, "allow");
 	}
 });
 
@@ -1113,6 +1120,12 @@ test("opening the seal over its own channel is what changes the waterfall's answ
 	// End to end, through the same loopback channel the control posts to: no
 	// second mechanism, and no code edit. Before the seal existed, making this
 	// call succeed meant deleting a line from NETWORK_TOOL_NAMES and restarting.
+	//
+	// The call is the demo's own request — "open WhatsApp" — because that is now
+	// the calibration (ADR-0007): the same words are refused with the seal closed
+	// and permitted with it open, which is what makes the monitor an instrument
+	// rather than an assertion. An instrument that can only ever return one
+	// answer is not an instrument.
 	setSealed(true);
 	try {
 		const agent = stubAgent();
@@ -1122,7 +1135,7 @@ test("opening the seal over its own channel is what changes the waterfall's answ
 		await seal.handler("open", { sessionId: "s1" });
 
 		const decision = await host.preExecuteListener(
-			{ name: "bf_canary", arguments: { target: "https://example.com/x" }, agent },
+			{ name: "pwsh", arguments: { command: 'Start-Process "https://web.whatsapp.com"' }, agent },
 			() => ({ kind: "allow" }),
 		);
 		assert.equal(decision.kind, "allow");

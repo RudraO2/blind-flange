@@ -9,12 +9,12 @@
  * this product has to earn, so this adds the arrival without replacing the
  * mention.
  *
- * Shaped exactly like the canary's channel (`egress/canary.js`): one loopback RPC
+ * Shaped exactly like the seal's channel (`egress/seal.js`): one loopback RPC
  * channel, one endpoint, `authority: "loopback"` so it is reachable from a
  * browser on this machine and not from anything that can merely reach the port.
  * Following that pattern rather than inventing a second one is deliberate —
  * there is now one way a composer control talks to the host, and a reader who
- * has understood the canary has understood this too.
+ * has understood the seal has understood this too.
  *
  * **Uploading ingests immediately.** Two reasons. It removes a step from a demo
  * timed to three minutes, and the OCR pass is several seconds of visible CPU work

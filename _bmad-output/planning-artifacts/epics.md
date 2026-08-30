@@ -552,6 +552,13 @@ hand-written greens and hand-rolled pill are gone (UX-DR7)
 
 ### Story 2.3: The canary proves the zero is enforced
 
+> **Superseded 30 August 2026 by ADR-0007.** This story shipped and did its job. The button
+> was then removed: the operator's own request — "open WhatsApp" — proves the same thing
+> through the path a user actually takes, and nobody has to be told what a canary is. The
+> acceptance criteria below still hold, with the request in place of the button, and the
+> waterfall was widened to cover the launcher routes the canary never exercised before the
+> button was deleted. Read the ADR, not just this story.
+
 As an evaluator who does not trust a quiet panel,
 I want a button that deliberately tries to call out,
 So that I can watch the block happen instead of taking silence as evidence.

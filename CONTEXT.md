@@ -32,23 +32,28 @@ The small UI element showing which model answered and why, expanding into the cl
 scores. One of the three demo moments — the user watches it change model mid-session.
 _Avoid_: model badge, indicator
 
-**Canary**:
-The button that fires a deliberate outbound network call so the user can watch egress denial
-block it, the monitor turn red, and the audit log record it. Silence proves nothing; the
-canary is what turns an absence into evidence.
-_Avoid_: the test call, the network test
-
 **The seal**:
 Whether Blind Flange is denying outbound calls. Closed by default, closed again by a
-restart, and opened only by holding the control in the egress monitor — which is recorded
-on the session log like any other attempt. The seal is what makes the canary an instrument
-rather than an assertion: with it open the attempt genuinely leaves the process, so the
-same button can be shown succeeding on a connected machine and failing on a sealed one.
+restart, and opened only from the control in the Sovereignty drawer — which is recorded on
+the session log like any other attempt. The seal is what makes the egress monitor an
+instrument rather than an assertion: with it open the attempt genuinely leaves the process,
+so the same request can be shown refused on a sealed machine and reaching the internet on an
+open one. That pair is the calibration.
 _Avoid_: the toggle, the switch, egress mode
 
 **Egress monitor**:
-The always-on display of outbound attempts. Pairs with the canary: the monitor is the
-instrument, the canary is the calibration.
+The count of outbound attempts and the record of each one. Its resting form is the seal row
+at the sidebar foot — one line, always on screen, on the new-session screen as well as inside
+a conversation, because the seal is a property of the installation rather than of a
+conversation. Its full form is the **Sovereignty drawer**.
+
+**Sovereignty drawer**:
+The right-hand panel the seal row opens: the seal and its switch, the egress figures and the
+record, then residency and the model plane as collapsed sections, then the export. One
+surface answering one question — what is this machine doing, and what has it refused? It
+insets the workbench rather than covering it, so it can stay open through a whole demo, and
+its width is the operator's to set.
+_Avoid_: the egress panel, the sidebar, the details pane
 
 **Deliverable factory**:
 The path that carries work through to a signed Word document with provenance, rather than
@@ -106,8 +111,10 @@ What we actually extract from a P&ID — symbol and tag inventory plus region Q&
 connectivity-graph extraction is past the cut line and we say so on the slide.
 
 **Sovereignty proof**:
-The demonstrated version of the sovereignty claim: pull the cable and keep working, fire
-the canary and watch it blocked. Never the asserted version.
+The demonstrated version of the sovereignty claim: pull the cable and keep working; ask the
+workbench to open WhatsApp and watch the attempt refused before it runs and written to the
+record. Never the asserted version. The request is the proof precisely because nobody has to
+be told what it is for — a button labelled with our own vocabulary proves our vocabulary.
 _Avoid_: security story, compliance claim
 
 ## Audiences

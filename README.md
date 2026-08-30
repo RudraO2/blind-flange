@@ -69,7 +69,7 @@ npm run ingestion             # optional: run it
 
 Worth being straight about before you judge what you are looking at.
 
-**Real.** The egress seal, the canary and the audit log. The router — it genuinely classifies
+**Real.** The egress seal and the audit record. The router — it genuinely classifies
 each request and scores the fleet. The sandbox: a coding task really executes. The approval
 note is really written to disk as a `.docx`. The OCR is real PP-OCRv6 inference on the scanned
 report.
@@ -91,13 +91,20 @@ names the page and region it was read from so the Provenance tab can show you th
 ## What you should see
 
 The first screen is the workbench itself — no notice to dismiss, no API-key prompt, no
-account. In the session header, beside the composer, there is a pill reading **Egress 0** with
-a green dot. That zero is a count of denied outbound attempts, not a printed literal.
+account. At the foot of the sidebar, above Settings, one line reads **Sealed** with a green dot
+and a number. That number is a count of denied outbound attempts, not a printed literal, and
+the line is there on the new-session screen as well as inside a conversation — the seal belongs
+to the installation, not to a conversation.
 
-Click it. The panel underneath carries a **Fire the canary** button. Pressing it makes Blind
-Flange deliberately attempt one outbound call, watch its own egress denial refuse it, turn the
-monitor red, and write the attempt into an audit log you can read on the same screen. Silence
-proves nothing; the canary is what turns an absence into evidence.
+Now ask it to do something that needs the internet: *open WhatsApp and check the vendor
+thread*. The attempt is refused before it runs, a notice names the tool and the address it was
+sent to, and the count goes up. Click the seal row: the **Sovereignty** drawer opens with the
+seal's own switch, the figures, and the record of every attempt this session — timestamped,
+named, and exportable. Silence proves nothing; a refused request is what turns an absence into
+evidence.
+
+Then throw the switch and ask again. The same request reaches the internet, and that is
+recorded too. An instrument that can only ever return one answer is not an instrument.
 
 That is the first demo beat. From there the routing chip at the end of the composer names the
 fleet member that answered and why, and the Provenance tab shows the image region each finding
@@ -141,7 +148,7 @@ the active provider is named on screen at all times.
 | `scripts/record-demo.mjs` | `npm run record-demo` — drives a running workbench through the three demo beats and records them. Needs `ffmpeg` on `PATH` |
 | `videos/recorded-offline-run/` | The recording itself, and what it shows second by second |
 | `profile/` | The harness profile's configuration, tracked. The source of truth for what `npm start` writes |
-| `plugins/dsh-client-ui-base/` | Blind Flange itself: the egress seal, canary, model plane, router, provenance viewer and deliverable factory, as one out-of-tree harness plugin |
+| `plugins/dsh-client-ui-base/` | Blind Flange itself: the egress seal, model plane, router, provenance viewer and deliverable factory, as one out-of-tree harness plugin |
 | `registry/models.yaml` | The fleet, one row per model, each with the licence it was verified under |
 | `services/ingestion/` | The Python OCR service that turns a scanned report into text with regions |
 | `docs/licence-policy.md` | The licence allow-list, and why it is absolute |

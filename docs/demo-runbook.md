@@ -40,10 +40,19 @@ Invoke-RestMethod http://127.0.0.1:8080/running    # the model(s) currently resi
 
 ## The demo, and what each beat proves
 
-1. **Egress monitor reads zero, then press the canary.** One deliberate outbound call, refused,
-   red row, audit line. The zero is a count of `egress/denied` events, never a literal — silence
-   proves nothing, so the canary is what turns an absence into evidence.
-2. **Upload a scanned document.** The control is in the composer row, left of the canary. It reads
+1. **The seal row reads zero, then ask it to open WhatsApp.** The seal row sits at the foot of
+   the sidebar and is on screen before you type anything. Ask the workbench to open WhatsApp and
+   check a vendor thread: the attempt is refused before it runs, a notice names the tool and the
+   address, and the count goes up. Click the row — the Sovereignty drawer carries the seal's
+   switch, the two figures and the record. The zero was a count of `egress/denied` events, never
+   a literal; silence proves nothing, so a refused request is what turns an absence into
+   evidence.
+
+   Then **throw the switch and ask again.** With the seal open the same request reaches the
+   internet and is recorded as let through. Do this only on a machine you are willing to have
+   reach the network, and close the seal afterwards — a restart closes it anyway. This half is
+   what proves the monitor is measuring rather than asserting.
+2. **Upload a scanned document.** The control is in the composer row. It reads
    the file in the browser, posts it over loopback, and OCRs it immediately — expect roughly 7s for
    two pages, and the button says which stage it is in. Then ask about the findings: click one and
    the provenance crop shows the region of the page it was read from, cut from a page rendered on

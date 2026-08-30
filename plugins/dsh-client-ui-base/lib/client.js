@@ -70,22 +70,29 @@
  * event, so the chip shows the decision the router actually recorded — never
  * an animation without an event behind it (NFR8).
  *
- * Story 2.2 adds the egress monitor: a compact chip sharing
- * `conversation.session.header.utilities` and a full panel in `shell.overlay`.
- * Both show one number — the count of `egress/denied` session events the
- * denial waterfall records (host half) — folded through a registered
+ * Story 2.2 adds the egress monitor. It was a chip in
+ * `conversation.session.header.utilities` and a floating card in
+ * `shell.overlay`; on 30 August 2026 it became a permanent seal row at
+ * `sidebar.footer.action` and the Sovereignty drawer. The chip's slot is scoped
+ * *session*, so the one claim this product rests on was absent from the
+ * new-session screen — the first thing an evaluator sees. The foot row's slot
+ * is scoped `root`, which is both the fix and the more honest siting: the seal
+ * belongs to this installation's outbound access, not to one conversation.
+ *
+ * Both surfaces show one number — the count of `egress/denied` session events
+ * the denial waterfall records (host half) — folded through a registered
  * `bf-egress` conversation view. The zero is counted, never a literal (FR15),
  * and it is the rebuild of the 27 August spike's hand-rolled monitor against
  * the shipped primitives and theme tokens (UX-DR7).
  *
- * Story 2.3 adds the canary: a button in `conversation.input.right` that posts
- * to the host's loopback `/bf-canary` channel. The host dispatches a real tool
- * whose body calls `fetch`, the egress denial waterfall refuses it before that
- * body runs, and the monitor above turns red off the recorded denial rather
- * than off anything the button says.
+ * Story 2.3's canary was removed on 30 August 2026 (ADR-0007), and with it the
+ * composer button that fired it. The demonstration is now the request an
+ * operator actually types — "open WhatsApp" — refused by the same waterfall and
+ * recorded on the same event, so nothing on screen depends on a control that
+ * existed to be pressed.
  *
- * Story 2.4 adds no seat either. The egress monitor's full panel becomes the
- * audit surface: it lists every recorded denial — the timestamp the harness
+ * Story 2.4 adds no seat either. The drawer is the audit surface: it lists
+ * every recorded egress event — the timestamp the harness
  * stamped on the event, the tool, and the refused target — in the order the log
  * wrote them. The lines come from the same `bf-egress` view the count comes
  * from, so reading the log on screen needs no terminal and a fresh denial lands
@@ -191,7 +198,7 @@ window.__ModuleLoader__.load({
 			return jsxs("span", {
 				style: { display: "inline-flex", alignItems: "center", gap: "0.4em" },
 				children: [
-					jsx(FaradayMark, { size, className }),
+					jsx(RingedMark, { size, className }),
 					jsxs("span", {
 						style: { display: "inline-flex", flexDirection: "column", alignItems: "flex-start", lineHeight: 1.05 },
 						children: [
@@ -218,6 +225,75 @@ window.__ModuleLoader__.load({
 			}
 			if (typeof jsxRuntime?.jsx !== "function") return null;
 			return jsxRuntime.jsx("span", { children: "Faraday" });
+		}
+
+		/**
+		 * The seal, drawn as a ring around the mark.
+		 *
+		 * The cheapest true thing on the screen: Faraday is named after the plate
+		 * bolted over a line to isolate it, and a closed ring around the mark is
+		 * that plate. Continuous means sealed. Broken means open.
+		 *
+		 * Restraint is the whole design. The sealed ring is a hairline in the
+		 * theme's own border token and carries no colour at all — a permanently
+		 * green logo is a reassurance nobody reads by the third minute, and this
+		 * is industrial control software (UX-DR7). Colour appears only in the
+		 * abnormal state, where an amber dashed ring is the point. Until the host
+		 * has answered once there is no ring: this client does not know the seal's
+		 * state and must not imply either answer.
+		 *
+		 * It is decoration in the strict sense — `aria-hidden`, no title, no
+		 * click. The seal row at the sidebar foot is the accessible statement of
+		 * the same fact, and saying it twice to a screen reader helps nobody.
+		 * @param props.size - the square edge the seat asked for.
+		 */
+		function SealRing({ size, children }) {
+			const { useSyncExternalStore } = require("react");
+			const { jsx, jsxs } = require("react/jsx-runtime");
+			const state = useSyncExternalStore(seal.subscribe, seal.get);
+			const open = state.known && !state.sealed;
+			const edge = typeof size === "number" && Number.isFinite(size) ? size : 24;
+			return jsxs("span", {
+				style: {
+					position: "relative",
+					display: "inline-flex",
+					alignItems: "center",
+					justifyContent: "center",
+					width: `${edge}px`,
+					height: `${edge}px`,
+					flex: "0 0 auto",
+				},
+				children: [
+					state.known
+						? jsx("span", {
+								"aria-hidden": "true",
+								style: {
+									position: "absolute",
+									inset: 0,
+									borderRadius: "50%",
+									border: open
+										? "1.5px dashed var(--dsw-alias-state-warn-primary)"
+										: "1px solid var(--dsw-alias-border-l3)",
+								},
+							})
+						: null,
+					jsx("span", {
+						style: { display: "inline-flex", alignItems: "center", justifyContent: "center" },
+						children,
+					}),
+				],
+			});
+		}
+
+		/**
+		 * The mark inside its ring, at the size the seat asked for. The ring owns
+		 * the seat's full square and the artwork sits at 62% of it, so taking the
+		 * ring costs the mark a little presence and costs the layout nothing.
+		 */
+		function RingedMark({ size, className }) {
+			const { jsx } = require("react/jsx-runtime");
+			const edge = typeof size === "number" && Number.isFinite(size) ? size : 24;
+			return jsx(SealRing, { size: edge, children: jsx(FaradayMark, { size: Math.round(edge * 0.62), className }) });
 		}
 
 		function FaradayMark({ size, className }) {
@@ -736,7 +812,8 @@ window.__ModuleLoader__.load({
 		 * (host half, `index.js`) — folded through a registered conversation
 		 * view. The zero is `that fold's node count`, never a literal (FR15),
 		 * and it moves only on a real recorded denial, never an animation
-		 * (NFR8). Story 2.3's canary is what first makes it non-zero on stage.
+		 * (NFR8). The request an operator types is what first makes it non-zero on
+		 * stage — "open WhatsApp", refused before it runs.
 		 *
 		 * This replaces the 27 August spike's `@blind-flange/dsh-client-ui-egress`
 		 * (hand-written greens, a hand-rolled pill — the counter-example the UI
@@ -777,7 +854,7 @@ window.__ModuleLoader__.load({
 		const EGRESS_VIEW_TARGET = "bf-egress";
 		const EGRESS_DEFINITION_KIND = "bf-egress";
 
-		/** The seal's loopback channel, mirroring `CANARY_CHANNEL` below. */
+		/** The seal's loopback channel. */
 		const SEAL_CHANNEL = "/bf-seal";
 
 		/**
@@ -930,7 +1007,101 @@ window.__ModuleLoader__.load({
 			};
 		}
 
-		const egressPanelOpen = createOpenStore();
+		const drawerOpen = createOpenStore();
+
+		/**
+		 * How wide the Sovereignty drawer is, in pixels, and the one thing about
+		 * this UI the operator gets to keep.
+		 *
+		 * A fixed width is a guess about a screen we do not own. The ledger's lines
+		 * are URLs and command text — the two kinds of string with no natural
+		 * wrapping point — so the reader who most needs this panel is exactly the
+		 * reader for whom our guess is too narrow, and on a projector at 1280 the
+		 * same number is too wide. So it is a drag, and it is remembered.
+		 *
+		 * Persisted to `localStorage` rather than to the harness's own settings:
+		 * this is a per-machine display preference, not deployment state, and it
+		 * must never be a reason a profile fails to load. Every read and write is
+		 * wrapped — a browser with site data blocked throws on access rather than
+		 * returning null, and a drawer that cannot remember its width is a much
+		 * smaller problem than a panel that will not render.
+		 */
+		const DRAWER_WIDTH_KEY = "faraday.sovereignty.width";
+		const DRAWER_MIN_WIDTH = 300;
+		const DRAWER_MAX_WIDTH = 720;
+		const DRAWER_DEFAULT_WIDTH = 380;
+
+		function clampWidth(value) {
+			if (typeof value !== "number" || !Number.isFinite(value)) return DRAWER_DEFAULT_WIDTH;
+			return Math.min(DRAWER_MAX_WIDTH, Math.max(DRAWER_MIN_WIDTH, Math.round(value)));
+		}
+
+		function createWidthStore() {
+			let width = DRAWER_DEFAULT_WIDTH;
+			try {
+				const stored = globalThis.localStorage?.getItem(DRAWER_WIDTH_KEY);
+				if (stored !== null && stored !== undefined) width = clampWidth(Number(stored));
+			} catch {
+				// Site data blocked, or a private window. The default is a fine answer.
+			}
+			const listeners = new Set();
+			return {
+				get: () => width,
+				subscribe(listener) {
+					listeners.add(listener);
+					return () => listeners.delete(listener);
+				},
+				/** Set the width without writing it down — called for every pointer move. */
+				set(next) {
+					const clamped = clampWidth(next);
+					if (clamped === width) return;
+					width = clamped;
+					for (const listener of listeners) listener();
+				},
+				/** Write the current width down — called once, when the drag ends. */
+				commit() {
+					try {
+						globalThis.localStorage?.setItem(DRAWER_WIDTH_KEY, String(width));
+					} catch {
+						// Same reasoning as the read: not remembering is not a failure.
+					}
+				},
+			};
+		}
+
+		const drawerWidth = createWidthStore();
+
+		/**
+		 * Inset the application by the drawer's width while it is open.
+		 *
+		 * The drawer is a reading surface, not a popover: an evaluator has it open
+		 * while they type the request that fills it, and a panel that covers the
+		 * transcript is a panel they close before the interesting part happens. So
+		 * the app gives up the width rather than being covered by it.
+		 *
+		 * `#root` is the harness's own mount node (`document.getElementById("root")`
+		 * in its web boot), and padding it is the least invasive way to reach the
+		 * whole frame: ui-layout's AppFrame fills it, and nothing of ours has to
+		 * know the frame's internal structure or its build-hashed class names. The
+		 * drawer itself is `position: fixed`, so it sits in the strip the padding
+		 * reclaims. One rule, one job — the same technique the hero headline is
+		 * hidden with.
+		 */
+		let insetStyleNode = null;
+		function applyInset(pixels) {
+			if (typeof document === "undefined" || !document.head) return;
+			if (insetStyleNode === null) {
+				insetStyleNode = document.createElement("style");
+				insetStyleNode.dataset.faraday = "drawer-inset";
+				document.head.appendChild(insetStyleNode);
+			}
+			insetStyleNode.textContent =
+				pixels > 0 ? `#root { box-sizing: border-box; padding-right: ${pixels}px; }` : "";
+		}
+		function disposeInset() {
+			insetStyleNode?.remove();
+			insetStyleNode = null;
+		}
 
 		/**
 		 * The seal's state, as this client understands it, plus the only route
@@ -1002,9 +1173,21 @@ window.__ModuleLoader__.load({
 		const seal = createSealStore();
 
 		/**
+		 * The host transport, once the client root has one.
+		 *
+		 * The drawer is registered unconditionally — the monitor is worth more than
+		 * any detail inside it, and a client with no transport must still be able to
+		 * read the ledger its own session log produced. But two sections of it (the
+		 * residency read and the log export's provider line) do need the host, so
+		 * they ask this rather than being gated behind an `inject` that would take
+		 * the whole drawer down with them.
+		 */
+		let hostConnection = null;
+
+		/**
 		 * The clock reading for one audit line, from the `time` the harness
 		 * stamped on the denial event. Local wall time with seconds, because an
-		 * evaluator reads it against the moment they pressed the canary. Renders
+		 * evaluator reads it against the moment the request was refused. Renders
 		 * an em dash rather than inventing a time when the record carries none.
 		 * @param time - unix epoch milliseconds, or null.
 		 */
@@ -1087,76 +1270,194 @@ window.__ModuleLoader__.load({
 		}
 
 		/**
-		 * Build the compact egress chip for `conversation.session.header.utilities`.
+		 * Build the permanent seal row for `sidebar.footer.action`.
+		 *
+		 * WHY IT MOVED. Until 30 August 2026 this was a `Pill` in
+		 * `conversation.session.header.utilities` — a slot scoped *session*, so the
+		 * header it sat in did not exist until a conversation did. The one claim
+		 * this product rests on was therefore missing from the new-session screen:
+		 * the first thing an evaluator sees, and the moment the workbench
+		 * introduces itself. That was not a styling problem with a styling fix; it
+		 * was the wrong scope.
+		 *
+		 * `sidebar.footer.action` is a `list` slot scoped `root`, declared by
+		 * `@deepseek-ai/dsh-client-ui-sidebar` and rendered beside Settings at the
+		 * sidebar foot (read from that package's own slot declaration, 30 Aug 2026).
+		 * Root scope is the whole point rather than a convenience: the seal is a
+		 * property of this installation's outbound access, not of one conversation,
+		 * so the shell is where it is *true*, and being always on screen falls out
+		 * of that rather than being arranged.
+		 *
+		 * It states one thing and counts one number. The ledger, the switch and
+		 * everything about the machine are in the drawer it opens.
+		 *
+		 * The count does not turn the row red and leave it red. A denial is the seal
+		 * doing its job, and a permanent alarm colour for good news is an alarm
+		 * colour nobody reads by the third minute; the standing colour states the
+		 * seal and nothing else. A fresh denial is loud for a few seconds — see
+		 * `useRecentIncrease` — and then it is a number in a list.
 		 * @param ctx - client root context, carrying `sessions`.
 		 * @returns the component.
 		 */
-		function buildEgressChip(ctx) {
-			const { useSyncExternalStore } = require("react");
+		function buildSealFootRow(ctx) {
+			const { useEffect, useRef, useState, useSyncExternalStore } = require("react");
 			const { jsx, jsxs } = require("react/jsx-runtime");
-			const { Pill, StateDot } = require("@deepseek-ai/dsh-client-ui-primitives");
+			const { StateDot, Tooltip } = require("@deepseek-ai/dsh-client-ui-primitives");
 
 			/**
-			 * The chip: "Egress N", a green state dot at zero and a red one once
-			 * anything has been denied (Story 2.3's red state). Clicking it opens
-			 * the full panel. Reads the session's `bf-egress` view through
-			 * `useSyncExternalStore`, so a fresh denial moves the number with no
-			 * user action.
+			 * True for a few seconds after `value` goes up, false otherwise.
+			 *
+			 * The moment a denial lands has to be visible from the back of a room
+			 * without leaving a mark on the interface afterwards. This is the "for a
+			 * few seconds" half; the notice at the top of the window is the loud half.
 			 */
-			function EgressChip(props) {
+			function useRecentIncrease(value) {
+				const previous = useRef(value);
+				const [recent, setRecent] = useState(false);
+				useEffect(() => {
+					const before = previous.current;
+					previous.current = value;
+					if (typeof value !== "number" || typeof before !== "number" || value <= before) return undefined;
+					setRecent(true);
+					const timer = setTimeout(() => setRecent(false), 6000);
+					return () => clearTimeout(timer);
+				}, [value]);
+				return recent;
+			}
+
+			/**
+			 * The row. `wide` is the sidebar's own fold state, handed to every footer
+			 * action: true for the full column, false for the 56px rail. The rail form
+			 * is the dot alone, because that is the whole shelf there is — and the
+			 * `Tooltip` that names it is the same one the sidebar puts on its own
+			 * controls when it is collapsed, so a collapsed Faraday behaves like a
+			 * collapsed harness.
+			 */
+			function SealFootRow(props) {
+				const wide = props?.wide !== false;
 				const sealState = useSyncExternalStore(seal.subscribe, seal.get);
-				const session = ctx.sessions?.binding?.(props.sessionId)?.session ?? null;
+				const list = ctx.sessions?.list ?? null;
+				const current = useSyncExternalStore(
+					(onChange) => (list ? list.subscribe(onChange) : () => {}),
+					() => (list ? list.getSnapshot().current ?? null : null),
+				);
+				const session = current ? ctx.sessions?.binding?.(current)?.session ?? null : null;
 				const snapshot = useSyncExternalStore(
 					(onChange) => (session ? session.subscribe(onChange) : () => {}),
 					() => readEgressSnapshot(session),
 				);
-				const ready = snapshot !== null;
-				const count = ready ? snapshot.count : null;
-				const breached = ready && count > 0;
+				const count = snapshot === null ? null : snapshot.count;
+				const fresh = useRecentIncrease(count);
+				const open = sealState.known && !sealState.sealed;
 
-				return jsx(Pill, {
-					active: breached || (sealState.known && !sealState.sealed),
-					onClick: () => egressPanelOpen.toggle(),
+				const label = !sealState.known ? "Checking the seal" : open ? "Seal OPEN" : "Sealed";
+				const title = open
+					? "The seal is OPEN — Faraday is not denying outbound calls. Open the Sovereignty drawer for the audit detail and the control that closes it."
+					: count === null
+						? "Sealed. Outbound calls are denied before they run."
+						: `Sealed. ${count} outbound attempt${count === 1 ? "" : "s"} denied and recorded this session. Open the Sovereignty drawer for the audit detail.`;
+
+				const row = jsxs("button", {
+					type: "button",
+					onClick: () => drawerOpen.toggle(),
 					"aria-haspopup": "dialog",
-					title:
-						sealState.known && !sealState.sealed
-							? "Egress monitor: the seal is OPEN — outbound calls are not being denied. Open for the audit detail and the control that closes it."
-							: breached
-								? `Egress monitor: ${count} outbound attempt${count === 1 ? "" : "s"} denied and recorded this session. Open for the audit detail.`
-								: "Egress monitor: no outbound attempt has been made this session. The count is the number of recorded denials, not a fixed label.",
-					children: jsxs("span", {
-						style: { display: "inline-flex", alignItems: "center", gap: "6px" },
-						children: [
-							jsx(StateDot, {
-								state: sealState.known && !sealState.sealed ? "warning" : breached ? "error" : "done",
-								size: 8,
-							}),
-							// The chip stops showing a count while the seal is open. A
-							// number that keeps reading "0" with enforcement switched off
-							// would be the most misleading thing on the screen — true, and
-							// understood as the opposite of what it means.
-							sealState.known && !sealState.sealed ? "Egress — open" : ready ? `Egress ${count}` : "Egress",
-						],
-					}),
+					"aria-label": title,
+					title,
+					style: {
+						display: "flex",
+						alignItems: "center",
+						gap: "10px",
+						width: "100%",
+						justifyContent: wide ? "flex-start" : "center",
+						padding: wide ? "8px 10px" : "8px 0",
+						border: "1px solid transparent",
+						borderRadius: "8px",
+						background: open ? "var(--dsw-alias-state-warn-tertiary)" : "transparent",
+						borderColor: open ? "var(--dsw-alias-state-warn-primary)" : "transparent",
+						color: "var(--dsw-alias-label-secondary)",
+						font: "inherit",
+						fontSize: "13px",
+						textAlign: "left",
+						cursor: "pointer",
+					},
+					children: [
+						// Two readings only, deliberately: the seal is holding, or it is
+						// not. What has been denied is a number, not a colour.
+						jsx(StateDot, { state: open ? "warning" : "done", size: 8 }),
+						wide
+							? jsx("span", {
+									style: { flex: "1 1 auto", color: open ? "var(--dsw-alias-state-warn-label)" : undefined },
+									children: label,
+								})
+							: null,
+						wide && count !== null
+							? jsx("span", {
+									style: {
+										fontVariantNumeric: "tabular-nums",
+										color: fresh ? "var(--dsw-alias-state-error-primary)" : "var(--dsw-alias-label-tertiary)",
+										fontWeight: fresh ? 600 : 400,
+										transition: "color 200ms ease",
+									},
+									children: String(count),
+								})
+							: null,
+					],
 				});
+
+				return jsx(Tooltip, { label: title, delayMs: 500, disabled: wide, children: row });
 			}
 
-			return EgressChip;
+			return SealFootRow;
 		}
 
 		/**
-		 * Build the full egress panel for `shell.overlay`. Root-scoped, so it
+		 * Build the Sovereignty drawer for `shell.overlay`. Root-scoped, so it
 		 * has no `sessionId` prop — it reads `ctx.sessions.list.current` and
 		 * binds that session itself.
+		 *
+		 * WHAT IT IS. One surface answering one question: what is this machine
+		 * doing, and what has it refused? Before 30 August 2026 that question had
+		 * three different answers in three different geometries — the egress
+		 * monitor was a floating card with a Dismiss button, residency was a
+		 * dropdown menu of disabled items, and the open seal was a band. Three
+		 * shapes for one idea, and the card landed on top of the transcript the
+		 * evaluator was reading.
+		 *
+		 * The band stays, because a state nobody may forget they are in should
+		 * take space rather than borrow a colour. The other two are here, ranked
+		 * by consequence rather than split evenly: the seal is the argument, the
+		 * ledger is the evidence, residency and the model plane are context and
+		 * arrive collapsed. A drawer that opened at fifty-fifty would be giving
+		 * half its room to the least consequential thing in it.
+		 *
+		 * It insets the application rather than covering it (see `applyInset`),
+		 * and its width is a drag the operator keeps (see `drawerWidth`), because
+		 * the two kinds of string in the ledger — URLs and command text — are the
+		 * two with no natural wrapping point.
+		 *
+		 * `details` (ui-layout's own resizable right column) was the other
+		 * candidate and was not taken: it is a `single` slot scoped *session*, so
+		 * occupying it would both displace the harness's own tool-detail panel and
+		 * leave the drawer unopenable on the new-session screen — the exact fault
+		 * this redesign exists to fix.
 		 * @param ctx - client root context, carrying `sessions`.
 		 * @returns the component.
 		 */
-		function buildEgressPanel(ctx) {
+		function buildSovereigntyDrawer(ctx) {
 			const { useEffect, useRef, useState, useSyncExternalStore } = require("react");
 			const { jsx, jsxs } = require("react/jsx-runtime");
-			const { StateDot, Button } = require("@deepseek-ai/dsh-client-ui-primitives");
+			const { Button, StateDot } = require("@deepseek-ai/dsh-client-ui-primitives");
 
 			const SECONDARY = { color: "var(--dsw-alias-label-secondary)" };
+			const TERTIARY = { color: "var(--dsw-alias-label-tertiary)" };
+			/** Section headings. Small, spaced, uppercase — the vernacular of a plant panel, not of a web page. */
+			const SECTION_LABEL = {
+				...TERTIARY,
+				fontSize: "10px",
+				fontWeight: 600,
+				letterSpacing: "0.14em",
+				textTransform: "uppercase",
+			};
 
 			/** Current session id from the sessions list store, or null. */
 			function useCurrentSessionId() {
@@ -1168,52 +1469,162 @@ window.__ModuleLoader__.load({
 			}
 
 			/** The session face for the current session, or null. */
-			function useCurrentSession() {
-				const list = ctx.sessions?.list ?? null;
-				const current = useSyncExternalStore(
-					(onChange) => (list ? list.subscribe(onChange) : () => {}),
-					() => (list ? list.getSnapshot().current ?? null : null),
-				);
-				return current ? ctx.sessions?.binding?.(current)?.session ?? null : null;
+			function useCurrentSession(sessionId) {
+				return sessionId ? ctx.sessions?.binding?.(sessionId)?.session ?? null : null;
 			}
 
 			/**
-			 * One audit line: the timestamp the log recorded, the tool that
-			 * attempted the call, and the target it was refused. Two rows so a
-			 * long target wraps under the clock rather than squeezing it, and
-			 * `title` carries the ISO stamp and the whole sentence for a reader
-			 * who wants the unambiguous form.
+			 * The host's trace read — residency, the live provider, and what the
+			 * last turn routed to. Polled only while the drawer is open: llama-swap
+			 * is being asked over HTTP every two seconds, and doing that behind a
+			 * closed panel is work nobody is looking at. Two seconds is chosen
+			 * against the thing being watched — a model swap on this card takes
+			 * about three — rather than to feel live.
+			 */
+			function useTrace(open) {
+				const [trace, setTrace] = useState(null);
+				useEffect(() => {
+					if (!open || hostConnection === null) return undefined;
+					let live = true;
+					async function read() {
+						try {
+							const result = await hostConnection.rpc.call(TRACE_CHANNEL, TRACE_ENDPOINT, {});
+							if (live) setTrace(result?.ok === true ? result.value : null);
+						} catch {
+							// A section that says nothing is better than a drawer that throws.
+							if (live) setTrace(null);
+						}
+					}
+					read();
+					const timer = setInterval(read, 2000);
+					return () => {
+						live = false;
+						clearInterval(timer);
+					};
+				}, [open]);
+				return trace;
+			}
+
+			/**
+			 * One ledger line: the timestamp the log recorded, what happened in
+			 * words, and the target underneath.
 			 *
 			 * A field the record does not carry is named as missing rather than
-			 * filled in — an audit surface that invents a value is worse than
-			 * one that admits a gap.
-			 * @param entry - one folded `egress/denied` entry from the view.
+			 * filled in — an audit surface that invents a value is worse than one
+			 * that admits a gap. `title` carries the ISO stamp and the whole
+			 * sentence for a reader who wants the unambiguous form.
+			 * @param entry - one folded entry from the `bf-egress` view.
 			 * @returns the row, keyed by the event's log sequence number.
 			 */
-function auditLine(entry) {
+			function ledgerLine(entry) {
 				const line = describeEntry(entry);
+				const denied = entry.kind === "denied";
 				return jsxs(
 					"div",
 					{
 						role: "listitem",
 						title: `${denialStamp(entry.time)} — ${line.headline}. ${line.detail}`,
-						style: { display: "flex", flexDirection: "column", gap: "2px" },
+						style: {
+							display: "flex",
+							flexDirection: "column",
+							gap: "1px",
+							padding: "8px 0",
+							borderBottom: "1px solid var(--dsw-alias-border-l1)",
+						},
 						children: [
 							jsxs("div", {
-								style: { display: "flex", alignItems: "baseline", gap: "8px" },
+								style: { display: "flex", alignItems: "baseline", gap: "10px" },
 								children: [
 									jsx("span", {
-										style: { ...SECONDARY, fontVariantNumeric: "tabular-nums", flex: "0 0 auto" },
+										style: { ...TERTIARY, fontVariantNumeric: "tabular-nums", flex: "0 0 auto", fontSize: "11.5px" },
 										children: denialClock(entry.time),
 									}),
-									jsx("span", { style: { flex: "1 1 auto", minWidth: 0 }, children: line.headline }),
+									jsx("span", {
+										style: { flex: "1 1 auto", minWidth: 0, fontSize: "12.5px", fontWeight: denied ? 500 : 400 },
+										children: line.headline,
+									}),
 								],
 							}),
-							jsx("div", { style: { ...SECONDARY, wordBreak: "break-all" }, children: line.detail }),
+							jsx("div", {
+								// `overflowWrap: anywhere`, not `wordBreak: break-all`. This line
+								// carries both a sentence and a target, and break-all breaks the
+								// sentence too — "Recorded here because the o / perator did it."
+								// Anywhere leaves prose alone and still breaks a URL that has no
+								// space in it, which is the only string that needs it.
+								style: { ...SECONDARY, fontSize: "11.5px", overflowWrap: "anywhere", lineHeight: 1.45 },
+								children: line.detail,
+							}),
 						],
 					},
 					`bf-egress-line:${entry.seq}`,
 				);
+			}
+
+			/**
+			 * A collapsed section. Context, on request.
+			 *
+			 * Hand-rolled rather than taken from the shipped `DisclosureRow`
+			 * primitive: that component's owner props are not documented anywhere
+			 * this package can read, and a guessed prop shape that renders wrong is
+			 * worse than a button and a region built from the same theme tokens
+			 * everything else here uses. Revisit if its contract is ever published.
+			 * @param props.label - the section name.
+			 * @param props.summary - the one fact worth seeing while collapsed.
+			 */
+			function Disclosure(props) {
+				const [open, setOpen] = useState(false);
+				return jsxs("div", {
+					style: { borderTop: "1px solid var(--dsw-alias-border-l1)" },
+					children: [
+						jsxs("button", {
+							type: "button",
+							onClick: () => setOpen((was) => !was),
+							"aria-expanded": open ? "true" : "false",
+							style: {
+								display: "flex",
+								alignItems: "center",
+								gap: "10px",
+								width: "100%",
+								padding: "13px 18px",
+								border: 0,
+								background: "transparent",
+								color: "var(--dsw-alias-label-primary)",
+								font: "inherit",
+								fontSize: "13px",
+								textAlign: "left",
+								cursor: "pointer",
+							},
+							children: [
+								jsx("span", {
+									"aria-hidden": "true",
+									style: {
+										...TERTIARY,
+										fontSize: "10px",
+										display: "inline-block",
+										transform: open ? "rotate(90deg)" : "none",
+										transition: "transform 120ms ease",
+									},
+									children: "\u25b8",
+								}),
+								jsx("span", { style: { flex: "1 1 auto" }, children: props.label }),
+								props.summary === null || props.summary === undefined
+									? null
+									: jsx("span", { style: { ...SECONDARY, fontSize: "12px" }, children: props.summary }),
+							],
+						}),
+						open
+							? jsx("div", {
+									style: { padding: "0 18px 14px", display: "flex", flexDirection: "column", gap: "5px" },
+									children: props.children,
+								})
+							: null,
+					],
+				});
+			}
+
+			/** One line of detail inside a disclosure. */
+			function detailLine(text, key) {
+				return jsx("div", { style: { ...SECONDARY, fontSize: "12px", lineHeight: 1.5 }, children: text }, key);
 			}
 
 			/**
@@ -1236,18 +1647,14 @@ function auditLine(entry) {
 			 * the gesture. The gesture only ever cost legibility.
 			 *
 			 * On a projector this has to read at a glance and change in front of the
-			 * room: deny the canary with the seal closed, throw the switch, fire it
-			 * again and watch it reach the internet. The switch is the demo's whole
-			 * argument that the zero beside it is counted rather than painted.
+			 * room: ask the workbench to open WhatsApp and watch it refused, throw the
+			 * switch, ask again and watch it reach. The switch is the demo's whole
+			 * argument that the number beside it is counted rather than painted.
 			 *
 			 * `role="switch"` with `aria-checked`, operable by Space and Enter, so it
 			 * is a real switch to a screen reader and not a div that happens to slide.
 			 * Track, thumb and text take `ui-theme` tokens only - no colour of ours
 			 * (UX-DR7).
-			 *
-			 * The sentence under it is not a warning label. It says what opening the
-			 * seal does, that the act is recorded, and that a restart undoes it, at the
-			 * one moment that information is relevant.
 			 * @param props.sessionId - the session the change is recorded against.
 			 */
 			function SealControl(props) {
@@ -1262,254 +1669,465 @@ function auditLine(entry) {
 					void seal.request(open, props.sessionId);
 				};
 
-				return jsxs("div", {
-					style: { display: "flex", flexDirection: "column", gap: "6px" },
-					children: [
-						jsxs("div", {
-							style: { display: "flex", alignItems: "center", gap: "8px" },
-							children: [
-								jsx("button", {
-									type: "button",
-									role: "switch",
-									"aria-checked": open ? "true" : "false",
-									"aria-label": "Network seal",
-									disabled,
-									onClick: toggle,
-									onKeyDown: (event) => {
-										// Space and Enter both throw a switch. Enter alone is what a
-										// button gives you for free, and a switch that ignores Space is
-										// the one keyboard complaint every audit makes.
-										if (event.key === " " || event.key === "Enter") {
-											event.preventDefault();
-											toggle();
-										}
-									},
-									title: open
-										? "Close the seal. Faraday goes back to denying every outbound call."
-										: "Open the seal. This workbench will be allowed to make real outbound calls, and each one is recorded.",
-									style: {
-										position: "relative",
-										flex: "0 0 auto",
-										width: "38px",
-										height: "22px",
-										padding: 0,
-										borderRadius: "11px",
-										border: "1px solid var(--dsw-alias-border-l2)",
-										// The open state is the loud one, so it takes the foreground
-										// colour as a fill. Closed is the quiet surface every other
-										// control in this panel sits on.
-										background: open ? "var(--dsw-alias-label-primary)" : "var(--dsw-alias-bg-layer-2)",
-										cursor: disabled ? "default" : "pointer",
-										opacity: disabled ? 0.5 : 1,
-										transition: "background 120ms ease",
-									},
-									children: jsx("span", {
-										"aria-hidden": "true",
-										style: {
-											position: "absolute",
-											top: "2px",
-											left: open ? "18px" : "2px",
-											width: "16px",
-											height: "16px",
-											borderRadius: "50%",
-											background: open ? "var(--dsw-alias-bg-layer-1)" : "var(--dsw-alias-label-secondary)",
-											transition: "left 120ms ease",
-										},
-									}),
-								}),
-								jsx("span", {
-									style: { fontWeight: 600 },
-									children: open ? "Seal OPEN" : "Seal closed",
-								}),
-							],
-						}),
-						jsx("span", {
-							style: { ...SECONDARY, fontSize: "0.9em" },
-							children: open
-								? "Every outbound call is now allowed to run, and each one is recorded above."
-								: "Opening it lets this workbench make real outbound calls. The change is recorded here, and restarting the workbench closes it again.",
-						}),
-					],
+				return jsx("button", {
+					type: "button",
+					role: "switch",
+					"aria-checked": open ? "true" : "false",
+					"aria-label": "Network seal",
+					disabled,
+					onClick: toggle,
+					onKeyDown: (event) => {
+						// Space and Enter both throw a switch. Enter alone is what a
+						// button gives you for free, and a switch that ignores Space is
+						// the one keyboard complaint every audit makes.
+						if (event.key === " " || event.key === "Enter") {
+							event.preventDefault();
+							toggle();
+						}
+					},
+					title: open
+						? "Close the seal. Faraday goes back to denying every outbound call."
+						: "Open the seal. This workbench will be allowed to make real outbound calls, and each one is recorded.",
+					style: {
+						position: "relative",
+						flex: "0 0 auto",
+						width: "38px",
+						height: "22px",
+						padding: 0,
+						borderRadius: "11px",
+						border: "1px solid var(--dsw-alias-border-l2)",
+						// The open state is the loud one, so it takes the foreground
+						// colour as a fill. Closed is the quiet surface every other
+						// control in this drawer sits on.
+						background: open ? "var(--dsw-alias-label-primary)" : "var(--dsw-alias-bg-layer-2)",
+						cursor: disabled ? "default" : "pointer",
+						opacity: disabled ? 0.5 : 1,
+						transition: "background 120ms ease",
+					},
+					children: jsx("span", {
+						"aria-hidden": "true",
+						style: {
+							position: "absolute",
+							top: "2px",
+							left: open ? "18px" : "2px",
+							width: "16px",
+							height: "16px",
+							borderRadius: "50%",
+							background: open ? "var(--dsw-alias-bg-layer-1)" : "var(--dsw-alias-label-secondary)",
+							transition: "left 120ms ease",
+						},
+					}),
 				});
 			}
 
 			/**
-			 * The panel: a small fixed card bottom-right of the overlay layer.
-			 * Surface colours, border and shadow are `ui-theme` tokens; the
-			 * state dot and buttons are primitives. Renders only while the chip
-			 * has opened it.
+			 * The drag handle down the drawer's left edge.
 			 *
-			 * Story 2.4 makes this the audit surface: below the counted state it
-			 * lists every recorded denial — timestamp, tool, refused target —
-			 * oldest first, which is the order the log wrote them. The list is
-			 * the `bf-egress` view's `entries`, folded from the same
-			 * `egress/denied` events the count is folded from, so a fresh denial
-			 * appears here through the standing `useSyncExternalStore`
-			 * subscription with no restart and no reopening — and the list
-			 * scrolls to keep that newest line in view once there are more of
-			 * them than the capped box shows.
+			 * Pointer capture on the handle itself, so a fast drag that outruns the
+			 * cursor keeps receiving events instead of stopping where the pointer
+			 * left the element — the failure that made the old press-and-hold seal
+			 * control indistinguishable from a broken button.
+			 *
+			 * `role="separator"` with `aria-orientation` and the arrow keys, because
+			 * a resize that only exists as a drag does not exist for anyone using a
+			 * keyboard. The width is written down when the gesture ends, not on
+			 * every move: one `localStorage` write per drag rather than one per frame.
 			 */
-			function EgressPanel() {
-				const open = useSyncExternalStore(egressPanelOpen.subscribe, egressPanelOpen.get);
+			function ResizeHandle() {
+				const width = useSyncExternalStore(drawerWidth.subscribe, drawerWidth.get);
+				const onPointerDown = (event) => {
+					event.preventDefault();
+					const node = event.currentTarget;
+					const pointerId = event.pointerId;
+					try {
+						node.setPointerCapture?.(pointerId);
+					} catch {
+						// Older engines, and jsdom. The window listeners below still work.
+					}
+					const move = (moveEvent) => drawerWidth.set(window.innerWidth - moveEvent.clientX);
+					const up = () => {
+						try {
+							node.releasePointerCapture?.(pointerId);
+						} catch {
+							// Already released, or never captured.
+						}
+						window.removeEventListener("pointermove", move);
+						window.removeEventListener("pointerup", up);
+						drawerWidth.commit();
+					};
+					window.addEventListener("pointermove", move);
+					window.addEventListener("pointerup", up);
+				};
+				return jsx("div", {
+					role: "separator",
+					"aria-orientation": "vertical",
+					"aria-label": "Resize the Sovereignty drawer",
+					"aria-valuenow": width,
+					"aria-valuemin": DRAWER_MIN_WIDTH,
+					"aria-valuemax": DRAWER_MAX_WIDTH,
+					tabIndex: 0,
+					onPointerDown,
+					onKeyDown: (event) => {
+						// Wider is leftwards, which is why ArrowLeft adds.
+						if (event.key === "ArrowLeft") {
+							event.preventDefault();
+							drawerWidth.set(width + 16);
+							drawerWidth.commit();
+						} else if (event.key === "ArrowRight") {
+							event.preventDefault();
+							drawerWidth.set(width - 16);
+							drawerWidth.commit();
+						}
+					},
+					style: {
+						position: "absolute",
+						left: "-3px",
+						top: 0,
+						bottom: 0,
+						width: "7px",
+						cursor: "col-resize",
+						touchAction: "none",
+						zIndex: 1,
+					},
+				});
+			}
+
+			/**
+			 * Write the ledger out as a file.
+			 *
+			 * The on-screen list convinces the person standing at the machine. This
+			 * is for the one who wants to take it away — an MRPL reviewer, or a
+			 * judge who asks for the evidence rather than the demo. Plain text, one
+			 * line per event, with the header naming what produced it, so it can be
+			 * read with anything and quoted in a report.
+			 *
+			 * The harness's own "Session log" download beside it is the whole log
+			 * and stays where it is; this is the egress record alone, which is the
+			 * part somebody is actually auditing.
+			 */
+			function exportLedger(entries, sessionId, providerName) {
+				const stamped = new Date();
+				const lines = [
+					"Faraday — egress record",
+					`Session: ${sessionId ?? "none"}`,
+					`Exported: ${stamped.toISOString()}`,
+					`Model plane: ${providerName ?? "unknown"}`,
+					`Events: ${entries.length}`,
+					"",
+					"Every line below is one event this session's log recorded. Denials are",
+					"refusals Faraday made before the call ran; anything else is stated as",
+					"what it was. Nothing here is derived from a counter.",
+					"",
+				];
+				for (const entry of entries) {
+					const line = describeEntry(entry);
+					lines.push(`${denialStamp(entry.time)}  [${entry.kind ?? "unknown"}]  ${line.headline}`);
+					lines.push(`    ${line.detail}`);
+				}
+				const name = `faraday-egress-${stamped.toISOString().slice(0, 19).replace(/[:T]/g, "")}.txt`;
+				try {
+					const blob = new Blob([lines.join("\n")], { type: "text/plain;charset=utf-8" });
+					const url = URL.createObjectURL(blob);
+					const anchor = document.createElement("a");
+					anchor.href = url;
+					anchor.download = name;
+					document.body.appendChild(anchor);
+					anchor.click();
+					anchor.remove();
+					// Revoked on the next tick rather than immediately: some engines
+					// have not finished reading the blob when click() returns.
+					setTimeout(() => URL.revokeObjectURL(url), 1000);
+				} catch (error) {
+					console.warn(
+						`@blind-flange/dsh-client-ui-base: the egress record could not be exported — ${error instanceof Error ? error.message : String(error)}`,
+					);
+				}
+			}
+
+			/**
+			 * The drawer. Renders only while the seal row has opened it.
+			 *
+			 * `ui-theme` exposes colour, shadow and font tokens but no radius or
+			 * spacing scale — every shipped primitive hard-codes those in px — so
+			 * the surface's colours and borders are `--dsw-*` tokens and the
+			 * spacing matches the sidebar it mirrors.
+			 */
+			function SovereigntyDrawer() {
+				const open = useSyncExternalStore(drawerOpen.subscribe, drawerOpen.get);
+				const width = useSyncExternalStore(drawerWidth.subscribe, drawerWidth.get);
 				const sealState = useSyncExternalStore(seal.subscribe, seal.get);
 				const sessionId = useCurrentSessionId();
-				const session = useCurrentSession();
+				const session = useCurrentSession(sessionId);
 				const snapshot = useSyncExternalStore(
 					(onChange) => (session ? session.subscribe(onChange) : () => {}),
 					() => readEgressSnapshot(session),
 				);
+				const trace = useTrace(open);
 
 				const ready = snapshot !== null;
 				const count = ready ? snapshot.count : null;
-				const breached = ready && count > 0;
 				const entries = ready && Array.isArray(snapshot.entries) ? snapshot.entries : [];
-				// Calls that actually reached the internet this session. Counted
-				// separately from denials and stated separately below, because
-				// re-closing the seal does not un-send them: once something has got
-				// out, the session carries that fact whatever the seal does next.
-				const escaped = ready && typeof snapshot.escaped === "number" ? snapshot.escaped : 0;
+				// Calls this workbench let run. Counted and stated separately from
+				// denials, because re-closing the seal does not un-send them: once
+				// something has gone out, the session carries that fact whatever the
+				// seal does next. `escaped` is folded in for sessions recorded before
+				// 30 August 2026, when the canary wrote that event.
+				const letThrough = ready
+					? (typeof snapshot.permitted === "number" ? snapshot.permitted : 0) +
+						(typeof snapshot.escaped === "number" ? snapshot.escaped : 0)
+					: 0;
 
-				// Keep the newest denial in view. The list reads oldest-first —
-				// the order the log wrote them, which is what this story asks for —
-				// so a fresh line lands at the bottom, and past the third it lands
-				// below the fold of the capped box. An evaluator pressing the canary
-				// while watching this panel would stop seeing the line their own
-				// press produced, so every new entry scrolls the box to the end.
-				// Declared above the `open` early return: hook order has to be the
-				// same on the render that draws the panel and the one that hides it.
+				// Keep the newest line in view. The ledger reads oldest-first — the
+				// order the log wrote it — so a fresh line lands at the bottom, and
+				// past the fold it lands where the person who just caused it cannot
+				// see it. Declared above the `open` early return: hook order has to be
+				// the same on the render that draws the drawer and the one that hides it.
 				const listRef = useRef(null);
 				useEffect(() => {
 					const node = listRef.current;
 					if (node) node.scrollTop = node.scrollHeight;
 				}, [entries.length]);
 
+				// The application gives up the width rather than being covered by it.
+				useEffect(() => {
+					applyInset(open ? width : 0);
+					return () => applyInset(0);
+				}, [open, width]);
+
 				if (!open) return null;
 
-				// Two facts, stated separately because they are independent: whether
-				// enforcement is on, and what it has stopped. Folding them into one
-				// sentence hid the count for as long as the seal's state was still
-				// being read, and a count that disappears is worse than one that waits.
-				const sealLine = !sealState.known
-					? "Checking whether the seal is closed."
-					: sealState.sealed
-						? "Sealed. Outbound calls are denied before they run."
-						: "The seal is OPEN. Outbound calls are not being denied by Faraday.";
-				const body = !ready
-					? jsx("span", { style: SECONDARY, children: "Waiting for a session." })
-					: jsxs("div", {
-							style: { display: "flex", flexDirection: "column", gap: "4px" },
-							children: [
-								jsx("span", { style: SECONDARY, children: sealLine }),
-								escaped > 0
-									? jsx("span", {
-											style: SECONDARY,
-											children: `${escaped} call${escaped === 1 ? "" : "s"} reached the internet in this session. Closing the seal does not undo that.`,
-										})
-									: null,
-								jsx("span", {
-									style: SECONDARY,
-									children: breached
-										? `${count} outbound attempt${count === 1 ? "" : "s"} denied and written to the session log.`
-										: "No outbound attempt has been made. This zero is counted from the denial log, not printed.",
-								}),
-							],
-						});
+				const sealOpen = sealState.known && !sealState.sealed;
+				const sealHeadline = !sealState.known ? "Checking the seal" : sealOpen ? "Seal OPEN" : "Sealed";
+				const sealSentence = !sealState.known
+					? "Asking the workbench whether it is denying outbound calls."
+					: sealOpen
+						? "Outbound calls are not being denied by Faraday. Every call that runs is recorded below, and restarting the workbench closes the seal again."
+						: "Outbound calls are denied before they run. Opening the seal is recorded here, and a restart closes it again.";
 
-				// `ui-theme` exposes colour, shadow and font tokens but no radius
-				// or spacing scale — every shipped primitive hard-codes those in
-				// px (Pill, HoverCard and Toast all use `border-radius: 12px`).
-				// So the surface's colours, border and shadow are `--dsw-*`
-				// tokens, and the radius/padding/gap match the shipped `Pill`'s
-				// own values rather than inventing a look. Same pattern as the
-				// inline `gap` on the provider and routing chips above.
-				return jsx("section", {
-					"aria-label": "Egress monitor",
+				const residency = Array.isArray(trace?.residency) ? trace.residency : [];
+				const shown = (row) => row.name || row.model;
+				const residentReady = residency.filter((row) => row.state === "ready");
+				const residencySummary =
+					trace === null || trace.runtimeReachable === false
+						? "not answering"
+						: residentReady.length > 0
+							? residentReady.map(shown).join(", ")
+							: "nothing loaded";
+
+				return jsxs("aside", {
+					"aria-label": "Sovereignty",
 					style: {
-						position: "absolute",
-						right: "16px",
-						// Anchored below the session header, not above the composer.
-						// Story 2.2 sat this card bottom-right, which was fine while it
-						// was three lines tall; Story 2.4's audit list makes it tall
-						// enough to cover the canary button in the composer row — the
-						// one control an evaluator presses *while* watching this panel.
-						// The header is fixed chrome (measured 76px at default density,
-						// 28 Aug 2026) where the chip that opens this panel also lives,
-						// so opening beneath that chip both clears the composer and
-						// reads as the chip's own surface. The list's `maxHeight` below
-						// keeps the card from growing back down into the composer.
-						top: "88px",
-						width: "320px",
-						padding: "12px 14px",
+						// Fixed to the viewport, so it sits in the strip `applyInset`
+						// reclaims rather than inside the frame it just narrowed.
+						position: "fixed",
+						top: 0,
+						right: 0,
+						bottom: 0,
+						width: `${width}px`,
 						display: "flex",
 						flexDirection: "column",
-						gap: "8px",
-						borderRadius: "12px",
 						background: "var(--dsw-alias-bg-layer-1)",
-						border: "1px solid var(--dsw-alias-border-l2)",
-						boxShadow: "var(--dsw-shadow-lv2)",
+						borderLeft: "1px solid var(--dsw-alias-border-l2)",
 						color: "var(--dsw-alias-label-primary)",
+						fontSize: "13px",
+						zIndex: 30,
 					},
 					children: [
+						jsx(ResizeHandle, {}),
+						// Header
 						jsxs("div", {
-							style: { display: "flex", alignItems: "center", gap: "8px" },
+							style: {
+								display: "flex",
+								alignItems: "center",
+								gap: "8px",
+								padding: "16px 18px 14px",
+								borderBottom: "1px solid var(--dsw-alias-border-l1)",
+							},
 							children: [
-								// Three readings, not two. "Sealed and nothing refused" is
-								// the resting state; "sealed and something was refused" is
-								// the seal doing its job; "open" is neither, and it must not
-								// borrow the colour of either.
-								jsx(StateDot, {
-									state: sealState.known && !sealState.sealed ? "warning" : breached ? "error" : "done",
-									size: 10,
-								}),
-								jsx("strong", { style: { flex: "1 1 auto" }, children: "Egress monitor" }),
-								jsx("span", {
-									style: { ...SECONDARY, fontVariantNumeric: "tabular-nums" },
-									children: ready ? String(count) : "—",
+								jsx("strong", { style: { flex: "1 1 auto", fontSize: "14px" }, children: "Sovereignty" }),
+								jsx(Button, {
+									variant: "ghost",
+									size: "sm",
+									onClick: () => drawerOpen.set(false),
+									"aria-label": "Close the Sovereignty drawer",
+									children: "Close",
 								}),
 							],
 						}),
-						body,
-						jsx("div", {
-							"aria-hidden": "true",
-							style: { height: "1px", background: "var(--dsw-alias-border-l2)" },
+						// Scrolling body
+						jsxs("div", {
+							style: { flex: "1 1 auto", overflowY: "auto", display: "flex", flexDirection: "column" },
+							children: [
+								// The seal: the argument, and the one control.
+								jsxs("div", {
+									style: { padding: "16px 18px", display: "flex", alignItems: "flex-start", gap: "12px" },
+									children: [
+										jsxs("div", {
+											style: { flex: "1 1 auto", minWidth: 0, display: "flex", flexDirection: "column", gap: "5px" },
+											children: [
+												jsxs("div", {
+													style: { display: "flex", alignItems: "center", gap: "9px", fontSize: "15px", fontWeight: 600 },
+													children: [
+														jsx(StateDot, { state: sealOpen ? "warning" : "done", size: 9 }),
+														jsx("span", {
+															style: sealOpen ? { color: "var(--dsw-alias-state-warn-label)" } : undefined,
+															children: sealHeadline,
+														}),
+													],
+												}),
+												jsx("span", { style: { ...SECONDARY, fontSize: "12px", lineHeight: 1.45 }, children: sealSentence }),
+											],
+										}),
+										jsx(SealControl, { sessionId }),
+									],
+								}),
+								// The ledger: the evidence.
+								jsxs("div", {
+									style: { padding: "16px 18px", borderTop: "1px solid var(--dsw-alias-border-l1)" },
+									children: [
+										jsx("div", { style: { ...SECTION_LABEL, marginBottom: "12px" }, children: "Egress monitor" }),
+										!ready
+											? jsx("span", { style: SECONDARY, children: "Waiting for a session." })
+											: jsxs("div", {
+													style: { display: "flex", flexDirection: "column" },
+													children: [
+														jsxs("div", {
+															style: { display: "flex", gap: "26px", marginBottom: "14px" },
+															children: [
+																jsxs("div", {
+																	children: [
+																		jsx("div", {
+																			style: {
+																				fontSize: "28px",
+																				fontWeight: 600,
+																				letterSpacing: "-0.03em",
+																				lineHeight: 1,
+																				fontVariantNumeric: "tabular-nums",
+																			},
+																			children: String(count),
+																		}),
+																		jsx("div", { style: { ...SECONDARY, fontSize: "11.5px", marginTop: "3px" }, children: "denied this session" }),
+																	],
+																}),
+																jsxs("div", {
+																	children: [
+																		jsx("div", {
+																			style: {
+																				fontSize: "28px",
+																				fontWeight: 600,
+																				letterSpacing: "-0.03em",
+																				lineHeight: 1,
+																				fontVariantNumeric: "tabular-nums",
+																				color:
+																					letThrough > 0
+																						? "var(--dsw-alias-state-warn-label)"
+																						: "var(--dsw-alias-label-tertiary)",
+																			},
+																			children: String(letThrough),
+																		}),
+																		jsx("div", { style: { ...SECONDARY, fontSize: "11.5px", marginTop: "3px" }, children: "let through" }),
+																	],
+																}),
+															],
+														}),
+														entries.length > 0
+															? jsx("div", {
+																	role: "list",
+																	"aria-label": "Egress record — oldest first",
+																	ref: listRef,
+																	style: {
+																		display: "flex",
+																		flexDirection: "column",
+																		maxHeight: "40vh",
+																		overflowY: "auto",
+																		borderTop: "1px solid var(--dsw-alias-border-l1)",
+																	},
+																	children: entries.map((entry) => ledgerLine(entry)),
+																})
+															: null,
+														jsx("div", {
+															style: { ...TERTIARY, fontSize: "11.5px", lineHeight: 1.45, marginTop: "11px" },
+															children:
+																"Both figures are counts of events this session's log recorded, not printed labels.",
+														}),
+													],
+												}),
+									],
+								}),
+								// Context, collapsed.
+								jsx(Disclosure, {
+									label: "Residency",
+									summary: residencySummary,
+									children:
+										residency.length === 0
+											? [
+													detailLine(
+														trace === null || trace.runtimeReachable === false
+															? "llama-swap is not answering, so nothing can be loaded. Start it, or switch the model plane to `replay` in the profile patch."
+															: "Nothing is resident in GPU memory. A model loads on the next question.",
+														"r0",
+													),
+												]
+											: residency.map((row, index) =>
+													detailLine(
+														`${shown(row)} (${row.model}) — ${row.state}${
+															typeof row.ttl === "number" && row.ttl > 0 ? `, unloads after ${row.ttl}s idle` : ""
+														}`,
+														`r${index}`,
+													),
+												),
+								}),
+								jsx(Disclosure, {
+									label: "Model plane",
+									summary: trace?.providerName ?? "unknown",
+									children: [
+										detailLine(
+											trace?.taskType === null || trace?.taskType === undefined
+												? "Nothing routed yet."
+												: `Routed as ${trace.taskType} \u2192 ${trace.selected ?? "no member"}${trace.runtimeId ? ` (${trace.runtimeId})` : ""}`,
+											"m0",
+										),
+										trace?.dispatchReason && trace.dispatchReason !== "routed"
+											? // A fallback to the default model looks exactly like a routing
+												// decision unless the reason is said out loud.
+												detailLine(`Not dispatched: ${trace.dispatchReason}`, "m1")
+											: null,
+										trace?.ingestion
+											? detailLine(
+													trace.ingestion.source === "live"
+														? `Read ${trace.ingestion.findings ?? "?"} OCR lines from ${trace.ingestion.report ?? "the document"} on this machine`
+														: `Read ${trace.ingestion.findings ?? "?"} OCR lines from the committed capture, not a live OCR pass`,
+													"m2",
+												)
+											: null,
+										...(Array.isArray(trace?.tools) ? trace.tools : []).map((tool, index) =>
+											detailLine(`${index + 1}. ${tool.name}${tool.outcome ? ` — ${tool.outcome}` : ""}`, `t${index}`),
+										),
+									],
+								}),
+							],
 						}),
-						jsx(SealControl, { sessionId }),
-						entries.length > 0
-							? jsx("div", {
-									"aria-hidden": "true",
-									style: { height: "1px", background: "var(--dsw-alias-border-l2)" },
-								})
-							: null,
-						entries.length > 0 ? jsx("div", { style: SECONDARY, children: "Audit log — oldest first" }) : null,
-						entries.length > 0
-							? jsx("div", {
-									role: "list",
-									"aria-label": "Audit log — denied outbound attempts",
-									ref: listRef,
-									style: {
-										display: "flex",
-										flexDirection: "column",
-										gap: "8px",
-										maxHeight: "168px",
-										overflowY: "auto",
-									},
-									children: entries.map((entry) => auditLine(entry)),
-								})
-							: null,
+						// Footer
 						jsx("div", {
-							style: { display: "flex", justifyContent: "flex-end" },
+							style: {
+								display: "flex",
+								gap: "8px",
+								padding: "12px 18px",
+								borderTop: "1px solid var(--dsw-alias-border-l1)",
+							},
 							children: jsx(Button, {
 								variant: "ghost",
 								size: "sm",
-								onClick: () => egressPanelOpen.set(false),
-								children: "Dismiss",
+								disabled: entries.length === 0,
+								onClick: () => exportLedger(entries, sessionId, trace?.providerName),
+								children: "Export egress record",
 							}),
 						}),
 					],
 				});
 			}
 
-			return EgressPanel;
+			return SovereigntyDrawer;
 		}
 
 		/**
@@ -1608,24 +2226,6 @@ function auditLine(entry) {
 		}
 
 		/* ---------------------------------------------------------------------
-		 * Canary (Story 2.3)
-		 *
-		 * CONTEXT.md: the button that fires a deliberate outbound network call so
-		 * the user can watch egress denial block it, the monitor turn red, and the
-		 * audit log record it. Silence proves nothing; the canary is what turns an
-		 * absence into evidence.
-		 *
-		 * It takes `conversation.input.right` (list, session) — the composer tool
-		 * row, before the send button — and posts to the host's loopback
-		 * `/bf-canary` channel. The host dispatches the real canary tool through
-		 * `ctx.tools.execute`, the egress denial waterfall refuses it and appends
-		 * the `egress/denied` event, and the monitor above re-reads that event
-		 * through the same `bf-egress` view it always reads. Nothing here touches
-		 * the count: this button has no path to the number it makes move, which is
-		 * what keeps the panel driven by a real event (NFR8).
-		 * ------------------------------------------------------------------- */
-
-		/* ---------------------------------------------------------------------
 		 * Upload (30 August 2026)
 		 *
 		 * Story 8.2 established that the harness already ships an `@` mention
@@ -1635,8 +2235,8 @@ function auditLine(entry) {
 		 * seconds this product has to earn — so this adds the arrival beside the
 		 * mention rather than replacing it.
 		 *
-		 * Same seat and same shape as the canary below it: `conversation.input.right`
-		 * (list, session), a `Pill`, and one loopback RPC channel. Nothing here sets
+		 * `conversation.input.right` (list, session), a `Pill`, and one loopback
+		 * RPC channel. Nothing here sets
 		 * a colour; `Pill` and `StateDot` carry the whole look through the theme's
 		 * own tokens, which is what keeps it looking like it shipped with the
 		 * harness in both light and dark.
@@ -1650,7 +2250,11 @@ function auditLine(entry) {
 		 * Residency (30 August 2026)
 		 *
 		 * CONTEXT.md "Residency": which fleet members are resident in VRAM at a
-		 * given moment, and how long they stay before eviction.
+		 * given moment, and how long they stay before eviction. It was a chip in
+		 * the session header until 30 August 2026 and is now a collapsed section
+		 * in the Sovereignty drawer: it describes the machine, which is what that
+		 * drawer is for, and the header it used to sit in carried four pills of
+		 * equal weight with nothing to say which one was the claim.
 		 *
 		 * The spec asked for an execution-trace surface. Most of what one would show
 		 * already has a home — the routing chip carries every classifier score and
@@ -1675,151 +2279,6 @@ function auditLine(entry) {
 		const TRACE_CHANNEL = "/bf-trace";
 		const TRACE_ENDPOINT = "read";
 
-		/**
-		 * Build the residency chip for `conversation.session.header.utilities`.
-		 * @param connection - the host transport (`ctx.connection`), carrying `rpc.call`.
-		 */
-		function buildResidencyChip(connection) {
-			// Deliberately only the hooks the rest of this file already uses. An
-			// earlier version reached for `useCallback`, which the browser has and
-			// this package's own test seam does not model — so the chip threw in test
-			// and rendered fine in the app, which is the worst way round.
-			const { useEffect, useState } = require("react");
-			const { jsx, jsxs } = require("react/jsx-runtime");
-			const { Menu, Pill, StateDot } = require("@deepseek-ai/dsh-client-ui-primitives");
-
-			function ResidencyChip() {
-				const [trace, setTrace] = useState(null);
-				const [open, setOpen] = useState(false);
-
-				useEffect(() => {
-					let live = true;
-					async function read() {
-						try {
-							const result = await connection.rpc.call(TRACE_CHANNEL, TRACE_ENDPOINT, {});
-							// Guard against a resolve arriving after unmount, which would
-							// otherwise be a setState on a dead component every time a
-							// session is closed mid-poll.
-							if (live) setTrace(result?.ok === true ? result.value : null);
-						} catch {
-							// A chip that throws is worse than one that says nothing.
-							if (live) setTrace(null);
-						}
-					}
-					read();
-					// Polled rather than pushed. llama-swap has an SSE event stream its own
-					// UI consumes, and using it would mean a second transport for one chip;
-					// a swap takes about three seconds, so two-second polling shows it
-					// happening without pretending to be live.
-					const timer = setInterval(read, 2000);
-					return () => {
-						live = false;
-						clearInterval(timer);
-					};
-				}, []);
-
-				const residency = Array.isArray(trace?.residency) ? trace.residency : [];
-				// llama-swap answers with both a runtime id (`bf-coder`) and the display
-				// name the config gives it (`Coder`). The id is an internal key: it is what
-				// `registry/models.yaml`'s `runtime_id` has to match and what dispatch sends,
-				// and it means nothing to anyone reading the header. Prefer the name and keep
-				// the id for the expanded rows, where a reader chasing the config wants it.
-				const shown = (entry) => entry.name || entry.model;
-				const ready = residency.filter((entry) => entry.state === "ready");
-				const loading = residency.filter((entry) => entry.state === "starting" || entry.state === "stopping");
-
-				// Four states, and each says something different about the machine.
-				let tone = "neutral";
-				let label = "VRAM idle";
-				let title = "No model is resident in the GPU. One will load on the next question.";
-				if (trace === null || trace.runtimeReachable === false) {
-					tone = "danger";
-					label = "VRAM —";
-					title =
-						"llama-swap is not answering, so nothing can be loaded. Start it, or switch the model plane to `replay` " +
-						"in the profile patch.";
-				} else if (loading.length > 0) {
-					tone = "info";
-					label = `Loading ${shown(loading[0])}`;
-					title = `Swapping models: ${loading.map((entry) => `${shown(entry)} is ${entry.state}`).join(", ")}. On this card only one fits at a time.`;
-				} else if (ready.length > 0) {
-					tone = "success";
-					label = `VRAM ${ready.map(shown).join(", ")}`;
-					title = `Resident in GPU memory: ${ready.map(shown).join(", ")}. Read from llama-swap, not tracked by Faraday.`;
-				}
-
-				const items = [];
-				items.push({ kind: "label", text: "Resident in GPU memory" });
-				if (residency.length === 0) {
-					items.push({ kind: "text", text: trace?.runtimeReachable === false ? "llama-swap is not answering." : "Nothing loaded." });
-				} else {
-					for (const entry of residency) {
-						items.push({
-							kind: "text",
-							text: `${shown(entry)} (${entry.model}) — ${entry.state}${typeof entry.ttl === "number" && entry.ttl > 0 ? `, unloads after ${entry.ttl}s idle` : ""}`,
-						});
-					}
-				}
-				items.push({ kind: "label", text: "This turn" });
-				items.push({ kind: "text", text: `Model plane: ${trace?.providerName ?? "unknown"}` });
-				items.push({
-					kind: "text",
-					text:
-						trace?.taskType === null || trace?.taskType === undefined
-							? "Nothing routed yet."
-							: `Routed as ${trace.taskType} → ${trace.selected ?? "no member"}${trace.runtimeId ? ` (${trace.runtimeId})` : ""}`,
-				});
-				if (trace?.dispatchReason && trace.dispatchReason !== "routed") {
-					// A fallback to the default model looks exactly like a routing
-					// decision unless the reason is said out loud.
-					items.push({ kind: "text", text: `Not dispatched: ${trace.dispatchReason}` });
-				}
-				if (trace?.ingestion) {
-					items.push({
-						kind: "text",
-						text:
-							trace.ingestion.source === "live"
-								? `Read ${trace.ingestion.findings ?? "?"} OCR lines from ${trace.ingestion.report ?? "the document"} on this machine`
-								: `Read ${trace.ingestion.findings ?? "?"} OCR lines from the committed capture, not a live OCR pass`,
-					});
-				}
-				for (const [index, tool] of (Array.isArray(trace?.tools) ? trace.tools : []).entries()) {
-					items.push({ kind: "text", text: `${index + 1}. ${tool.name}${tool.outcome ? ` — ${tool.outcome}` : ""}` });
-				}
-
-				const anchor = jsxs(Pill, {
-					as: "button",
-					type: "button",
-					onClick: () => setOpen((was) => !was),
-					title,
-					"aria-label": title,
-					children: [jsx(StateDot, { tone }), label],
-				});
-
-				return jsx(Menu, {
-					open,
-					onOpenChange: setOpen,
-					side: "bottom",
-					// Right-aligned and portalled, like the routing chip. This chip is the
-					// last seat in the session header, so a menu aligned to its left edge
-					// opens rightwards into nothing: measured 30 August 2026 at 255px wide
-					// from x=1170 in a 1283px window, which put 141px of it past the edge of
-					// the screen with no way to scroll to it. `end` hangs it from the chip's
-					// right edge instead, so it grows back across the header where there is
-					// room. The portal keeps it out of the header's own overflow.
-					align: "end",
-					portal: true,
-					anchor,
-					items: items.map((item, index) =>
-						item.kind === "label"
-							? { id: `l${index}`, type: "label", label: item.text }
-							: { id: `t${index}`, type: "item", label: item.text, disabled: true },
-					),
-				});
-			}
-
-			return ResidencyChip;
-		}
 
 		const UPLOAD_CHANNEL = "/bf-upload";
 		const UPLOAD_ENDPOINT = "attach";
@@ -1946,122 +2405,135 @@ function auditLine(entry) {
 			return UploadButton;
 		}
 
-		const CANARY_CHANNEL = "/bf-canary";
-		const CANARY_ENDPOINT = "fire";
-
 		/**
-		 * Build the canary button for `conversation.input.right`.
-		 * @param connection - the host transport (`ctx.connection`), carrying `rpc.call`.
+		 * The denial notice.
+		 *
+		 * The moment a refusal happens is the moment this product has to be
+		 * legible from the back of a room, and it is the moment nothing on the
+		 * screen used to move unless the drawer happened to be open. Before
+		 * 30 August 2026 the canary button carried that job: it turned a colour
+		 * and the panel opened itself. With the canary gone (ADR-0007) the
+		 * trigger is the operator's own request, so the announcement has to come
+		 * from the record rather than from a control.
+		 *
+		 * It is transient on purpose. A denial is the seal *working*, and marking
+		 * the interface permanently for good news teaches a room to ignore the
+		 * mark — so this says its piece for eight seconds and leaves the standing
+		 * colour to state the seal alone. What it announced is in the ledger
+		 * afterwards, which is where a record belongs.
+		 *
+		 * It watches the same `bf-egress` view everything else reads and fires on
+		 * the count going up. There is no path from any control in this package
+		 * to this component: it cannot be made to appear except by an event the
+		 * host actually wrote (NFR8).
+		 * @param ctx - client root context, carrying `sessions`.
 		 * @returns the component.
 		 */
-		function buildCanaryButton(connection) {
-			const { useState } = require("react");
+		function buildDenialNotice(ctx) {
+			const { useEffect, useRef, useState, useSyncExternalStore } = require("react");
 			const { jsx, jsxs } = require("react/jsx-runtime");
-			const { Pill, StateDot } = require("@deepseek-ai/dsh-client-ui-primitives");
+			const { Button, StateDot } = require("@deepseek-ai/dsh-client-ui-primitives");
 
-			/**
-			 * Five outcomes, and the button says which one it is rather than
-			 * looking the same after every press.
-			 *
-			 * `refused` and `stoppedOutside` are both good news and both red, but
-			 * they are emphatically not the same fact, and the button must never
-			 * report one as the other: in the first, Faraday stopped the call
-			 * and wrote the record; in the second the call genuinely left this
-			 * process and something outside it — a host firewall, an unplugged
-			 * cable — refused it, and we can claim no credit and no record. The
-			 * old code collapsed the two, which would have had this button assert
-			 * a denial and an audit entry that the counter beside it could not
-			 * corroborate. See `createCanaryRpcHandler`.
-			 *
-			 * `reached` is amber, because a canary that got out is the one result
-			 * nobody should be able to miss — and, when the operator opened the
-			 * seal deliberately, the one that proves this button is measuring
-			 * something rather than asserting it.
-			 */
-			const COPY = {
-				idle: "Fire the canary: attempt a real outbound connection and watch what happens to it.",
-				firing: "Firing the canary — attempting an outbound connection.",
-				refused: "Denied by Faraday before the call ran, and written to the audit log.",
-				stoppedOutside:
-					"The call left Faraday and nothing came back within three seconds. Whatever refused it was outside this application — Faraday did not.",
-				reached: "The call REACHED the internet. The seal was open and nothing stopped it.",
-				failed: "The canary could not be fired. The host did not answer.",
-			};
+			/** How long the notice stays up. Long enough to read aloud, short enough not to become furniture. */
+			const NOTICE_MS = 8000;
 
-			/** Server outcome name to button phase. Anything unrecognised is a failure to report, not a result to invent. */
-			const PHASE_FOR = {
-				refused: "refused",
-				"stopped-outside": "stoppedOutside",
-				reached: "reached",
-			};
+			function DenialNotice() {
+				const list = ctx.sessions?.list ?? null;
+				const current = useSyncExternalStore(
+					(onChange) => (list ? list.subscribe(onChange) : () => {}),
+					() => (list ? list.getSnapshot().current ?? null : null),
+				);
+				const session = current ? ctx.sessions?.binding?.(current)?.session ?? null : null;
+				const snapshot = useSyncExternalStore(
+					(onChange) => (session ? session.subscribe(onChange) : () => {}),
+					() => readEgressSnapshot(session),
+				);
+				const count = snapshot === null ? null : snapshot.count;
+				const previous = useRef(count);
+				const [notice, setNotice] = useState(null);
 
-			/**
-			 * The composer-row control. A `Pill`, like the routing chip beside it
-			 * and the egress chip in the session header: `Button`'s `toolbar`
-			 * variant looked right in dark and resolved to a translucent dark fill
-			 * under near-black text in light, which is the "pasted on" failure the
-			 * UI rules exist to prevent (UX-DR2). Nothing here sets a colour —
-			 * `Pill` and `StateDot` carry the whole look through `--dsw-*` tokens.
-			 */
-			function CanaryButton(props) {
-				const [phase, setPhase] = useState("idle");
+				useEffect(() => {
+					const before = previous.current;
+					previous.current = count;
+					if (typeof count !== "number" || typeof before !== "number" || count <= before) return undefined;
+					// The newest denial, not the newest event: a seal change landing in
+					// the same instant must not be announced as a refusal.
+					const entries = Array.isArray(snapshot?.entries) ? snapshot.entries : [];
+					const denials = entries.filter((entry) => entry.kind === "denied");
+					const latest = denials.length > 0 ? denials[denials.length - 1] : null;
+					if (latest === null) return undefined;
+					setNotice(latest);
+					const timer = setTimeout(() => setNotice(null), NOTICE_MS);
+					return () => clearTimeout(timer);
+				}, [count]);
 
-				async function fire() {
-					if (phase === "firing") return;
-					setPhase("firing");
-					try {
-						const result = await connection.rpc.call(CANARY_CHANNEL, CANARY_ENDPOINT, {
-							sessionId: props.sessionId,
-						});
-						if (result?.ok !== true) {
-							setPhase("failed");
-							return;
-						}
-						const next = PHASE_FOR[result.value?.outcome];
-						setPhase(next ?? "failed");
-						// The alarm brings up the instrument. A call that got out is the
-						// loudest thing this system can say about itself, and it should
-						// not depend on the panel already happening to be open.
-						if (next === "reached") egressPanelOpen.set(true);
-					} catch (error) {
-						console.warn(
-							`@blind-flange/dsh-client-ui-base: the canary could not be fired — ${error instanceof Error ? error.message : String(error)}`,
-						);
-						setPhase("failed");
-					}
-				}
+				if (notice === null) return null;
 
-				const dot =
-					phase === "firing"
-						? "ongoing"
-						: phase === "refused" || phase === "stoppedOutside"
-							? "error"
-							: phase === "reached" || phase === "failed"
-								? "warning"
-								: null;
+				const tool = typeof notice.tool === "string" && notice.tool !== "" ? notice.tool : "a tool";
+				const target =
+					typeof notice.target === "string" && notice.target !== "" ? notice.target : "an unrecorded target";
 
-				return jsx(Pill, {
-					active: dot !== null,
-					disabled: phase === "firing",
-					onClick: fire,
-					title: COPY[phase],
-					"aria-label": COPY[phase],
-					children: jsxs("span", {
-						style: { display: "inline-flex", alignItems: "center", gap: "6px" },
-						// The label stays the control's name; the dot and the tooltip
-						// carry the state, and the audit list carries the sentence. The
-						// one exception is the call that got out: that outcome is named
-						// on the button itself, because it is the only one that must be
-						// legible from the back of the room without hovering anything.
+				return jsx("div", {
+					style: {
+						position: "absolute",
+						top: "12px",
+						left: 0,
+						right: 0,
+						display: "flex",
+						justifyContent: "center",
+						pointerEvents: "none",
+					},
+					children: jsxs("section", {
+						role: "status",
+						"aria-label": "An outbound call was denied",
+						style: {
+							pointerEvents: "auto",
+							display: "flex",
+							alignItems: "center",
+							gap: "10px",
+							maxWidth: "min(680px, calc(100% - 32px))",
+							padding: "8px 10px 8px 14px",
+							borderRadius: "12px",
+							background: "var(--dsw-alias-bg-layer-1)",
+							border: "1px solid var(--dsw-alias-border-l2)",
+							boxShadow: "var(--dsw-shadow-lv2)",
+							color: "var(--dsw-alias-label-primary)",
+							fontSize: "13px",
+						},
 						children: [
-							dot === null ? null : jsx(StateDot, { state: dot, size: 8 }),
-							phase === "reached" ? "Canary — got out" : "Canary",
+							jsx(StateDot, { state: "error", size: 10 }),
+							jsxs("span", {
+								style: { flex: "1 1 auto", minWidth: 0 },
+								children: [
+									jsx("strong", { children: "Outbound call denied." }),
+									// The target is the fact worth reading out. It is allowed to
+									// truncate rather than wrap: this is a notice, not the record,
+									// and the record is one click away and complete.
+									jsx("span", {
+										style: {
+											color: "var(--dsw-alias-label-secondary)",
+											marginLeft: "6px",
+											fontVariantNumeric: "tabular-nums",
+										},
+										children: `${tool} \u2192 ${target}`,
+									}),
+								],
+							}),
+							jsx(Button, {
+								variant: "ghost",
+								size: "sm",
+								onClick: () => {
+									setNotice(null);
+									drawerOpen.set(true);
+								},
+								children: "Show",
+							}),
 						],
 					}),
 				});
 			}
 
-			return CanaryButton;
+			return DenialNotice;
 		}
 
 		/**
@@ -2605,14 +3077,11 @@ function auditLine(entry) {
 		 * from a session event: the findings are what a document ingested
 		 * through Epic 4 produced, not something a turn recorded.
 		 *
-		 * Story 2.3's canary takes `conversation.input.right` (list, session):
-		 * the button that fires a real outbound attempt through the host's
-		 * loopback `/bf-canary` channel so the denial can be watched happening.
-		 * It is registered behind a nested `ctx.inject(["connection"])` so that a
-		 * client with no host transport loses the button and keeps everything
-		 * else.
+		 * The upload control takes `conversation.input.right` (list, session),
+		 * registered behind a nested `ctx.inject(["connection"])` so that a client
+		 * with no host transport loses the control and keeps everything else.
 		 *
-		 * A broken React seam aborts all nine: every one of them renders
+		 * A broken React seam aborts all of them: every one of them renders
 		 * through the host's `react/jsx-runtime`, so registering into a slot
 		 * without it would trade one loud console error for obscure render
 		 * failures. (The conversation Definitions carry no React and are
@@ -2640,8 +3109,9 @@ function auditLine(entry) {
 			const TaskTypeIndicator = buildTaskTypeIndicator();
 			const ProviderDisclosure = buildProviderDisclosure();
 			const RoutingChip = buildRoutingChip(ctx);
-			const EgressChip = buildEgressChip(ctx);
-			const EgressPanel = buildEgressPanel(ctx);
+			const SealFootRow = buildSealFootRow(ctx);
+			const SovereigntyDrawer = buildSovereigntyDrawer(ctx);
+			const DenialNotice = buildDenialNotice(ctx);
 			const SealBand = buildSealBand(ctx);
 			const ProvenanceView = buildProvenanceView();
 			// Hide the shipped hero headline so the lockup above is the only one on
@@ -2668,7 +3138,7 @@ function auditLine(entry) {
 			}
 
 			const disposeSidebarMark = ctx.slots.inject("sidebar.brand.mark", function* () {
-				yield ctx.slots.register({ name: "sidebar.brand.mark" }, FaradayMark);
+				yield ctx.slots.register({ name: "sidebar.brand.mark" }, RingedMark);
 			});
 			const disposeSidebarName = ctx.slots.inject("sidebar.brand.name", function* () {
 				yield ctx.slots.register({ name: "sidebar.brand.name" }, FaradayWordmark);
@@ -2697,29 +3167,37 @@ function auditLine(entry) {
 				);
 				return () => { dispose(); };
 			});
-			// The egress monitor's compact chip shares that same session-scoped
-			// list slot (Story 2.2). The `inject` factory hands it the resolved
-			// session id so it can read that session's `bf-egress` view; clicking
-			// it toggles the full panel below.
-			const disposeEgressChip = ctx.slots.inject("conversation.session.header.utilities", () => {
+			// The seal row takes `sidebar.footer.action` — a `list` slot scoped
+			// `root`, beside Settings at the sidebar foot. Root scope is why this
+			// moved off `conversation.session.header.utilities` on 30 August 2026:
+			// that slot is session-scoped, so the product's one load-bearing claim
+			// was absent from the new-session screen. See `buildSealFootRow`.
+			const disposeSealFootRow = ctx.slots.inject("sidebar.footer.action", () => {
 				const dispose = ctx.slots.register(
-					{
-						name: "conversation.session.header.utilities",
-						id: "bf-egress-chip",
-						inject: (sessionId) => ({ sessionId }),
-					},
-					EgressChip,
+					{ name: "sidebar.footer.action", id: "bf-seal", order: -10 },
+					SealFootRow,
 				);
 				return () => { dispose(); };
 			});
-			// The egress monitor's full panel takes `shell.overlay` (list, root).
-			// Root-scoped, so no session id is injected — the panel reads
-			// `ctx.sessions.list.current` itself. It renders only once the chip
-			// has opened it.
-			const disposeEgressPanel = ctx.slots.inject("shell.overlay", () => {
+			// The Sovereignty drawer takes `shell.overlay` (list, root).
+			// Root-scoped, so no session id is injected — it reads
+			// `ctx.sessions.list.current` itself. It renders only once the seal row
+			// has opened it, and insets the application while it is open rather
+			// than covering the transcript.
+			const disposeDrawer = ctx.slots.inject("shell.overlay", () => {
 				const dispose = ctx.slots.register(
-					{ name: "shell.overlay", id: "bf-egress-panel" },
-					EgressPanel,
+					{ name: "shell.overlay", id: "bf-sovereignty-drawer" },
+					SovereigntyDrawer,
+				);
+				return () => { dispose(); };
+			});
+			// The denial notice shares `shell.overlay` with the drawer and the band.
+			// It renders nothing until a denial lands, says its piece for eight
+			// seconds, and leaves the record to the drawer — see `buildDenialNotice`.
+			const disposeDenialNotice = ctx.slots.inject("shell.overlay", () => {
+				const dispose = ctx.slots.register(
+					{ name: "shell.overlay", id: "bf-denial-notice" },
+					DenialNotice,
 				);
 				return () => { dispose(); };
 			});
@@ -2731,56 +3209,33 @@ function auditLine(entry) {
 				const dispose = ctx.slots.register({ name: "shell.overlay", id: "bf-seal-band" }, SealBand);
 				return () => { dispose(); };
 			});
-			// The canary takes `conversation.input.right` (list, session) — the
-			// composer tool row, before the send button. Deferred behind
+			// The upload control takes `conversation.input.right` (list, session) —
+			// the composer tool row, before the send button. Deferred behind
 			// `ctx.inject(["connection"])` rather than named in this plugin's own
 			// `inject` list: a hard gate on a service the headless client has no
-			// reason to provide would take the other seven seats down with it, and
-			// the monitor is worth more than the button that calibrates it.
-			let disposeCanary;
+			// reason to provide would take every other seat down with it, and the
+			// monitor is worth more than any control beside it.
+			//
+			// The canary shared this seat until 30 August 2026 (ADR-0007). The
+			// composer row is one control lighter for it, which is the right
+			// direction: the proof is now the request the operator types.
 			let disposeUpload;
-			let disposeResidency;
-			ctx.inject(["connection"], (canaryCtx) => {
+			ctx.inject(["connection"], (connectedCtx) => {
 				// Point the seal store at the host transport and read the seal once.
-				// Everything that displays the seal — the band, the chip, the panel's
-				// control — reads that answer rather than assuming one, so a reloaded
-				// page shows the machine's real state instead of the safe-looking one.
-				seal.bind(canaryCtx.connection);
-				const CanaryButton = buildCanaryButton(canaryCtx.connection);
-				disposeCanary = canaryCtx.slots.inject("conversation.input.right", () => {
-					const dispose = canaryCtx.slots.register(
-						{
-							name: "conversation.input.right",
-							id: "bf-canary",
-							label: "Canary",
-							inject: (sessionId) => ({ sessionId }),
-						},
-						CanaryButton,
-					);
-					return () => { dispose(); };
-				});
+				// Everything that displays the seal — the band, the foot row, the mark's
+				// ring, the drawer's control — reads that answer rather than assuming
+				// one, so a reloaded page shows the machine's real state instead of the
+				// safe-looking one.
+				seal.bind(connectedCtx.connection);
+				// The drawer's residency and model-plane sections read the host's trace
+				// through this. Held module-scoped rather than passed in, so the drawer
+				// stays registered unconditionally: a client with no transport keeps the
+				// ledger its own session log produced and simply has no residency to show.
+				hostConnection = connectedCtx.connection;
 
-				// The upload control takes the same seat, deferred behind the same
-				// `connection` gate and for the same reason. `order` puts it before the
-				// canary: the natural left-to-right reading of the row is "give it a
-				// document, then prove nothing left the box", which is also the order
-				// the demo does them in.
-				// Residency takes a seat in the session header beside the egress chip
-				// and the provider chip, not the composer row — it describes the
-				// machine's state rather than offering an action, and the header is
-				// where this product already puts that.
-				const ResidencyChip = buildResidencyChip(canaryCtx.connection);
-				disposeResidency = canaryCtx.slots.inject("conversation.session.header.utilities", () => {
-					const dispose = canaryCtx.slots.register(
-						{ name: "conversation.session.header.utilities", id: "bf-residency", label: "Residency", order: 20 },
-						ResidencyChip,
-					);
-					return () => { dispose(); };
-				});
-
-				const UploadButton = buildUploadButton(canaryCtx.connection);
-				disposeUpload = canaryCtx.slots.inject("conversation.input.right", () => {
-					const dispose = canaryCtx.slots.register(
+				const UploadButton = buildUploadButton(connectedCtx.connection);
+				disposeUpload = connectedCtx.slots.inject("conversation.input.right", () => {
+					const dispose = connectedCtx.slots.register(
 						{
 							name: "conversation.input.right",
 							id: "bf-upload",
@@ -2833,12 +3288,13 @@ function auditLine(entry) {
 				disposeHeroMark();
 				disposeIndicator?.();
 				disposeProviderDisclosure?.();
-				disposeEgressChip?.();
-				disposeEgressPanel?.();
+				disposeSealFootRow?.();
+				disposeDrawer?.();
+				disposeDenialNotice?.();
 				disposeSealBand?.();
-				disposeCanary?.();
 				disposeUpload?.();
-				disposeResidency?.();
+				disposeInset();
+				hostConnection = null;
 				disposeRoutingChip?.();
 				disposeProvenanceView?.();
 				disposeRoutingView?.();
