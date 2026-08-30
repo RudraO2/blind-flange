@@ -1712,6 +1712,15 @@ function auditLine(entry) {
 					open,
 					onOpenChange: setOpen,
 					side: "bottom",
+					// Right-aligned and portalled, like the routing chip. This chip is the
+					// last seat in the session header, so a menu aligned to its left edge
+					// opens rightwards into nothing: measured 30 August 2026 at 255px wide
+					// from x=1170 in a 1283px window, which put 141px of it past the edge of
+					// the screen with no way to scroll to it. `end` hangs it from the chip's
+					// right edge instead, so it grows back across the header where there is
+					// room. The portal keeps it out of the header's own overflow.
+					align: "end",
+					portal: true,
 					anchor,
 					items: items.map((item, index) =>
 						item.kind === "label"
