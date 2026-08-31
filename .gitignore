@@ -31,27 +31,23 @@ models/
 # workbench does at runtime depends on it.
 #
 # `_bmad/custom/` IS kept: those overrides are ours, they explain themselves,
-# and docs/ralph-loop.md refers to them.
+# and the build loop that produced them referred to them.
 .claude/skills/
 _bmad/*
 !_bmad/custom/
 
-# BMAD working output — tracked in full since 28 Aug 2026.
+# The development method's own working output, removed from the repository on
+# 31 August 2026 and kept on disk.
 #
-# It used to be that only the planning artifacts and the sprint tracker were
-# kept, and everything under implementation-artifacts was treated as build
-# scratch. That was right while this was a solo build: the specs were a record
-# of work only one person would ever read.
-#
-# It stopped being right when the repository was handed to a teammate. The
-# specs say why each story was built the way it was, deferred-work.md is the
-# standing list of known problems and the reasoning behind each, and the epic
-# contexts carry the constraints. Someone picking this up cold needs all of it,
-# and 116 KB of markdown is a cheap price for not having to ask.
-#
-# `party-mode/` stays out: it is a scratch directory for an interactive
-# brainstorming mode, not a record of anything the build depends on.
-_bmad-output/party-mode/
+# It was tracked in full for three days, on the reasoning that the specs say why
+# each story was built the way it was and someone picking the project up cold
+# would need them. That reasoning was sound for a teammate and wrong for a
+# reader: what survives here should be the product and the evidence behind its
+# decisions — the ADRs, the licence record, the measurements — not the process
+# that produced them. The decisions are in docs/adr/; the measurements are in
+# docs/measurements/; the history is in git.
+_bmad/
+_bmad-output/
 
 # Claude Code worktrees — Lane B works in one; never commit a worktree tree.
 .claude/worktrees/
@@ -60,3 +56,11 @@ _bmad-output/party-mode/
 # (session cwd defaults to the repo root under `dsh --profile headless`).
 # Generated output, never source.
 /deliverables/
+
+# Kept on disk, deliberately out of the repository (31 August 2026). CLAUDE.md is
+# instruction for an AI coding agent, not part of the product; a reader of this
+# repository should meet the README, not a briefing written for a tool.
+CLAUDE.md
+
+# `npm run record-demo` writes its MP4 here. Recordings are output, not source.
+videos/

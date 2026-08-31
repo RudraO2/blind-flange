@@ -96,7 +96,7 @@ decision. Start a new session.
 Someone will ask, and having the answer straight is better than being caught by it.
 
 - **Model weights were downloaded** over the network, at setup time, on 30 August. Nothing is
-  fetched at runtime and no demo pulls anything. `.scratch/local-inference-lanes/fetch-runtime.ps1`
+  fetched at runtime and no demo pulls anything. `scripts/fetch-runtime.ps1`
   is the script that did it and it is idempotent.
 - **The coding lane scores 2 of 5** against ground truth. The document lane scores 5 of 5. The
   coding failures are a 1.5B model reading engineering arithmetic imprecisely — summing when asked

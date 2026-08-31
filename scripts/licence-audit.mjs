@@ -71,7 +71,6 @@ const PROJECT_ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const DECISIONS_PATH = join(PROJECT_ROOT, "docs", "licence-decisions.json");
 const REPORT_PATH = join(PROJECT_ROOT, "docs", "licence-audit.md");
 const POLICY_PATH = join(PROJECT_ROOT, "docs", "licence-policy.md");
-const CLAUDE_MD_PATH = join(PROJECT_ROOT, "CLAUDE.md");
 const README_PATH = join(PROJECT_ROOT, "README.md");
 
 /** The harness home, honouring `DSH_HOME` exactly as `scripts/start.mjs` does. */
@@ -581,12 +580,15 @@ function checkEvidence(decisions) {
  * Assert every prose file that states the allow-list still names what the code
  * gates on.
  *
- * `CLAUDE.md` is here and not only the policy file, because it is what every
- * session loads as authority. ADR-0006 widened the set in `fleet.js`,
- * `loader.js`, the policy and the ADR — and left `CLAUDE.md` stating the
- * superseded four names as the hard constraint. A drift check that only looked
- * at the policy could not see it, so the file most likely to be believed was the
- * one file nothing verified.
+ * `CLAUDE.md` used to be checked here too, because it was what every session
+ * loaded as authority: ADR-0006 widened the set in `fleet.js`, `loader.js`, the
+ * policy and the ADR, and left `CLAUDE.md` still stating the superseded four
+ * names as the hard constraint. It left the repository on 31 August 2026 — it is
+ * a briefing for an AI coding agent, not part of the product — so checking it
+ * here would make this audit pass or fail on a file a fresh clone does not have.
+ * It is now gitignored rather than deleted, and drift in it can no longer
+ * mislead a reader of this repository, because no reader of this repository
+ * sees it.
  *
  * `README.md` joined them on 28 August 2026, for the same reason and with the
  * same history: it had been stating the superseded four names since ADR-0006,
@@ -599,7 +601,6 @@ function checkPolicyDrift() {
 	const problems = [];
 	for (const [label, path] of [
 		["docs/licence-policy.md", POLICY_PATH],
-		["CLAUDE.md", CLAUDE_MD_PATH],
 		["README.md", README_PATH],
 	]) {
 		if (!existsSync(path)) {

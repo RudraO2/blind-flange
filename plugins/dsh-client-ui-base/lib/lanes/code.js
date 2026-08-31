@@ -5,7 +5,7 @@
  * ## Python, not PowerShell
  *
  * Measured on 30 August 2026 over nine attempts per language
- * (`.scratch/local-inference-lanes/issues/08`): `Qwen2.5-Coder-1.5B-Instruct`
+ * (`docs/measurements/local-inference-lanes/issues/08`): `Qwen2.5-Coder-1.5B-Instruct`
  * produced runnable PowerShell **zero** times and runnable Python **six**
  * times. It gave the reason away by writing `sum(1..100)` when asked for
  * PowerShell — its training is Python-weighted. `tool-pwsh` is still the

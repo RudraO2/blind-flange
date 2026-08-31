@@ -165,7 +165,7 @@
 			"licence": "AGPL-3.0",
 			"decision": "rejected",
 			"recorded": "2026-08-28",
-			"reason": "Copyleft with a network disclosure obligation. Named explicitly because it is the library every PDF tutorial reaches for and the default an agent selects unprompted (ADR-0005, CLAUDE.md). pypdfium2 is the substitute. The audit fails if this ever appears in the tree."
+			"reason": "Copyleft with a network disclosure obligation. Named explicitly because it is the library every PDF tutorial reaches for and the default an agent selects unprompted (ADR-0005, docs/licence-policy.md). pypdfium2 is the substitute. The audit fails if this ever appears in the tree."
 		},
 		{
 			"ecosystem": "python",

@@ -57,7 +57,7 @@ fleet:
   # reason for the drawing lane instead of a decorative one.
   #
   # It writes Python, not PowerShell — measured 6/9 runnable against 0/9, see
-  # .scratch/local-inference-lanes/issues/08. 1.5B is the smallest Apache-2.0
+  # docs/measurements/local-inference-lanes/issues/08. 1.5B is the smallest Apache-2.0
   # member of the Coder family; the 3B is research-licensed and is declared
   # further down as a refusal case.
   - name: Qwen/Qwen2.5-Coder-1.5B-Instruct

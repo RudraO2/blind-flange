@@ -5,8 +5,8 @@ built on open-weight multimodal models. This file is the vocabulary agents and h
 use. It is deliberately short: only terms whose meaning is specific to *this* project.
 
 General AI jargon (token, VRAM, quantisation, KV cache, prefill/decode, MoE, RAG, reranker,
-SBOM, P&ID) is defined once in §20 Glossary of `blind-flange.html` and is not repeated here.
-Go there for those; come here for how *we* use words.
+SBOM, P&ID) carries its ordinary industry meaning here and is not redefined. Come here for
+how *we* use words, not for a dictionary of the field.
 
 ## The system
 
@@ -137,15 +137,11 @@ own IT, and audit evidence. Not benchmark charts.
 
 ## Artifacts in this folder
 
-**The artifact**:
-The 21-section build plan at
-https://claude.ai/code/artifact/b473557c-9051-4b97-aa83-6495a28c603d, sourced from
-`blind-flange.html`. "The artifact" always means this one.
-
 **The deck**:
-The 9-slide IIT Madras BS internal hackathon deck. Copy lives in `DECK-CONTENT.md`.
-The 6-slide official SIH portal submission is "the idea PPT", a cut-down of the deck.
+The 9-slide IIT Madras BS internal hackathon deck. The 6-slide official SIH portal
+submission is "the idea PPT", a cut-down of the deck. Neither is source; both are output,
+and neither lives in this repository.
 
 **The explainer**:
-The video in `videos/sovereign-workbench-explainer`, built from this project's context.
-Output only — it is not a source of truth and nothing reads back from it.
+The recorded walkthrough of an offline run, produced by `npm run record-demo`. Output only —
+it is not a source of truth and nothing reads back from it.

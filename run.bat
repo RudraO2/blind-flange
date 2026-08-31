@@ -86,7 +86,7 @@ if /i "%~1"=="stop" (
 )
 
 if /i "%~1"=="models" (
-  call %PS% -NoProfile -ExecutionPolicy Bypass -File ".scratch\local-inference-lanes\fetch-runtime.ps1"
+  call %PS% -NoProfile -ExecutionPolicy Bypass -File "scripts\fetch-runtime.ps1"
   echo.
   pause
   exit /b %errorlevel%
@@ -123,7 +123,7 @@ echo   The inference runtime or the models are missing. Fetching them now -
 echo   about 2.5 GB on a machine that has never run this. Already-downloaded
 echo   files are skipped, so this is quick on every run after the first.
 echo.
-call %PS% -NoProfile -ExecutionPolicy Bypass -File ".scratch\local-inference-lanes\fetch-runtime.ps1"
+call %PS% -NoProfile -ExecutionPolicy Bypass -File "scripts\fetch-runtime.ps1"
 if errorlevel 1 (
   echo.
   echo   Fetching the runtime failed. The message above says why. The usual

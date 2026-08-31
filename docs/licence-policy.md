@@ -71,10 +71,12 @@ Saying "we only use permissive licences" proves nothing. Three mechanisms make i
    `ALLOWED_LICENCES` from the same module the model loader reads, so there is one
    allow-list in this project rather than two that can drift.
 
-   It also checks that *this file* and `CLAUDE.md` still name every licence the code gates
-   on, so a widened set and a stale statement of it cannot coexist. `CLAUDE.md` is checked
-   because it is what every session loads as authority, and ADR-0006 initially updated the
-   code and this file while leaving it stating the superseded four names.
+   It also checks that *this file* and `README.md` still name every licence the code gates
+   on, so a widened set and a stale statement of it cannot coexist. The README is checked
+   because it is the first file anyone reads and the only one an evaluator is guaranteed to
+   see; a front page that overstates its own licence claim is the worst place for drift to
+   hide. ADR-0006 initially updated the code and this file while leaving both the README and
+   the (since removed) agent briefing stating the superseded four names.
 
    The evidence check has no carve-out. Most evidence lives outside the repo — in the
    harness home and in Python's site-packages — and a missing path still fails, because
@@ -147,8 +149,7 @@ enumerates the harness, the profile, our packages and the ingestion service, and
 and in `docs/licence-decisions.json` rather than left to be noticed. **Two components are
 linked at runtime**, both inherited rather than chosen, both named. Neither places any obligation on our own code. **That is the sentence this
 policy can defend, and it is a different sentence from "every component is permissively
-licensed"** — which `blind-flange.html` §Feasibility and `DECK-CONTENT.md` still say, and
-which is no longer true.
+licensed"** — which the earlier build plan and deck copy both said, and which is not true.
 
 ## Rejected
 

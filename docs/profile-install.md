@@ -720,7 +720,7 @@ store predating this story fails to load its chat history with `SessionFormatUns
 ... contains event type "router/classified" (seq 6) unknown to this harness`, and the
 composer stays disabled on any session whose history failed to load this way. Not caused by
 this change — it predates Story 5.2 by at least an hour of session timestamps — and out of
-scope to fix here; recorded in `_bmad-output/implementation-artifacts/deferred-work.md`.
+scope to fix here; recorded as deferred work at the time and left unfixed.
 
 ## Story 5.3: a coding task runs and is verified in the sandbox
 
@@ -841,7 +841,7 @@ cwd — not authored, not a fixture:
   this story writes is the same public, unextended structure `python-docx`'s own `lxml`-backed
   parser accepted (no proprietary Word-only markup, no named-style references), which is why
   this was accepted for the Phase 0 prototype rather than blocked on further environment
-  troubleshooting. Recorded in `_bmad-output/implementation-artifacts/deferred-work.md`;
+  troubleshooting. Recorded as deferred work at the time;
   re-verify on a machine where an interactive install can complete, or ask a human to open the
   file once and confirm, if a real LibreOffice-side problem is ever observed.
 

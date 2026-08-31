@@ -93,7 +93,7 @@ A source grep of `packages/client` and `apps/web` agrees: the only absolute URLs
 the DeepSeek provider adapter and its doc links — none of which fire unless that provider is
 configured.
 
-This clears the risk §14 of `blind-flange.html` calls "the one that will actually bite you."
+This clears the risk the original build plan called "the one that will actually bite you."
 Still to do before the claim is made in front of MRPL: re-run the grep against the **built**
 `dist/` bundle, not just source.
 

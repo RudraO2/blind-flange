@@ -1,5 +1,5 @@
 # `__RUNTIME_ROOT__` and the `__*_GPU__` names below are substituted by
-# `.scratch/local-inference-lanes/fetch-runtime.ps1` when it copies this file
+# `scripts/fetch-runtime.ps1` when it copies this file
 # into place. The root is not hardcoded because the weights are 2.5 GB and the
 # machine that has to hold them may not have the same drives: it defaults to
 # D:i where a D: drive exists, and falls back to LOCALAPPDATA where it does
@@ -16,7 +16,7 @@
 # `fetch-runtime.ps1` now copies this into place.
 #
 # Every flag below is here because a measurement put it here — the sources are
-# `.scratch/local-inference-lanes/issues/06` and `/07`. Three of them are not
+# `docs/measurements/local-inference-lanes/issues/06` and `/07`. Three of them are not
 # optional:
 #
 #   --device           Both team laptops have two Vulkan devices, and llama.cpp

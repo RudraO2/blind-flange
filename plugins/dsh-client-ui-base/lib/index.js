@@ -173,7 +173,7 @@ const NETWORK_PWSH_PATTERN =
  * **Why this exists.** The coding lane asks the model for Python, not
  * PowerShell — measured on 30 August 2026, the 1.5B coder produced runnable
  * PowerShell zero times out of nine and runnable Python six times out of nine
- * (`.scratch/local-inference-lanes/issues/08`). The executor is still
+ * (`docs/measurements/local-inference-lanes/issues/08`). The executor is still
  * `tool-pwsh`, because `dsh-bash-sandbox` never loads on win32; the command
  * simply invokes the interpreter.
  *

@@ -146,7 +146,6 @@ the active provider is named on screen at all times.
 | `scripts/start.mjs` | The start command. Node builtins only — no dependencies |
 | `scripts/doctor.mjs` | `npm run doctor` — checks the toolchain, the wiring, the seal, the tests and the licence audit |
 | `scripts/record-demo.mjs` | `npm run record-demo` — drives a running workbench through the three demo beats and records them. Needs `ffmpeg` on `PATH` |
-| `videos/recorded-offline-run/` | The recording itself, and what it shows second by second |
 | `profile/` | The harness profile's configuration, tracked. The source of truth for what `npm start` writes |
 | `plugins/dsh-client-ui-base/` | Blind Flange itself: the egress seal, model plane, router, attached-image path and deliverable factory, as one out-of-tree harness plugin |
 | `registry/models.yaml` | The fleet, one row per model, each with the licence it was verified under |
