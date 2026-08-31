@@ -1,0 +1,65 @@
+# The gate this project actually claims.
+#
+# Two things run here and both are load-bearing. The plugin's own test suite is
+# the ordinary half. The licence audit is the half worth having in CI: it walks
+# every dependency tree it can reach, checks each licence against the eleven
+# permissive names in docs/licence-policy.md, and exits non-zero on anything
+# undecided. Add a dependency under a licence nobody has ruled on and this build
+# goes red before the dependency reaches a branch.
+#
+# It also checks that docs/licence-policy.md and README.md still state the same
+# eleven names the code gates on, so a widened allow-list and a stale sentence
+# about it cannot coexist. That check exists because they did once.
+#
+# Runs on both platforms deliberately. Faraday ships for Windows and the target
+# should be exercised; the suite is platform-agnostic Node with no branches on
+# `process.platform`, so Ubuntu is the honest fast path and Windows is the one
+# that matches the machine an evaluator will run.
+#
+# No GPU, no model weights, no harness install. The audit reports a tree it
+# cannot reach rather than skipping it silently, and the decisions file and its
+# evidence paths are validated either way — which is what makes this runnable by
+# anyone, on any box, in about a minute.
+
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  test:
+    name: tests and licence audit (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+
+    steps:
+      - name: Check out the repository
+        uses: actions/checkout@v4
+
+      # Pinned to the floor in package.json's `engines`, not to `latest`: the
+      # harness is a developer preview and the version this was verified against
+      # is the version worth testing against.
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22.15.0'
+
+      # `npm test` is `node --test` over the plugin package, then
+      # scripts/licence-audit.mjs. Neither installs anything: this repository has
+      # no npm dependencies, which is itself part of the claim.
+      - name: Run the tests and the licence audit
+        run: npm test
