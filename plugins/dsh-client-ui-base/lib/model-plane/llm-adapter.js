@@ -39,6 +39,27 @@ import {
 	servesTaskType,
 	verdictFor,
 } from "../lanes/code.js";
+import {
+	alreadyDispatched,
+	describePlan,
+	describeProgress,
+	describeReports,
+	FANOUT_SUMMARY_SYSTEM_PROMPT,
+	FANOUT_LANE_MAX_TOKENS,
+	FANOUT_LANE_SYSTEM_PROMPT,
+	FANOUT_PLAN_SCHEMA,
+	FANOUT_PLAN_SCHEMA_NAME,
+	helpersDispatched,
+	helpersHaveReported,
+	isSettleTurn,
+	parsePlan,
+	rememberDispatch,
+	settledReports,
+	subagentArguments,
+	SUBAGENT_TOOL_NAME,
+	userText,
+	wantsDelegation,
+} from "../lanes/fanout.js";
 import { announceRefusals, loadFleet } from "../registry/loader.js";
 import { imageRefsIn, resolveMessageImages } from "../attachments/images.js";
 import { currentTaskType, runtimeModelForCurrentTurn } from "../router/dispatch.js";
@@ -212,6 +233,114 @@ async function* codeLanePieces(modelProvider, options, dispatch) {
 }
 
 /**
+ * What the parent says once helpers are out.
+ *
+ * The harness delivers each finished helper as its own turn, so before this the
+ * parent answered once per helper — three short replies, each summarising
+ * whichever child had just spoken and naming no subject. Observed 31 August 2026.
+ *
+ * Now it holds. A helper that is not the last produces one written line, with no
+ * model call at all: how many have reported is a fact this code knows exactly,
+ * and spending a 1.5B on it would make a certainty less reliable. When the last
+ * one lands, every report is laid out verbatim and the model is asked for a
+ * synthesis after them — so a reader can tell what was reported from what was
+ * concluded, the same separation the coding lane draws.
+ * @param {import("./model-provider.js").ModelProvider} modelProvider
+ * @param {{ messages: unknown[] }} options
+ * @param {string | undefined} model
+ */
+async function* settlePieces(modelProvider, options, model) {
+	if (!isSettleTurn(options.messages)) {
+		yield* modelProvider.answer({ messages: options.messages, model });
+		return;
+	}
+	const reports = settledReports(options.messages);
+	const total = helpersDispatched();
+	// `total` can be 0 after a restart, when this process never saw the dispatch.
+	// Summarising what is in hand beats holding for a count we cannot know.
+	if (total > 0 && reports.length < total) {
+		yield { type: "text", text: describeProgress(reports.length, total) };
+		return;
+	}
+	yield { type: "text", text: `${describeReports(reports)}\n` };
+	yield* modelProvider.answer({
+		model,
+		messages: [{ role: "system", content: FANOUT_SUMMARY_SYSTEM_PROMPT }, ...options.messages],
+	});
+}
+
+/**
+ * The fan-out lane's two steps, as harness pieces.
+ *
+ * **Step one** asks the model for `{ helpers: [{ description, prompt }] }` under
+ * a schema and emits one `tool-call` per helper. The harness dispatches each for
+ * real, spawning a genuine subagent session with its own lineage — which is what
+ * makes the shipped `ui-subagent` breadcrumb count something true.
+ *
+ * **Step two** is a plain turn over the results. Nothing of ours is computed
+ * there: a helper's answer is the helper's, and the parent summarising it is the
+ * parent's own work.
+ *
+ * Falls back to a plain turn whenever the plan cannot be used. A delegation
+ * request answered directly is a worse answer; a turn lost to a parse error is
+ * no answer at all.
+ * @param {import("./model-provider.js").ModelProvider} modelProvider
+ * @param {{ messages: unknown[] }} options
+ * @param {{ runtimeId: string | null }} dispatch
+ */
+async function* fanoutLanePieces(modelProvider, options, dispatch) {
+	const model = dispatch.runtimeId ?? undefined;
+	const trigger = userText(options.messages);
+
+	// Two independent reasons not to dispatch, and both are checked because
+	// either alone was once believed sufficient. The first reads the harness's
+	// message list; the second reads the operator's own words. See
+	// `alreadyDispatched` in `lanes/fanout.js` for what thirty-six children cost.
+	if (helpersHaveReported(options.messages) || alreadyDispatched(trigger)) {
+		yield* settlePieces(modelProvider, options, model);
+		return;
+	}
+
+	const reply = await drainText(
+		modelProvider.answer({
+			model,
+			schema: FANOUT_PLAN_SCHEMA,
+			schemaName: FANOUT_PLAN_SCHEMA_NAME,
+			maxTokens: FANOUT_LANE_MAX_TOKENS,
+			messages: [{ role: "system", content: FANOUT_LANE_SYSTEM_PROMPT }, ...options.messages],
+		}),
+	);
+
+	let helpers;
+	try {
+		helpers = parsePlan(reply);
+	} catch (error) {
+		console.warn(`@blind-flange/dsh-client-ui-base: fan-out lane fell back to a plain turn — ${error.message}`);
+		yield* modelProvider.answer({ messages: options.messages, model });
+		return;
+	}
+
+	// Remembered BEFORE the calls are emitted, not after. A generator that is
+	// abandoned part-way — the operator pressing stop — must still count as a
+	// dispatch, because the sessions it already spawned are real.
+	rememberDispatch(trigger, helpers.length);
+	yield { type: "text", text: `${describePlan(helpers)}
+
+` };
+	// Recorded once per helper, so an approval note drawn from this turn names
+	// every session it caused rather than the fact that delegation happened.
+	for (const [ordinal, helper] of helpers.entries()) {
+		recordTool(SUBAGENT_TOOL_NAME, { outcome: `dispatched — ${helper.description}` });
+		yield {
+			type: "tool-call",
+			id: `bf-fanout-${Date.now()}-${ordinal}`,
+			name: SUBAGENT_TOOL_NAME,
+			arguments: subagentArguments(helper),
+		};
+	}
+}
+
+/**
  * A reply ceiling. A third of the failures during bring-up were the *schema
  * output itself* truncating mid-string because the model rambled past 300
  * tokens — a defect in our request, not in the model.
@@ -231,12 +360,17 @@ async function* streamImpl(modelProvider, options, readImageRequest) {
 	recordImages(imageRefsIn(messages).length);
 	// The lane that shapes the request is chosen by task type; the model that
 	// answers it by dispatch. Both come from the same routing decision.
-	const pieces = servesTaskType(currentTaskType())
-		? codeLanePieces(modelProvider, { ...options, messages }, dispatch)
-		: modelProvider.answer({
-			messages,
-			model: dispatch.runtimeId ?? undefined,
-			});
+	// Delegation is asked for in the operator's own words and is orthogonal to
+	// task type — a calculation can be delegated or not — so it is tested before
+	// the type-keyed lane rather than alongside it. See `lanes/fanout.js`.
+	let pieces;
+	if (wantsDelegation(messages)) {
+		pieces = fanoutLanePieces(modelProvider, { ...options, messages }, dispatch);
+	} else if (servesTaskType(currentTaskType())) {
+		pieces = codeLanePieces(modelProvider, { ...options, messages }, dispatch);
+	} else {
+		pieces = modelProvider.answer({ messages, model: dispatch.runtimeId ?? undefined });
+	}
 	let index = -1;
 	let openTextIndex = -1;
 	let openText = "";

@@ -36,9 +36,20 @@
   config:
     text: >-
       You are Faraday, a sovereign industrial knowledge-work workbench running entirely
-      offline on the {{model}} model within the DeepSeek Harness. Your working directory is
+      offline on the {{model}} model. Your working directory is
       {{cwd}}. This session handles code work, presented through the Code Mode SDK so you can
       combine multi-step operations into one TypeScript program.
+
+      Two rules govern how you answer.
+
+      Never perform a tool you did not call. Do not write out "Helper Agent 1:" and
+      answer as it, do not invent the output of a program you did not run, and do not
+      present a calculation you did in your head as one a sandbox produced. The
+      workbench dispatches real tools and shows their real results; text that imitates
+      that is the one thing this product cannot afford to print.
+
+      When you cannot do something, say so in one sentence and stop. An honest refusal
+      is a usable answer. An imitation of success is not.
 
 - id: agent-instructions
   name: '@deepseek-ai/dsh-agent-instructions'
@@ -93,10 +104,22 @@
 # `skill-filesystem` contributes local-root discovery for agents on this preset, and
 # `tool-skill` gives them the catalog and loader; the merged catalog also
 # carries whatever the deployment registered globally (repository plugins).
+# Faraday, 31 August 2026: both rows off. `@deepseek-ai/dsh-tool-skill` is what
+# emits the `skill-catalog` context injection, and mounting the row here was
+# overriding dsh-web-app's own disable — so the catalogue kept reaching the
+# session log and rendering as a "Context injection" row in the transcript, on
+# every first turn. The 30 August note in profile/web/cordis.patch.yml records
+# why the catalogue is unwanted: Faraday offers no skills, so a list of them
+# describes capabilities this workbench does not have, and a 2B model asked to
+# summarise a report with none attached summarised the catalogue instead. The
+# `- id: skill` registry row is a different thing and must stay mounted; the
+# New Session button 500s without it.
 - id: skill-filesystem
+  disabled: true
   name: '@deepseek-ai/dsh-skill-filesystem'
 
 - id: tool-skill
+  disabled: true
   name: '@deepseek-ai/dsh-tool-skill'
 
 # ── goals ───────────────────────────────────────────────────────────────────

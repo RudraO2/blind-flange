@@ -31,9 +31,20 @@
   config:
     text: >-
       You are Faraday, a sovereign industrial knowledge-work workbench running entirely
-      offline on the {{model}} model within the DeepSeek Harness. Your working directory is
+      offline on the {{model}} model. Your working directory is
       {{cwd}}. This session handles calculation work: engineering calculations with shown
       steps and units.
+
+      Two rules govern how you answer.
+
+      Never perform a tool you did not call. Do not write out "Helper Agent 1:" and
+      answer as it, do not invent the output of a program you did not run, and do not
+      present a calculation you did in your head as one a sandbox produced. The
+      workbench dispatches real tools and shows their real results; text that imitates
+      that is the one thing this product cannot afford to print.
+
+      When you cannot do something, say so in one sentence and stop. An honest refusal
+      is a usable answer. An imitation of success is not.
 
 - id: agent-instructions
   name: '@deepseek-ai/dsh-agent-instructions'
@@ -57,14 +68,24 @@
   name: '@deepseek-ai/dsh-tool-pwsh'
   disabled: !!js process.platform !== 'win32'
 
+# Faraday, 31 August 2026: the calculation lane is cut to the smallest tool set
+# it actually uses — `pwsh`, `subagent`, `list_agents` and the control row that
+# backs them. Every row disabled below is disabled for one reason: this lane runs
+# on a 1.5B model, and choosing correctly between twenty-odd tool names is past
+# what a model that size does reliably. Asked to delegate, it narrated a helper
+# agent instead of calling `subagent`. Re-enable a row when a lane needs it and
+# the model answering is large enough to pick it.
+
 # ── filesystem ──────────────────────────────────────────────────────────────
 
 # Both register into the host `tools` registry and provide nothing, so
 # they need no realm. The `fs` service and its policy stay in the host.
 - id: tool-fs
+  disabled: true
   name: '@deepseek-ai/dsh-tool-fs'
 
 - id: tool-fs-search
+  disabled: true
   name: '@deepseek-ai/dsh-tool-fs-search'
   config:
     sampleOverCapGlobResults: false
@@ -79,6 +100,7 @@
 # owning agent anyway, so one host instance serves every session. What a preset
 # chooses is whether its agent can collect and stop background work at all.
 - id: tool-jobs
+  disabled: true
   name: '@deepseek-ai/dsh-tool-jobs'
 
 # ── skills ──────────────────────────────────────────────────────────────────
@@ -88,10 +110,22 @@
 # `skill-filesystem` contributes local-root discovery for agents on this preset, and
 # `tool-skill` gives them the catalog and loader; the merged catalog also
 # carries whatever the deployment registered globally (repository plugins).
+# Faraday, 31 August 2026: both rows off. `@deepseek-ai/dsh-tool-skill` is what
+# emits the `skill-catalog` context injection, and mounting the row here was
+# overriding dsh-web-app's own disable — so the catalogue kept reaching the
+# session log and rendering as a "Context injection" row in the transcript, on
+# every first turn. The 30 August note in profile/web/cordis.patch.yml records
+# why the catalogue is unwanted: Faraday offers no skills, so a list of them
+# describes capabilities this workbench does not have, and a 2B model asked to
+# summarise a report with none attached summarised the catalogue instead. The
+# `- id: skill` registry row is a different thing and must stay mounted; the
+# New Session button 500s without it.
 - id: skill-filesystem
+  disabled: true
   name: '@deepseek-ai/dsh-skill-filesystem'
 
 - id: tool-skill
+  disabled: true
   name: '@deepseek-ai/dsh-tool-skill'
 
 # ── goals ───────────────────────────────────────────────────────────────────
@@ -103,6 +137,7 @@
 # registry is keyed by session anyway, so one host instance serves every
 # session. What a preset chooses is whether its agent can call the goal tool.
 - id: tool-goal
+  disabled: true
   name: '@deepseek-ai/dsh-tool-goal'
 
 # ── plan mode ───────────────────────────────────────────────────────────────
@@ -199,6 +234,7 @@
         backgroundMode: continuable
 
     - id: tool-subagent-fork
+      disabled: true
       name: '@deepseek-ai/dsh-tool-subagent'
       config:
         provider: fork
@@ -233,9 +269,11 @@
         provider: spawn
 
     - id: tool-workflow
+      disabled: true
       name: '@deepseek-ai/dsh-tool-workflow'
 
     - id: tool-ralph
+      disabled: true
       name: '@deepseek-ai/dsh-tool-ralph'
       config:
         subagentProvider: spawn
@@ -244,9 +282,11 @@
 # ── remaining model-facing rows ─────────────────────────────────────────────
 
 - id: tool-ask-user
+  disabled: true
   name: '@deepseek-ai/dsh-tool-ask-user'
 
 - id: tool-todo
+  disabled: true
   name: '@deepseek-ai/dsh-tool-todo'
   config:
     allowParallelInProgress: true

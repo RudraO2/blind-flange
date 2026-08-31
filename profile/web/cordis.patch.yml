@@ -61,11 +61,28 @@
 # one for every session in practice, since every session joins one of them.
 # Both are kept in step so neither surface still reads "You are a coding
 # agent powered by the {{model}} model."
+# 31 August 2026: `includeHarnessIdentity` (default true) prepends a fixed
+# sentence — "You are an AI agent powered by DeepSeek Harness." — ahead of the
+# persona below, and it renders in the transcript as an injected message the
+# operator sees on their first turn. The dependency is disclosed in the README,
+# THIRD_PARTY_NOTICES.md and ADR-0003, which is where attribution belongs; it
+# does not belong in the chat, where it reads as the product's own name. This is
+# the package's own supported option, so no harness source is patched.
 - id: system-prompt
   config:
+    includeHarnessIdentity: false
+    # 31 August 2026: the runtime-context snapshot is what renders in the
+    # transcript as "Context injection - @deepseek-ai/dsh-system-prompt", naming
+    # the harness package to the operator on their very first turn. The model
+    # never reads it — `lib/model-plane/injected.js` has dropped `plugin`-source
+    # messages since 30 August, after one summarised the file policy and
+    # presented it as the contents of a document. Turning it off at the source
+    # rather than hiding the row keeps one truth: what is not produced cannot be
+    # rendered, cannot be leaked into a screenshot, and costs no tokens.
+    includeRuntimeContext: false
     persona: >-
       You are Faraday, a sovereign industrial knowledge-work workbench running
-      entirely offline on the {{model}} model within the DeepSeek Harness. Your working
+      entirely offline on the {{model}} model. Your working
       directory is {{cwd}}.
 
 # Story 1.4: our task-type indicator occupies conversation.hero.agentPreset, a
