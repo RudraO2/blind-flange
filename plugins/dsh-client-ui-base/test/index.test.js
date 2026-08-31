@@ -442,7 +442,7 @@ test("scores the licence-checked fleet against the classified task type and reco
 	assert.ok(routed, "no router/routed event recorded");
 	assert.equal(routed.data.taskType, "code");
 	assert.equal(routed.data.turn, 2);
-	assert.equal(routed.data.selected, "Qwen/Qwen2.5-Coder-1.5B-Instruct");
+	assert.equal(routed.data.selected, "Qwen/Qwen3-4B");
 	assert.ok(Array.isArray(routed.data.scored) && routed.data.scored.length > 0);
 	assert.ok(routed.data.scored.every((entry) => typeof entry.score === "number"));
 	assert.ok(Array.isArray(routed.data.excluded));
@@ -497,7 +497,7 @@ test("Story 3.8: a second turn classifying as a different task type routes to a 
 	assert.equal(routed[0].data.taskType, "document");
 	assert.equal(routed[0].data.selected, "Qwen/Qwen3-VL-2B-Instruct");
 	assert.equal(routed[1].data.taskType, "code");
-	assert.equal(routed[1].data.selected, "Qwen/Qwen2.5-Coder-1.5B-Instruct");
+	assert.equal(routed[1].data.selected, "Qwen/Qwen3-4B");
 	assert.notEqual(routed[0].data.selected, routed[1].data.selected);
 	assert.equal(routed[1].data.turn, 2);
 
@@ -507,7 +507,7 @@ test("Story 3.8: a second turn classifying as a different task type routes to a 
 	// provider can actually be pointed at.
 	const dispatch = runtimeModelForCurrentTurn(loadFleet().loaded);
 	assert.equal(dispatch.reason, "routed");
-	assert.equal(dispatch.member, "Qwen/Qwen2.5-Coder-1.5B-Instruct");
+	assert.equal(dispatch.member, "Qwen/Qwen3-4B");
 	assert.equal(dispatch.runtimeId, "bf-coder");
 });
 
@@ -527,7 +527,7 @@ test("the four task types resolve onto two runtime models, with no change to the
 	const drawing = scoreFleet("drawing", fleet);
 	assert.deepEqual(
 		drawing.excluded.map((entry) => [entry.name, entry.reason.code]),
-		[["Qwen/Qwen2.5-Coder-1.5B-Instruct", "modality-missing"]],
+		[["Qwen/Qwen3-4B", "modality-missing"]],
 	);
 });
 

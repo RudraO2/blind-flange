@@ -20,7 +20,7 @@ New-Item -ItemType Directory -Force -Path "$root\dl", "$root\models" | Out-Null
 $targets = @(
 	@{ name = "llama-swap v251";      url = "https://github.com/mostlygeek/llama-swap/releases/download/v251/llama-swap_251_windows_amd64.zip"; out = "$root\dl\llama-swap_251_windows_amd64.zip" }
 	@{ name = "llama.cpp b10687 vulkan"; url = "https://github.com/ggml-org/llama.cpp/releases/download/b10687/llama-b10687-bin-win-vulkan-x64.zip"; out = "$root\dl\llama-b10687-bin-win-vulkan-x64.zip" }
-	@{ name = "coder Q4_K_M";         url = "https://huggingface.co/Qwen/Qwen2.5-Coder-1.5B-Instruct-GGUF/resolve/main/qwen2.5-coder-1.5b-instruct-q4_k_m.gguf"; out = "$root\models\qwen2.5-coder-1.5b-instruct-q4_k_m.gguf" }
+	@{ name = "coder Q4_K_M";         url = "https://huggingface.co/Qwen/Qwen3-4B-GGUF/resolve/main/Qwen3-4B-Q4_K_M.gguf"; out = "$root\models\Qwen3-4B-Q4_K_M.gguf" }
 	@{ name = "vision Q4_K_M";        url = "https://huggingface.co/Qwen/Qwen3-VL-2B-Instruct-GGUF/resolve/main/Qwen3VL-2B-Instruct-Q4_K_M.gguf"; out = "$root\models\Qwen3VL-2B-Instruct-Q4_K_M.gguf" }
 	@{ name = "vision mmproj Q8_0";   url = "https://huggingface.co/Qwen/Qwen3-VL-2B-Instruct-GGUF/resolve/main/mmproj-Qwen3VL-2B-Instruct-Q8_0.gguf"; out = "$root\models\mmproj-Qwen3VL-2B-Instruct-Q8_0.gguf" }
 )

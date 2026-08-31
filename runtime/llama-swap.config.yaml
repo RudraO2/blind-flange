@@ -73,12 +73,19 @@ macros:
 
 models:
   # Serves the `code` and `calculation` task types.
-  # Qwen/Qwen2.5-Coder-1.5B-Instruct, Apache-2.0, Q4_K_M.
+  # Qwen/Qwen3-4B, Apache-2.0, Q4_K_M.
+  #
+  # `--reasoning off` because Qwen3 is a hybrid thinking model: left on, a
+  # `<think>` block spends the coding lane's token ceiling before the JSON
+  # starts. A schema-constrained turn could not emit one anyway — the grammar
+  # forbids it — so this only changes plain turns, and there it stops thinking
+  # aloud in the operator's transcript.
   "bf-coder":
     name: "Coder"
     cmd: |
       ${llama-server}
-      --model __RUNTIME_ROOT__/models/qwen2.5-coder-1.5b-instruct-q4_k_m.gguf
+      --reasoning off
+      --model __RUNTIME_ROOT__/models/Qwen3-4B-Q4_K_M.gguf
     ttl: 300
 
   # Serves the `document` and `drawing` task types.

@@ -22,7 +22,7 @@ const ROUTING = {
 	taskType: "document",
 	scored: [
 		{ name: "Qwen/Qwen3-VL-2B-Instruct", score: 6, matched: [{ capability: "document-understanding", points: 3 }] },
-		{ name: "Qwen/Qwen2.5-Coder-1.5B-Instruct", score: 2, matched: [{ capability: "general-reasoning", points: 1 }] },
+		{ name: "Qwen/Qwen3-4B", score: 2, matched: [{ capability: "general-reasoning", points: 1 }] },
 	],
 	excluded: [],
 	selected: "Qwen/Qwen3-VL-2B-Instruct",
@@ -47,7 +47,7 @@ test("the trail names the lane, the score that chose the model, and the model th
 	// The score, not just the winner: a reader has to be able to disagree with the
 	// choice, which needs the numbers that made it.
 	assert.match(text, /Qwen\/Qwen3-VL-2B-Instruct — score 6 \(document-understanding \+3\)/);
-	assert.match(text, /Qwen\/Qwen2\.5-Coder-1\.5B-Instruct — score 2/);
+	assert.match(text, /Qwen\/Qwen3-4B — score 2/);
 	assert.match(text, /Answered by: Qwen\/Qwen3-VL-2B-Instruct, running locally as "bf-vision"/);
 	assert.match(text, /Source: 2 attached images sent to the vision model on this machine\./);
 	assert.match(text, /1\. bf_approval_note — written \(0\.4s\)/);
@@ -60,7 +60,7 @@ test("an exclusion is printed with its reason, because that is the router declin
 			taskType: "drawing",
 			excluded: [
 				{
-					name: "Qwen/Qwen2.5-Coder-1.5B-Instruct",
+					name: "Qwen/Qwen3-4B",
 					reason: { code: "modality-missing", detail: 'task type "drawing" needs a member that accepts image input' },
 				},
 			],

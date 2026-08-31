@@ -52,21 +52,34 @@
 fleet:
   # Serves the `code` and `calculation` task types.
   #
-  # 1.04 GiB on disk at Q4_K_M. Text-only, and that is a feature rather than a
+  # 2.33 GiB on disk at Q4_K_M. Text-only, and that is a feature rather than a
   # shortcoming: it makes the router's modality gate produce a real exclusion
   # reason for the drawing lane instead of a decorative one.
   #
-  # It writes Python, not PowerShell — measured 6/9 runnable against 0/9, see
-  # docs/measurements/local-inference-lanes/issues/08. 1.5B is the smallest Apache-2.0
-  # member of the Coder family; the 3B is research-licensed and is declared
-  # further down as a refusal case.
-  - name: Qwen/Qwen2.5-Coder-1.5B-Instruct
+  # Replaced Qwen2.5-Coder-1.5B on 1 September 2026. The 1.5B was the smallest
+  # Apache-2.0 member of the Coder family and it showed: it writes Python rather
+  # than PowerShell (6/9 runnable against 0/9, see
+  # docs/measurements/local-inference-lanes/issues/08), and it invented a formula
+  # for a pump duty point and then computed it correctly, which is the worst
+  # shape a wrong answer can take.
+  #
+  # The obvious upgrade inside the Coder family is the 3B, and the 3B is the one
+  # member of that family under the Qwen Research Licence — it is declared
+  # further down purely so the loader refuses it by name. Qwen3-4B is outside the
+  # Coder family and squarely Apache-2.0, which is how the size step happens
+  # without touching the allow-list.
+  #
+  # It is a hybrid thinking model. `--reasoning off` in the llama-swap entry
+  # turns that off: a `<think>` block would burn the coding lane's 700-token
+  # ceiling before the JSON starts, and on a schema-constrained turn the grammar
+  # forbids it anyway, so leaving it on buys nothing and costs a plain turn.
+  - name: Qwen/Qwen3-4B
     role: coder
     runtime_id: bf-coder
     licence: Apache-2.0
-    licence_source: LICENSE file at the pinned revision
-    revision: 2e1fd397ee46e1388853d2af2c993145b0f1098a
-    size: 1.5B
+    licence_source: LICENSE file at the pinned revision of Qwen/Qwen3-4B-GGUF
+    revision: bc640142c66e1fdd12af0bd68f40445458f3869b
+    size: 4B
     quantisation: Q4_K_M
     context: 32768
     runtime_context: 8192

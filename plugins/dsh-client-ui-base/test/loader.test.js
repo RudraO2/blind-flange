@@ -110,7 +110,7 @@ test("the shipped registry: both Research-Licensed members are refused, both run
 	const { loaded, refused } = loadFleet();
 	assert.deepEqual(
 		loaded.map((m) => m.name),
-		["Qwen/Qwen2.5-Coder-1.5B-Instruct", "Qwen/Qwen3-VL-2B-Instruct"],
+		["Qwen/Qwen3-4B", "Qwen/Qwen3-VL-2B-Instruct"],
 	);
 	// Asserted by name, not just by count. The second refusal was added on
 	// 30 August 2026 precisely because `Qwen2.5-Coder-3B-Instruct` is the size an

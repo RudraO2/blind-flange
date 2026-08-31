@@ -91,9 +91,16 @@ classification miss and a lane failure can't hide inside one number.
 If the router becomes a model, where it runs decides whether the lanes fit at all.
 
 ```
-Vulkan0   AMD Radeon(TM) Graphics      ~8 GB shared system RAM   the Ryzen 4600H's iGPU
-Vulkan1   NVIDIA GeForce GTX 1650 Ti   4149 MiB, ~3.7 GB free    the discrete card
+Vulkan0   NVIDIA GeForce GTX 1650 with Max-Q Design   4152 MiB, ~3.5 GB free   the discrete card
+Vulkan1   Intel(R) UHD Graphics                       8042 MiB shared          the integrated one
 ```
+
+Re-checked 1 September 2026 with `llama-server --list-devices`. The enumeration above is not
+the one this note was first written against — it recorded an AMD iGPU at `Vulkan0` and the
+NVIDIA card second, and both the vendor and the order are now different. **Device order is not
+stable across machines or driver versions, which is the durable lesson**: `fetch-runtime.ps1`
+writes the discrete device into llama-swap's config by discovering it on the machine in front
+of it rather than by trusting an index recorded here.
 
 Three things follow:
 
@@ -122,8 +129,10 @@ with expert offload is the answer to the mid-range GPU" as a closed decision. Th
 MoE coder is roughly 17 GB at Q4 and has to sit in system RAM, against 15.4 GB total including
 Windows. Dense small models only. That claim is on a slide and needs correcting.
 
-**The GPU is a 1650 Ti, not a 1650 Max-Q.** ADR-0001 says Max-Q. Minor, but the residency
-arithmetic gets written against that number.
+**The GPU is a 1650 Max-Q, as ADR-0001 says.** This note previously claimed it was a 1650 Ti;
+`nvidia-smi` reports "NVIDIA GeForce GTX 1650 with Max-Q Design", 4096 MiB, checked
+1 September 2026. The residency arithmetic is written against that number, so it was worth
+settling rather than leaving two figures in the repository.
 
 **And the deadline recorded in the planning notes was wrong** — they said 31 August 2026; it is
 1 September.

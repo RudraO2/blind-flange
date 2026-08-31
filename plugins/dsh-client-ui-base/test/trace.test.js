@@ -119,7 +119,7 @@ test("the turn summary carries the route and the dispatch reason, not the whole 
 	clearTurn();
 	try {
 		recordRoutingDecision(
-			{ taskType: "code", scored: [], excluded: [], selected: "Qwen/Qwen2.5-Coder-1.5B-Instruct", tied: false, allZero: false },
+			{ taskType: "code", scored: [], excluded: [], selected: "Qwen/Qwen3-4B", tied: false, allZero: false },
 			1,
 		);
 		recordImages(1);
@@ -127,7 +127,7 @@ test("the turn summary carries the route and the dispatch reason, not the whole 
 
 		const result = await createTraceRpcHandler({ endpoint: stub.endpoint, providerName: "local" })(TRACE_ENDPOINT);
 		assert.equal(result.value.taskType, "code");
-		assert.equal(result.value.selected, "Qwen/Qwen2.5-Coder-1.5B-Instruct");
+		assert.equal(result.value.selected, "Qwen/Qwen3-4B");
 		assert.equal(result.value.runtimeId, "bf-coder");
 		assert.equal(result.value.dispatchReason, "routed");
 		assert.equal(result.value.images, 1);

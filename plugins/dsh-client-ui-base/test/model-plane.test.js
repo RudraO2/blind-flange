@@ -373,7 +373,7 @@ test("createLlmAdapter satisfies the duck-typed registerAdapter contract without
 	const listed = await adapter.listModels("replay");
 	assert.deepEqual(
 		listed.map((m) => m.id),
-		["Qwen/Qwen2.5-Coder-1.5B-Instruct", "Qwen/Qwen3-VL-2B-Instruct"],
+		["Qwen/Qwen3-4B", "Qwen/Qwen3-VL-2B-Instruct"],
 	);
 	assert.ok(listed.every((m) => m.provider === "replay"));
 

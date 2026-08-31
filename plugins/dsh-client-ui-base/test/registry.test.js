@@ -118,7 +118,7 @@ test("the shipped registry/models.yaml declares exactly the fleet on this box, w
 	assert.deepEqual(
 		fleet.map((m) => [m.name, m.licence]),
 		[
-			["Qwen/Qwen2.5-Coder-1.5B-Instruct", "Apache-2.0"],
+			["Qwen/Qwen3-4B", "Apache-2.0"],
 			["Qwen/Qwen3-VL-2B-Instruct", "Apache-2.0"],
 			["Qwen/Qwen2.5-3B-Instruct", "Qwen Research Licence"],
 			["Qwen/Qwen2.5-Coder-3B-Instruct", "Qwen Research Licence"],
@@ -149,6 +149,6 @@ test("a member that runs declares what it actually runs as, so the UI cannot ove
 test("the shipped registry omits both disallowed members from the model list", () => {
 	assert.deepEqual(
 		allowedFleet().map((m) => m.name),
-		["Qwen/Qwen2.5-Coder-1.5B-Instruct", "Qwen/Qwen3-VL-2B-Instruct"],
+		["Qwen/Qwen3-4B", "Qwen/Qwen3-VL-2B-Instruct"],
 	);
 });
