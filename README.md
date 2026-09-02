@@ -1,6 +1,9 @@
 <div align="center">
 
-<img src="Logo.svg" alt="Faraday" width="120" height="120">
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="Logo-dark.svg">
+  <img src="Logo.svg" alt="Faraday" width="96">
+</picture>
 
 # Faraday
 
@@ -114,6 +117,14 @@ self-consistency, and a model judging a model — and why each measures somethin
 it appears to.
 
 ## How it fits together
+
+![The Faraday stack: the browser client, the Cordis host runtime, the Faraday plugin, and
+the GPU inference machine under it](docs/diagrams/faraday-technology-stack.png)
+
+Four tiers, and only one of them is ours. The client is the harness's own React bundle with
+our panels in declared slots; Cordis is the unmodified host, configured by a profile patch
+rather than edited; Faraday is an out-of-tree plugin with no runtime dependencies; and the
+fleet is llama.cpp holding one model resident at a time on the local GPU.
 
 ```mermaid
 flowchart LR

@@ -1,9 +1,9 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<!-- The Faraday mark, dark ink — for a light background. Logo-dark.svg is the same artwork in white, and README.md picks between them with <picture>. -->
+<!-- The Faraday mark, light ink — for a dark background. Logo.svg is the same artwork in dark ink. -->
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="397 210.5 474 730.5" width="426" height="682"
  preserveAspectRatio="xMidYMid meet" role="img" aria-label="Faraday">
 <title>Faraday</title>
-<g transform="translate(0,1254) scale(0.1,-0.1)" fill="#0b1220" stroke="none">
+<g transform="translate(0,1254) scale(0.1,-0.1)" fill="#e6edf3" stroke="none">
 <path d="M5985 10174 c-371 -82 -622 -388 -707 -864 -9 -54 -13 -182 -13 -460
 l0 -385 27 -57 c34 -74 95 -132 166 -159 46 -17 72 -20 137 -17 100 6 163 35
 228 108 73 81 77 104 77 454 0 328 9 441 46 556 31 98 73 161 127 190 41 22
